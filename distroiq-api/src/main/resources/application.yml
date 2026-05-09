@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   application:
@@ -88,5 +88,5 @@ logging:
 # File storage
 app:
   upload:
-    dir: ${UPLOAD_DIR:C:/Users/Kathiravan/Desktop/distroiq/uploads}
+    dir: ${UPLOAD_DIR:/tmp/uploads}
     base-url: ${BASE_URL:http://localhost:8080}
