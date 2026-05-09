@@ -1,0 +1,43 @@
+package com.distroiq.api.module.sales.controller;
+
+import com.distroiq.api.module.sales.dto.SalesDtos;
+import com.distroiq.api.module.sales.service.SalesService;
+import com.distroiq.common.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/sales")
+@RequiredArgsConstructor
+@SecurityRequirement(name = "Bearer Authentication")
+@Tag(name = "Sales", description = "Sales person mobile endpoints")
+public class SalesController {
+
+    private final SalesService salesService;
+
+    @GetMapping("/my-allocation")
+    @PreAuthorize("hasRole('SALES')")
+    @Operation(summary = "Get today's route allocation for the calling sales person [SALES]")
+    public ResponseEntity<ApiResponse<SalesDtos.MyAllocationResponse>> getMyAllocation(
+            @RequestHeader("X-User-Id") UUID salesPersonId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(salesService.getMyAllocation(salesPersonId, tenantId)));
+    }
+
+    @GetMapping("/my-customers")
+    @PreAuthorize("hasRole('SALES')")
+    @Operation(summary = "Get today's customers for the calling sales person [SALES]")
+    public ResponseEntity<ApiResponse<List<SalesDtos.CustomerSummary>>> getMyCustomers(
+            @RequestHeader("X-User-Id") UUID salesPersonId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(salesService.getMyCustomers(salesPersonId, tenantId)));
+    }
+}

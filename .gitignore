@@ -1,0 +1,58 @@
+# DistroIQ .gitignore
+
+# Claude Code
+.claude/
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.classpath
+.project
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Environment
+.env
+*.env.local
+
+# Logs
+*.log
+logs/
+
+# Node / React
+node_modules/
+dist/
+build/
+.cache/
+
+# Flutter
+.dart_tool/
+.packages
+.metadata
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Docker
+*.pid
+
+# Local uploads
+uploads/
+
+# Maven wrapper jar (optional — already ignored by sub-.gitignore)
+mvnw
