@@ -22,7 +22,7 @@ import AuditHistoryButton from '../../components/AuditHistoryButton';
 import { applyApiErrorToForm } from '../../utils/formError';
 
 const { Option } = Select;
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
 const uploadImage = async (file: File, token: string): Promise<string> => {
   const form = new FormData();
@@ -68,7 +68,7 @@ const LocationPicker: React.FC<{
     setResolving(true);
     try {
       const res = await fetch(
-        `http://localhost:8080/api/v1/util/resolve-location?url=${encodeURIComponent(mapLink.trim())}`,
+        `${API_BASE}/util/resolve-location?url=${encodeURIComponent(mapLink.trim())}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();

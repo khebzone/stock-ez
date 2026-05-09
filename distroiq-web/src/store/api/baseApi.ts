@@ -2,7 +2,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 
 const rawBaseQuery = fetchBaseQuery({
-  baseUrl: '/api/v1',
+  baseUrl: `${import.meta.env.VITE_API_URL || ''}/api/v1`,
   prepareHeaders: (headers) => {
     const token    = localStorage.getItem('token');
     const tenantId = localStorage.getItem('tenantId');
