@@ -546,7 +546,7 @@ const PurchaseListPage: React.FC = () => {
                           <Table.Summary.Cell index={7} align="right">{formatINR(selected.totalTaxable)}</Table.Summary.Cell>
                           <Table.Summary.Cell index={8} align="right">{formatINR(selected.totalCgst)}</Table.Summary.Cell>
                           <Table.Summary.Cell index={9} align="right">{formatINR(selected.totalSgst)}</Table.Summary.Cell>
-                          <Table.Summary.Cell index={10} align="right" style={{ color: P }}>{formatINR(selected.totalAmount)}</Table.Summary.Cell>
+                          <Table.Summary.Cell index={10} align="right"><span style={{ color: P }}>{formatINR(selected.totalAmount)}</span></Table.Summary.Cell>
                           <Table.Summary.Cell index={11} colSpan={2} />
                         </Table.Summary.Row>
                       )}

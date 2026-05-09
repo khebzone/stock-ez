@@ -4,7 +4,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import { exportToCSV } from '../../components/TableToolbar';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend,
+  PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts';
 import dayjs from 'dayjs';
 import { useGetSalesAnalysisQuery } from '../../store/api/reportApi';

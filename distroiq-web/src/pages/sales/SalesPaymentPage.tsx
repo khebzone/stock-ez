@@ -3,7 +3,7 @@ import {
   Form, Input, InputNumber, Select, Modal, message, Divider, Spin, Grid, Skeleton,
 } from 'antd';
 import {
-  WalletOutlined, CheckCircleOutlined, SendOutlined, InfoCircleOutlined,
+  WalletOutlined, SendOutlined, InfoCircleOutlined,
   ArrowLeftOutlined, EditOutlined, SearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';

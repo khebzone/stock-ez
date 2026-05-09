@@ -102,7 +102,6 @@ const TargetsPage: React.FC = () => {
 
   const { data, isLoading } = useGetTargetsQuery({ month, year });
   const targets: any[] = data?.data?.targets || [];
-  const summary: any   = data?.data?.summary || {};
 
   const totalTarget  = targets.reduce((s, t) => s + Number(t.targetAmount || 0), 0);
   const totalActual  = targets.reduce((s, t) => s + Number(t.achievedAmount || 0), 0);

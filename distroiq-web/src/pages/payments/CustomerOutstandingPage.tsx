@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Button, Form, Input, InputNumber, Select, Modal, Skeleton, Popconfirm, message, Divider } from 'antd';
-import { PlusOutlined, DownloadOutlined, WalletOutlined } from '@ant-design/icons';
+import { Button, Form, Input, InputNumber, Select, Modal, Skeleton, message } from 'antd';
+import { DownloadOutlined, WalletOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   useGetCustomerOutstandingQuery,

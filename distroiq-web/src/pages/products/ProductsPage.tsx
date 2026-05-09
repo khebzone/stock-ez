@@ -23,24 +23,6 @@ import { applyApiErrorToForm } from '../../utils/formError';
 
 const { Option } = Select;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const expiryStatus = (expiryDate?: string) => {
-  if (!expiryDate) return null;
-  const exp = dayjs(expiryDate);
-  const daysLeft = exp.diff(dayjs(), 'day');
-  if (daysLeft < 0) return { label: 'Expired', color: '#ef4444', bg: '#fef2f2' };
-  if (daysLeft <= 30) return { label: `${daysLeft}d left`, color: '#f59e0b', bg: '#fffbeb' };
-  if (daysLeft <= 90) return { label: `${daysLeft}d left`, color: '#0891b2', bg: '#ecfeff' };
-  return { label: exp.format('DD MMM YY'), color: '#059669', bg: '#ecfdf5' };
-};
-
-const stockStatus = (qty?: number) => {
-  if (qty === undefined || qty === null) return null;
-  if (qty === 0) return { label: 'Out', color: '#ef4444', bg: '#fef2f2' };
-  if (qty <= 10) return { label: `${qty} low`, color: '#f59e0b', bg: '#fffbeb' };
-  return { label: `${qty}`, color: '#059669', bg: '#ecfdf5' };
-};
 
 // ─── Image uploader component ─────────────────────────────────────────────────
 

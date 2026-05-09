@@ -100,7 +100,7 @@ interface Props {
   onSaved?: () => void;
 }
 
-const PurchaseEntryPage: React.FC<Props> = ({ onClose, onSaved }) => {
+const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   const navigate = useNavigate();
   const [lines, setLines]         = useState<BatchLine[]>([emptyLine(1)]);
   const [nextId, setNextId]       = useState(2);
@@ -317,7 +317,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onClose, onSaved }) => {
                 <TH right muted>Min Sale *</TH>
                 <TH right muted>Max Sale *</TH>
                 <TH right muted>Stock</TH>
-                <TH center></TH>
+                <TH center>{''}</TH>
               </tr>
             </thead>
 
