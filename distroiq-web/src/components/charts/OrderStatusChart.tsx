@@ -7,23 +7,25 @@ interface Props {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING_APPROVAL: '#f59e0b',
-  APPROVED:         '#059669',
-  PREPARED:         '#06b6d4',
-  DISPATCHED:       '#8b5cf6',
-  DELIVERED:        '#10b981',
-  CANCELLED:        '#ef4444',
-  DRAFT:            '#9ca3af',
+  DRAFT:      '#94a3b8',
+  SUBMITTED:  '#f59e0b',
+  APPROVED:   '#059669',
+  PREPARING:  '#0891b2',
+  PREPARED:   '#06b6d4',
+  DISPATCHED: '#8b5cf6',
+  DELIVERED:  '#10b981',
+  CANCELLED:  '#ef4444',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  PENDING_APPROVAL: 'Pending',
-  APPROVED:         'Approved',
-  PREPARED:         'Prepared',
-  DISPATCHED:       'Dispatched',
-  DELIVERED:        'Delivered',
-  CANCELLED:        'Cancelled',
-  DRAFT:            'Draft',
+  DRAFT:      'Draft',
+  SUBMITTED:  'Submitted',
+  APPROVED:   'Approved',
+  PREPARING:  'Preparing',
+  PREPARED:   'Prepared',
+  DISPATCHED: 'Dispatched',
+  DELIVERED:  'Delivered',
+  CANCELLED:  'Cancelled',
 };
 
 const CustomTooltip = ({ active, payload }: any) => {

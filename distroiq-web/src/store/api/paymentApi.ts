@@ -39,7 +39,7 @@ export const paymentApi = baseApi.injectEndpoints({
       query: () => '/payments/pending-verification',
       providesTags: ['Payment'],
     }),
-    getCustomerOutstanding: builder.query<any, void>({
+    getOutstandingSummary: builder.query<any, void>({
       query: () => '/payments/customer-outstanding',
       providesTags: ['Payment', 'Order'],
     }),
@@ -63,7 +63,7 @@ export const {
   useGetMyDayCollectionsQuery,
   useSubmitDayCollectionsMutation,
   useGetPendingVerificationsQuery,
-  useGetCustomerOutstandingQuery,
+  useGetOutstandingSummaryQuery,
   useGetCustomerOrdersQuery,
   useGetCustomerPaymentHistoryQuery,
 } = paymentApi;

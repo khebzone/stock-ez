@@ -5,6 +5,8 @@ import com.distroiq.api.module.order.entity.Order;
 import com.distroiq.api.module.order.entity.Payment;
 import com.distroiq.api.module.order.repository.OrderRepository;
 import com.distroiq.api.module.order.repository.PaymentRepository;
+import com.distroiq.api.module.route.entity.RouteAllocation;
+import com.distroiq.api.module.route.repository.RouteAllocationRepository;
 import com.distroiq.api.module.payment.entity.PaymentMethod;
 import com.distroiq.api.module.payment.repository.PaymentMethodRepository;
 import com.distroiq.api.module.user.entity.User;
@@ -31,6 +33,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final PaymentMethodRepository paymentMethodRepository;
+    private final RouteAllocationRepository routeAllocationRepository;
     private final AuditService auditService;
 
     public OrderDtos.PaymentResponse collectPayment(OrderDtos.CreatePaymentRequest req, UUID collectorId, UUID tenantId) {
@@ -276,31 +279,71 @@ public class PaymentService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderDtos.CustomerOutstandingSummary> getCustomerOutstanding(UUID tenantId) {
-        List<Object[]> rows = orderRepository.findCustomerOutstanding(tenantId, Order.OrderStatus.CANCELLED);
+    public List<OrderDtos.CustomerOutstandingSummary> getCustomerOutstanding(UUID tenantId, UUID userId) {
+        User user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        List<Order> orders;
+        if (user.getRole() == User.UserRole.SALES || user.getRole() == User.UserRole.DELIVERY) {
+            List<RouteAllocation> allocations;
+            if (user.getRole() == User.UserRole.SALES) {
+                allocations = routeAllocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
+            } else {
+                allocations = routeAllocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
+            }
+
+            if (allocations.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            List<UUID> routeIds = allocations.stream().map(a -> a.getRoute().getId()).collect(Collectors.toList());
+            orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(tenantId, Order.OrderStatus.CANCELLED, java.math.BigDecimal.ZERO)
+                    .stream()
+                    .filter(o -> o.getCustomer().getRoute() != null && routeIds.contains(o.getCustomer().getRoute().getId()))
+                    .collect(Collectors.toList());
+        } else {
+            orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(tenantId, Order.OrderStatus.CANCELLED, java.math.BigDecimal.ZERO);
+        }
 
         Map<UUID, LocalDate> lastPaymentMap = paymentRepository.findLastPaymentDateByCustomer(tenantId)
                 .stream()
                 .collect(Collectors.toMap(
                     r -> (UUID) r[0],
-                    r -> (LocalDate) r[1]
+                    r -> {
+                        Object d = r[1];
+                        return d instanceof LocalDate ? (LocalDate) d : ((java.sql.Date) d).toLocalDate();
+                    }
                 ));
 
-        return rows.stream().map(row -> {
+        Map<UUID, List<Order>> byCustomer = orders.stream()
+                .collect(Collectors.groupingBy(o -> o.getCustomer().getId()));
+
+        return byCustomer.entrySet().stream().map(e -> {
+            List<Order> cos = e.getValue();
+            Order sample = cos.get(0);
+            com.distroiq.api.module.customer.entity.Customer c = sample.getCustomer();
+
+            java.math.BigDecimal totalOrdered = cos.stream().map(Order::getTotalAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal totalPaid    = cos.stream().map(Order::getPaidAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal outstanding  = cos.stream().map(Order::getBalanceAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            LocalDate lastOrderDate = cos.stream().map(Order::getOrderDate).max(Comparator.naturalOrder()).orElse(null);
+
             OrderDtos.CustomerOutstandingSummary s = new OrderDtos.CustomerOutstandingSummary();
-            s.setCustomerId((UUID) row[0]);
-            s.setBusinessName((String) row[1]);
-            s.setOwnerName((String) row[2]);
-            s.setPhone((String) row[3]);
-            s.setRouteName((String) row[4]);
-            s.setTotalOrdered((java.math.BigDecimal) row[5]);
-            s.setTotalPaid((java.math.BigDecimal) row[6]);
-            s.setOutstanding((java.math.BigDecimal) row[7]);
-            s.setLastOrderDate((LocalDate) row[8]);
-            s.setLastPaymentDate(lastPaymentMap.get((UUID) row[0]));
-            s.setOrderCount(((Long) row[9]).intValue());
+            s.setCustomerId(c.getId());
+            s.setBusinessName(c.getBusinessName());
+            s.setOwnerName(c.getOwnerName());
+            s.setPhone(c.getPhone());
+            s.setRouteName(c.getRoute() != null ? c.getRoute().getName() : null);
+            s.setTotalOrdered(totalOrdered);
+            s.setTotalPaid(totalPaid);
+            s.setOutstanding(outstanding);
+            s.setLastOrderDate(lastOrderDate);
+            s.setLastPaymentDate(lastPaymentMap.get(c.getId()));
+            s.setOrderCount(cos.size());
             return s;
-        }).collect(Collectors.toList());
+        })
+        .sorted(Comparator.comparing(OrderDtos.CustomerOutstandingSummary::getOutstanding).reversed())
+        .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

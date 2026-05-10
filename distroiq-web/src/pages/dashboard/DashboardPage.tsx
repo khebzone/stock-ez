@@ -87,12 +87,14 @@ const KpiCard: React.FC<KpiProps> = ({ title, value, icon, color, bg, prefix, su
 
 /* ── Order Status config ── */
 const STATUS_CFG: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-  PENDING_APPROVAL: { color: '#f59e0b', icon: <ClockCircleOutlined />, label: 'Pending Approval' },
-  APPROVED:         { color: '#059669', icon: <CheckCircleOutlined />, label: 'Approved' },
-  PREPARED:         { color: '#06b6d4', icon: <ShoppingOutlined />, label: 'Prepared' },
-  DISPATCHED:       { color: '#8b5cf6', icon: <TruckOutlined />, label: 'Dispatched' },
-  DELIVERED:        { color: '#10b981', icon: <CheckCircleOutlined />, label: 'Delivered' },
-  CANCELLED:        { color: '#ef4444', icon: <ClockCircleOutlined />, label: 'Cancelled' },
+  DRAFT:      { color: '#94a3b8', icon: <ClockCircleOutlined />, label: 'Draft' },
+  SUBMITTED:  { color: '#f59e0b', icon: <ClockCircleOutlined />, label: 'Submitted' },
+  APPROVED:   { color: '#059669', icon: <CheckCircleOutlined />, label: 'Approved' },
+  PREPARING:  { color: '#0891b2', icon: <ShoppingOutlined />,    label: 'Preparing' },
+  PREPARED:   { color: '#06b6d4', icon: <ShoppingOutlined />,    label: 'Prepared' },
+  DISPATCHED: { color: '#8b5cf6', icon: <TruckOutlined />,       label: 'Dispatched' },
+  DELIVERED:  { color: '#10b981', icon: <CheckCircleOutlined />, label: 'Delivered' },
+  CANCELLED:  { color: '#ef4444', icon: <ClockCircleOutlined />, label: 'Cancelled' },
 };
 
 const fmt = (v: number) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;

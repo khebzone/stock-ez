@@ -39,6 +39,6 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Query("SELECT p FROM Payment p WHERE p.tenant.id = :tenantId AND p.order.customer.id = :customerId AND p.collectionDate < :from ORDER BY p.collectionDate ASC")
     List<Payment> findByTenantAndCustomerBeforeDate(@Param("tenantId") UUID tenantId, @Param("customerId") UUID customerId, @Param("from") LocalDate from);
 
-    @Query("SELECT p.order.customer.id, MAX(p.collectionDate) FROM Payment p WHERE p.tenant.id = :tenantId GROUP BY p.order.customer.id")
+    @Query("SELECT c.id, MAX(p.collectionDate) FROM Payment p JOIN p.order o JOIN o.customer c WHERE p.tenant.id = :tenantId GROUP BY c.id")
     List<Object[]> findLastPaymentDateByCustomer(@Param("tenantId") UUID tenantId);
 }

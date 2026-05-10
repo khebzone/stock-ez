@@ -107,8 +107,9 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
     @Operation(summary = "Get all customers with outstanding balances")
     public ResponseEntity<ApiResponse<List<OrderDtos.CustomerOutstandingSummary>>> customerOutstanding(
-            @RequestHeader("X-Tenant-Id") UUID tenantId) {
-        return ResponseEntity.ok(ApiResponse.success(paymentService.getCustomerOutstanding(tenantId)));
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getCustomerOutstanding(tenantId, userId)));
     }
 
     @GetMapping("/customer/{customerId}/orders")

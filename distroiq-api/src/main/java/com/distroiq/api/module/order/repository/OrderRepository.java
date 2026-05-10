@@ -52,13 +52,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Query("SELECT o FROM Order o WHERE o.tenant.id = :tenantId AND o.customer.id = :customerId AND o.orderDate < :from AND o.status <> :cancelled ORDER BY o.orderDate ASC")
     List<Order> findByTenantAndCustomerBeforeDate(@Param("tenantId") UUID tenantId, @Param("customerId") UUID customerId, @Param("from") LocalDate from, @Param("cancelled") Order.OrderStatus cancelled);
 
-    @Query("SELECT o.customer.id, o.customer.businessName, o.customer.ownerName, o.customer.phone, " +
-           "o.customer.route.name, SUM(o.totalAmount), SUM(o.paidAmount), SUM(o.balanceAmount), " +
-           "MAX(o.orderDate), COUNT(o) " +
-           "FROM Order o WHERE o.tenant.id = :tenantId AND o.status <> :cancelled AND o.balanceAmount > 0 " +
-           "GROUP BY o.customer.id, o.customer.businessName, o.customer.ownerName, o.customer.phone, o.customer.route.name " +
-           "ORDER BY SUM(o.balanceAmount) DESC")
-    List<Object[]> findCustomerOutstanding(@Param("tenantId") UUID tenantId, @Param("cancelled") Order.OrderStatus cancelled);
+    List<Order> findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(UUID tenantId, Order.OrderStatus status, java.math.BigDecimal amount);
 
     @Query("SELECT o FROM Order o WHERE o.tenant.id = :tenantId " +
            "AND (:status IS NULL OR o.status = :status) " +

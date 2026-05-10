@@ -102,7 +102,7 @@ const SalesOrderPage: React.FC = () => {
   const { data: customersData, isLoading: custLoading } = useGetMyCustomersQuery();
   const { data: productsData,  isLoading: prodLoading  } = useGetProductsQuery({ size: 300 });
   const [createOrder, { isLoading: creating }]           = useCreateOrderMutation();
-  const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id, { skip: !selectedCustomer?.id });
+  const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id });
 
   const customers: any[] = customersData?.data || [];
   const products: any[]  = productsData?.data?.content || productsData?.data || [];
