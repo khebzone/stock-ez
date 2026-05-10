@@ -4,7 +4,7 @@ import {
 } from 'antd';
 import {
   WalletOutlined, SendOutlined, CheckCircleOutlined, InfoCircleOutlined,
-  ArrowLeftOutlined, SearchOutlined,
+  ArrowLeftOutlined, SearchOutlined, EditOutlined,
 } from '@ant-design/icons';
 import {
   useCollectPaymentMutation,
