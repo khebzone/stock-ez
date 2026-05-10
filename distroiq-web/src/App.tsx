@@ -46,7 +46,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const token = localStorage.getItem('token');
   if (!token) return <Navigate to="/login" replace />;
   const role = JSON.parse(localStorage.getItem('user') || '{}').role;
-  if (role === 'SALES')    return <Navigate to="/sales/dashboard" replace />;
+  if (role === 'SALES') return <Navigate to="/sales/dashboard" replace />;
   if (role === 'DELIVERY') return <Navigate to="/delivery/dashboard" replace />;
   return <MainLayout>{children}</MainLayout>;
 };
@@ -86,40 +86,40 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
 
         {/* ── Admin / General routes ── */}
-        <Route path="/dashboard"   element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/products"    element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
-        <Route path="/customers"   element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
-        <Route path="/routes"      element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
-        <Route path="/users"       element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-        <Route path="/orders"      element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
-        <Route path="/payments"    element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
-        <Route path="/reports"          element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-        <Route path="/reports/aging"    element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
-        <Route path="/reports/sales"    element={<ProtectedRoute><SalesAnalysisPage /></ProtectedRoute>} />
-        <Route path="/reports/ledger"   element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
-        <Route path="/reports/targets"  element={<ProtectedRoute><TargetsPage /></ProtectedRoute>} />
-        <Route path="/masters"     element={<ProtectedRoute><MastersPage /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
+        <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+        <Route path="/routes" element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+        <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+        <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+        <Route path="/reports/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
+        <Route path="/reports/sales" element={<ProtectedRoute><SalesAnalysisPage /></ProtectedRoute>} />
+        <Route path="/reports/ledger" element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
+        <Route path="/reports/targets" element={<ProtectedRoute><TargetsPage /></ProtectedRoute>} />
+        <Route path="/masters" element={<ProtectedRoute><MastersPage /></ProtectedRoute>} />
 
         {/* ── Invoice Approver ── */}
         <Route path="/invoice/approver" element={<ProtectedRoute><InvoiceApproverPage /></ProtectedRoute>} />
 
         {/* ── Purchases ── */}
-        <Route path="/purchases"           element={<ProtectedRoute><PurchaseListPage /></ProtectedRoute>} />
-        <Route path="/purchases/new"       element={<ProtectedRoute><PurchaseEntryPage /></ProtectedRoute>} />
-        <Route path="/supplier-payments"      element={<ProtectedRoute><SupplierPaymentsPage /></ProtectedRoute>} />
-        <Route path="/customer-outstanding"  element={<ProtectedRoute><CustomerOutstandingPage /></ProtectedRoute>} />
+        <Route path="/purchases" element={<ProtectedRoute><PurchaseListPage /></ProtectedRoute>} />
+        <Route path="/purchases/new" element={<ProtectedRoute><PurchaseEntryPage /></ProtectedRoute>} />
+        <Route path="/supplier-payments" element={<ProtectedRoute><SupplierPaymentsPage /></ProtectedRoute>} />
+        <Route path="/customer-outstanding" element={<ProtectedRoute><CustomerOutstandingPage /></ProtectedRoute>} />
 
         {/* ── Day Closure ── */}
         <Route path="/day-closure" element={<ProtectedRoute><DayClosurePage /></ProtectedRoute>} />
 
         {/* ── Goods Return & Damage ── */}
-        <Route path="/goods-return"   element={<ProtectedRoute><GoodsReturnPage /></ProtectedRoute>} />
-        <Route path="/stock-batches"  element={<ProtectedRoute><StockBatchesPage /></ProtectedRoute>} />
+        <Route path="/goods-return" element={<ProtectedRoute><GoodsReturnPage /></ProtectedRoute>} />
+        <Route path="/stock-batches" element={<ProtectedRoute><StockBatchesPage /></ProtectedRoute>} />
 
         {/* ── Gate Pass & Vehicles ── */}
-        <Route path="/gate-pass"      element={<ProtectedRoute><GatePassPage /></ProtectedRoute>} />
-        <Route path="/vehicles"       element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
-        <Route path="/field-monitor"  element={<ProtectedRoute><FieldMonitorPage /></ProtectedRoute>} />
+        <Route path="/gate-pass" element={<ProtectedRoute><GatePassPage /></ProtectedRoute>} />
+        <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+        <Route path="/field-monitor" element={<ProtectedRoute><FieldMonitorPage /></ProtectedRoute>} />
 
         {/* ── Suppliers ── */}
         <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
@@ -138,14 +138,14 @@ const App: React.FC = () => {
 
         {/* ── Sales Person routes ── */}
         <Route path="/sales/dashboard" element={<SalesProtectedRoute><SalesDashboardPage /></SalesProtectedRoute>} />
-        <Route path="/sales/route"     element={<SalesProtectedRoute><SalesRoutePage /></SalesProtectedRoute>} />
-        <Route path="/sales/order"     element={<SalesProtectedRoute><SalesOrderPage /></SalesProtectedRoute>} />
-        <Route path="/sales/payments"  element={<SalesProtectedRoute><SalesPaymentPage /></SalesProtectedRoute>} />
+        <Route path="/sales/route" element={<SalesProtectedRoute><SalesRoutePage /></SalesProtectedRoute>} />
+        <Route path="/sales/order" element={<SalesProtectedRoute><SalesOrderPage /></SalesProtectedRoute>} />
+        <Route path="/sales/payments" element={<SalesProtectedRoute><SalesPaymentPage /></SalesProtectedRoute>} />
 
         {/* ── Delivery Person routes ── */}
         <Route path="/delivery/dashboard" element={<DeliveryProtectedRoute><DeliveryDashboardPage /></DeliveryProtectedRoute>} />
-        <Route path="/delivery/orders"    element={<DeliveryProtectedRoute><DeliveryOrdersPage /></DeliveryProtectedRoute>} />
-        <Route path="/delivery/payments"  element={<DeliveryProtectedRoute><DeliveryPaymentsPage /></DeliveryProtectedRoute>} />
+        <Route path="/delivery/orders" element={<DeliveryProtectedRoute><DeliveryOrdersPage /></DeliveryProtectedRoute>} />
+        <Route path="/delivery/payments" element={<DeliveryProtectedRoute><DeliveryPaymentsPage /></DeliveryProtectedRoute>} />
 
         {/* ── Root redirect ── */}
         <Route path="/" element={<RootRedirect />} />
