@@ -45,9 +45,15 @@ public class Order {
     @Column(nullable = false, unique = true, length = 50)
     private String orderNumber; // e.g., ORD-2025-00001
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "customer_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "customer_id", nullable = true)
     private Customer customer;
+
+    @Column(name = "walk_in_name", length = 200)
+    private String walkInName;
+
+    @Column(name = "walk_in_phone", length = 20)
+    private String walkInPhone;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sales_person_id", nullable = false)

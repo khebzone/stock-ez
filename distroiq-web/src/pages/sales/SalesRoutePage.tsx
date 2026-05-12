@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Button, Skeleton, Form, Input, message, Grid } from 'antd';
+import { Modal, Button, Skeleton, Form, Input, InputNumber, Select, Switch, message, Grid } from 'antd';
 import {
   PhoneOutlined, EnvironmentOutlined, PlusOutlined,
   CheckCircleOutlined, ShoppingOutlined,
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetMyOrdersQuery } from '../../store/api/orderApi';
 import { useCreateCustomerMutation } from '../../store/api/customerApi';
+import { useGetRoutePlanQuery } from '../../store/api/routeApi';
 
 const { useBreakpoint } = Grid;
 
@@ -23,9 +24,13 @@ const STATUS_CFG = {
 const SalesRoutePage: React.FC = () => {
   const navigate = useNavigate();
   const screens = useBreakpoint();
-  const isSmallPhone = !screens.sm;
+  const isMobile = !screens.md;
+  const isSmall  = !screens.sm;
   const { data: allocData, isLoading, refetch } = useGetMyAllocationQuery();
   const { data: ordersData } = useGetMyOrdersQuery();
+  const { data: planData } = useGetRoutePlanQuery(
+    allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId }
+  );
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -36,6 +41,7 @@ const SalesRoutePage: React.FC = () => {
   const allocation = allocData?.data;
   const customers: any[] = allocation?.customers || [];
   const orders: any[] = ordersData?.data || [];
+  const routePlaces: any[] = planData?.data?.plan || [];
 
   const customerOrderMap: Record<string, any> = {};
   orders.forEach((o: any) => { if (o.customer?.id) customerOrderMap[o.customer.id] = o; });
@@ -69,14 +75,21 @@ const SalesRoutePage: React.FC = () => {
     try {
       const values = await newCustomerForm.validateFields();
       const payload: any = {
-        businessName: values.businessName.trim(),
-        ownerName: values.ownerName.trim(),
-        phone: values.phone.trim(),
-        address: values.address?.trim() || undefined,
-        routeId: allocation?.routeId,
+        businessName:  values.businessName.trim(),
+        ownerName:     values.ownerName.trim(),
+        phone:         values.phone.trim(),
+        altPhone:      values.altPhone?.trim()  || undefined,
+        email:         values.email?.trim()     || undefined,
+        address:       values.address?.trim()   || undefined,
+        gstin:         values.gstin?.trim()     || undefined,
+        routeId:       allocation?.routeId,
+        routePlaceId:  values.routePlaceId,
+        creditAllowed: values.creditAllowed || false,
+        creditDays:    values.creditDays    || undefined,
+        creditLimit:   values.creditLimit   || undefined,
       };
       if (gpsCoords) {
-        payload.latitude = gpsCoords.lat;
+        payload.latitude  = gpsCoords.lat;
         payload.longitude = gpsCoords.lng;
       }
       await createCustomer(payload).unwrap();
@@ -120,8 +133,9 @@ const SalesRoutePage: React.FC = () => {
 
       {/* Route Header */}
       <div style={{
-        background: '#0f172a', borderRadius: 18, padding: '20px',
-        boxShadow: '0 6px 24px rgba(15,23,42,0.18)', position: 'relative', overflow: 'hidden',
+        background: `linear-gradient(135deg, ${P} 0%, #047857 100%)`,
+        borderRadius: 18, padding: '20px',
+        boxShadow: '0 6px 24px rgba(5,150,105,0.28)', position: 'relative', overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', top: -24, right: -24, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -147,7 +161,7 @@ const SalesRoutePage: React.FC = () => {
           <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 100, height: 7 }}>
             <div style={{
               height: 7, borderRadius: 100,
-              background: `linear-gradient(90deg, ${P}, #34d399)`,
+              background: 'rgba(255,255,255,0.9)',
               width: `${pct}%`, transition: 'width 0.4s ease',
             }} />
           </div>
@@ -249,7 +263,7 @@ const SalesRoutePage: React.FC = () => {
                         display: 'flex', alignItems: 'center', gap: 5, flex: 1,
                         fontSize: 12, color: '#2563eb', textDecoration: 'none',
                         background: '#eff6ff', borderRadius: 8,
-                        padding: isSmallPhone ? '10px 12px' : '6px 10px',
+                        padding: isSmall ? '10px 12px' : '6px 10px',
                         justifyContent: 'center', minHeight: 40,
                       }}>
                         <PhoneOutlined style={{ fontSize: 12 }} />{c.phone}
@@ -260,7 +274,7 @@ const SalesRoutePage: React.FC = () => {
                           display: 'flex', alignItems: 'center', gap: 5, flex: 1,
                           fontSize: 12, color: P, border: `1.5px solid ${P}`,
                           background: '#fff', borderRadius: 8,
-                          padding: isSmallPhone ? '10px 12px' : '6px 12px',
+                          padding: isSmall ? '10px 12px' : '6px 12px',
                           cursor: 'pointer', fontWeight: 700, justifyContent: 'center', minHeight: 40,
                         }}
                       >
@@ -293,6 +307,9 @@ const SalesRoutePage: React.FC = () => {
       <Modal
         open={!!selectedCustomer}
         onCancel={() => setSelectedCustomer(null)}
+        width={isMobile ? '94%' : 520}
+        centered
+        styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: '12px 0 0' } }}
         title={
           <div>
             <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{selectedCustomer?.businessName}</div>
@@ -304,64 +321,104 @@ const SalesRoutePage: React.FC = () => {
           </div>
         }
         footer={
-          isSmallPhone ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Button type="primary" icon={<PlusOutlined />} block size="large"
+          <div style={{ display: 'flex', flexDirection: isSmall ? 'column' : 'row', gap: 8, justifyContent: 'flex-end' }}>
+            {!selectedOrder && (
+              <Button type="primary" icon={<PlusOutlined />}
+                size={isSmall ? 'large' : 'middle'}
+                block={isSmall}
                 style={{ background: P, borderColor: P, fontWeight: 700 }}
                 onClick={() => { navigate('/sales/order', { state: { customerId: selectedCustomer?.id } }); setSelectedCustomer(null); }}
               >
                 New Order
               </Button>
-              <Button block onClick={() => setSelectedCustomer(null)}>Close</Button>
-            </div>
-          ) : [
-            <Button key="order" type="primary" icon={<PlusOutlined />}
-              style={{ background: P, borderColor: P, fontWeight: 700 }}
-              onClick={() => { navigate('/sales/order', { state: { customerId: selectedCustomer?.id } }); setSelectedCustomer(null); }}
-            >
-              New Order
-            </Button>,
-            <Button key="close" onClick={() => setSelectedCustomer(null)}>Close</Button>,
-          ]
+            )}
+            <Button block={isSmall} size={isSmall ? 'large' : 'middle'} onClick={() => setSelectedCustomer(null)}>Close</Button>
+          </div>
         }
       >
         {selectedCustomer && (
-          <div style={{ marginTop: 4 }}>
-            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+          <div>
+            {/* Customer info */}
+            <div style={{ padding: '0 20px 14px' }}>
               {[
                 { label: 'Owner',   value: selectedCustomer.ownerName  },
-                { label: 'Phone',   value: <a href={`tel:${selectedCustomer.phone}`}>{selectedCustomer.phone}</a> },
+                { label: 'Phone',   value: <a href={`tel:${selectedCustomer.phone}`} style={{ color: '#2563eb' }}>{selectedCustomer.phone}</a> },
                 { label: 'Address', value: selectedCustomer.address    },
-                selectedCustomer.creditAllowed && { label: 'Credit Limit', value: `₹${selectedCustomer.creditLimit?.toFixed(0)}` },
-              ].filter(Boolean).map((row: any) => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{row.label}</span>
-                  <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 500, textAlign: 'right', maxWidth: '60%' }}>{row.value || '—'}</span>
+                selectedCustomer.creditAllowed && { label: 'Credit Limit', value: `₹${Number(selectedCustomer.creditLimit || 0).toFixed(0)}` },
+              ].filter(Boolean).map((row: any, i: number, arr: any[]) => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: i < arr.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, minWidth: 80 }}>{row.label}</span>
+                  <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 500, textAlign: 'right', flex: 1 }}>{row.value || '—'}</span>
                 </div>
               ))}
             </div>
 
-            {selectedOrder && (
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-                  Today's Order
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', background: '#ecfdf5', borderRadius: 12, padding: '12px 16px' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>#{selectedOrder.orderNumber}</div>
-                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{selectedOrder.items?.length || 0} items</div>
+            {selectedOrder && (() => {
+              const balance = Number(selectedOrder.balanceAmount || 0);
+              const sc = {
+                SUBMITTED:        '#f59e0b', PENDING_APPROVAL: '#f59e0b',
+                APPROVED:         P,         PREPARING:        '#f97316',
+                PREPARED:         '#06b6d4', DISPATCHED:       '#8b5cf6',
+                DELIVERED:        P,         CANCELLED:        '#ef4444',
+              }[selectedOrder.status as string] || '#6b7280';
+              return (
+                <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: 16 }}>
+                  {/* Order summary header */}
+                  <div style={{ padding: '0 20px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Today's Order</div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 15 }}>#{selectedOrder.orderNumber}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${sc}18`, color: sc }}>
+                        {selectedOrder.status}
+                      </span>
+                      <div style={{ fontWeight: 900, color: P, fontSize: 17, marginTop: 4 }}>₹{Number(selectedOrder.totalAmount || 0).toFixed(2)}</div>
+                      {balance > 0 ? (
+                        <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 700 }}>Due ₹{balance.toFixed(2)}</div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: P, fontWeight: 700 }}>✓ Fully Paid</div>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, color: P, fontSize: 16 }}>₹{selectedOrder.totalAmount?.toFixed(2)}</div>
-                    {(selectedOrder.balanceAmount || 0) > 0 ? (
-                      <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Due ₹{selectedOrder.balanceAmount?.toFixed(2)}</div>
-                    ) : (
-                      <div style={{ fontSize: 11, color: P, fontWeight: 600 }}>✓ Paid</div>
-                    )}
+
+                  {/* Items */}
+                  <div style={{ borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ padding: '10px 20px 6px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                      Items ({selectedOrder.items?.length || 0})
+                    </div>
+                    {(selectedOrder.items || []).map((item: any, idx: number) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: '11px 20px',
+                          borderBottom: idx < (selectedOrder.items.length - 1) ? '1px solid #f8fafc' : 'none',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12,
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13, lineHeight: 1.3 }}>
+                            {item.product?.name}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                            {item.product?.brand && <span>{item.product.brand} · </span>}
+                            {item.quantity} {item.product?.unit || 'pcs'} × ₹{Number(item.unitPrice).toFixed(2)}
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 800, color: P, fontSize: 14, flexShrink: 0 }}>
+                          ₹{Number(item.lineTotal).toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Total footer */}
+                    <div style={{ padding: '12px 20px', borderTop: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', background: '#f8fafc' }}>
+                      <span style={{ fontWeight: 700, color: '#64748b', fontSize: 13 }}>{selectedOrder.items?.length || 0} items</span>
+                      <span style={{ fontWeight: 900, color: P, fontSize: 16 }}>₹{Number(selectedOrder.totalAmount || 0).toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
       </Modal>
@@ -375,6 +432,8 @@ const SalesRoutePage: React.FC = () => {
         confirmLoading={creating}
         okText="Save Customer"
         okButtonProps={{ style: { background: P, borderColor: P } }}
+        width={isMobile ? '92%' : 520}
+        centered
       >
         {/* GPS status banner */}
         <div style={{
@@ -392,19 +451,54 @@ const SalesRoutePage: React.FC = () => {
           )}
         </div>
 
-        <Form form={newCustomerForm} layout="vertical">
-          <Form.Item name="businessName" label="Business Name" rules={[{ required: true, message: 'Required' }]}>
+        <Form form={newCustomerForm} layout="vertical" requiredMark={false}>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Basic Info</div>
+
+          <Form.Item name="businessName" label="Business / Shop Name *" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="e.g. Ravi General Stores" />
           </Form.Item>
-          <Form.Item name="ownerName" label="Owner Name" rules={[{ required: true, message: 'Required' }]}>
+          <Form.Item name="ownerName" label="Owner Name *" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="e.g. Ravi Kumar" />
           </Form.Item>
-          <Form.Item name="phone" label="Phone" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
+          <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
             <Input placeholder="10-digit mobile number" maxLength={10} />
           </Form.Item>
-          <Form.Item name="address" label="Address" style={{ marginBottom: 0 }}>
+          <Form.Item name="altPhone" label="Alt Mobile">
+            <Input placeholder="Optional" maxLength={10} />
+          </Form.Item>
+          <Form.Item name="address" label="Address">
             <Input.TextArea rows={2} placeholder="Shop address (optional)" />
           </Form.Item>
+          <Form.Item name="gstin" label="GSTIN">
+            <Input placeholder="Optional" />
+          </Form.Item>
+          <Form.Item name="email" label="Email">
+            <Input type="email" placeholder="Optional" />
+          </Form.Item>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Route Stop</div>
+
+          <Form.Item name="routePlaceId" label="Stop / Place *" rules={[{ required: true, message: 'Select a stop' }]}>
+            <Select placeholder="Select stop on this route" size="large">
+              {routePlaces.map((p: any) => (
+                <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Credit</div>
+
+          <Form.Item name="creditAllowed" label="Allow Credit" valuePropName="checked">
+            <Switch checkedChildren="Credit On" unCheckedChildren="Cash Only" />
+          </Form.Item>
+          <Form.Item name="creditDays" label="Credit Days">
+            <InputNumber style={{ width: '100%' }} min={0} max={365} placeholder="e.g. 30" addonAfter="days" />
+          </Form.Item>
+          <Form.Item name="creditLimit" label="Credit Limit" style={{ marginBottom: 0 }}>
+            <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 50000" addonBefore="₹" />
+          </Form.Item>
+
         </Form>
       </Modal>
     </div>

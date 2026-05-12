@@ -21,6 +21,7 @@ import SalesDashboardPage from './pages/sales/SalesDashboardPage';
 import SalesRoutePage from './pages/sales/SalesRoutePage';
 import SalesOrderPage from './pages/sales/SalesOrderPage';
 import SalesPaymentPage from './pages/sales/SalesPaymentPage';
+import SalesHistoryPage from './pages/sales/SalesHistoryPage';
 import InvoiceApproverPage from './pages/invoice/InvoiceApproverPage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
 import PurchaseEntryPage from './pages/purchases/PurchaseEntryPage';
@@ -141,6 +142,7 @@ const App: React.FC = () => {
         <Route path="/sales/route" element={<SalesProtectedRoute><SalesRoutePage /></SalesProtectedRoute>} />
         <Route path="/sales/order" element={<SalesProtectedRoute><SalesOrderPage /></SalesProtectedRoute>} />
         <Route path="/sales/payments" element={<SalesProtectedRoute><SalesPaymentPage /></SalesProtectedRoute>} />
+        <Route path="/sales/history" element={<SalesProtectedRoute><SalesHistoryPage /></SalesProtectedRoute>} />
 
         {/* ── Delivery Person routes ── */}
         <Route path="/delivery/dashboard" element={<DeliveryProtectedRoute><DeliveryDashboardPage /></DeliveryProtectedRoute>} />

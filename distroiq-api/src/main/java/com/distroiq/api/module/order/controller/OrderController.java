@@ -33,8 +33,8 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Create a new order [SALES]")
+    @PreAuthorize("hasAnyRole('SALES','INVOICE','ADMIN')")
+    @Operation(summary = "Create a new order [SALES/INVOICE/ADMIN]")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> create(
             @Valid @RequestBody OrderDtos.CreateOrderRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -64,6 +64,16 @@ public class OrderController {
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getOrderById(id, tenantId)));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('INVOICE')")
+    @Operation(summary = "Edit order items (only while SUBMITTED) [INVOICE]")
+    public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> update(
+            @PathVariable UUID id,
+            @Valid @RequestBody OrderDtos.UpdateOrderRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.updateOrder(id, request, tenantId), "Order updated"));
     }
 
     @PostMapping("/{id}/approve")

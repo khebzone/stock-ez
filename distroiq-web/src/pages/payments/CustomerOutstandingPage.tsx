@@ -22,8 +22,6 @@ const MODE_COLOR: Record<string, string> = {
 const CustomerOutstandingPage: React.FC = () => {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
-  const isTablet = screens.md && !screens.lg;
-  const isDesktop = screens.lg;
   const isLargeDesktop = screens.xl;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -56,6 +54,8 @@ const CustomerOutstandingPage: React.FC = () => {
   const [collectPayment, { isLoading: collecting }] = useCollectPaymentMutation();
 
   const selected = allSummaries.find(s => s.customerId === selectedCustomerId);
+  const shouldShowList = !isMobile || !selectedCustomerId;
+  const shouldShowDetail = !!selectedCustomerId;
 
   const collectAmount = Form.useWatch('amount', form);
   const selectedMethodId = Form.useWatch('paymentMethodId', form);
@@ -123,9 +123,6 @@ const CustomerOutstandingPage: React.FC = () => {
     cursor: 'pointer',
     transition: 'background 0.15s',
   });
-
-  const shouldShowList = !isMobile || !selectedCustomerId;
-  const shouldShowDetail = !!selectedCustomerId;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -197,12 +194,12 @@ const CustomerOutstandingPage: React.FC = () => {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: (selectedCustomerId && isDesktop) ? (isLargeDesktop ? '380px 1fr' : '320px 1fr') : '1fr',
+        gridTemplateColumns: shouldShowDetail && !isMobile ? '2fr 3fr' : '1fr',
         gap: 20,
-        alignItems: 'start'
+        alignItems: 'start',
       }}>
 
-        {/* Customer Summary Table */}
+        {/* Customer List — always left, always full remaining width */}
         {shouldShowList && (
           <div style={tableContainerStyle}>
             <div style={tableHeaderStyle}>
@@ -217,7 +214,6 @@ const CustomerOutstandingPage: React.FC = () => {
                 </>
               )}
             </div>
-
             {summaryLoading ? (
               <div style={{ padding: 20 }}><Skeleton active paragraph={{ rows: 5 }} /></div>
             ) : summaries.length === 0 ? (
@@ -225,14 +221,8 @@ const CustomerOutstandingPage: React.FC = () => {
             ) : summaries.map((s: any, i: number) => {
               const isSelected = s.customerId === selectedCustomerId;
               return (
-                <div
-                  key={s.customerId}
-                  onClick={() => setSelectedCustomerId(isSelected && !isMobile ? null : s.customerId)}
-                  style={{
-                    ...tableRowStyle(isSelected),
-                    borderBottom: i < summaries.length - 1 ? '1px solid #f1f5f9' : 'none',
-                  }}
-                >
+                <div key={s.customerId} onClick={() => setSelectedCustomerId(isSelected && !isMobile ? null : s.customerId)}
+                  style={{ ...tableRowStyle(isSelected), borderBottom: i < summaries.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <div style={{ width: 34, height: 34, borderRadius: 9, background: isSelected ? '#fff' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#475569', fontSize: 13, flexShrink: 0 }}>
                       {s.businessName?.[0]}
@@ -257,29 +247,28 @@ const CustomerOutstandingPage: React.FC = () => {
           </div>
         )}
 
-        {/* Detail Panel */}
+        {/* Detail Panel — fixed 440px on the right */}
         {shouldShowDetail && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Detail Summary Card */}
             {selected && (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: isMobile ? '16px' : '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 800, color: '#0f172a' }}>{selected.businessName}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{selected.businessName}</div>
                     <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 4 }}>
                       {selected.ownerName} · {selected.phone}
                       {selected.lastPaymentDate && <div style={{ marginTop: 2 }}>Last paid: {dayjs(selected.lastPaymentDate).format('DD MMM YYYY')}</div>}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: isMobile ? 12 : 20, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', borderTop: isMobile ? '1px solid #f1f5f9' : 'none', paddingTop: isMobile ? 12 : 0 }}>
+                  <div style={{ display: 'flex', gap: 16 }}>
                     {[
                       { label: 'Ordered', value: formatINR(selected.totalOrdered), color: '#0f172a' },
                       { label: 'Paid', value: formatINR(selected.totalPaid), color: '#059669' },
                       { label: 'Due', value: formatINR(selected.outstanding), color: '#dc2626' },
                     ].map(stat => (
-                      <div key={stat.label} style={{ textAlign: isMobile ? 'center' : 'right', flex: isMobile ? 1 : 'none' }}>
+                      <div key={stat.label} style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{stat.label}</div>
-                        <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: stat.color, marginTop: 2 }}>{stat.value}</div>
                       </div>
                     ))}
                   </div>
@@ -287,28 +276,24 @@ const CustomerOutstandingPage: React.FC = () => {
               </div>
             )}
 
-            {/* Unpaid Orders - Scrollable on very small screens, otherwise fits */}
             <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, marginLeft: 4 }}>Unpaid Orders</div>
             {ordersLoading ? <Skeleton active paragraph={{ rows: 3 }} /> : (
               <div style={{ ...tableContainerStyle, overflowX: 'auto' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr 1fr 100px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 18px', minWidth: 450 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 80px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 14px', minWidth: 380 }}>
                   {['Date', 'Order', 'Total', 'Balance', ''].map(h => (
-                    <div key={h} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
+                    <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
                   ))}
                 </div>
                 {unpaidOrders.length === 0 ? (
-                  <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>No unpaid orders</div>
+                  <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94a3b8' }}>No unpaid orders</div>
                 ) : unpaidOrders.map((o: any, i: number) => (
-                  <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr 1fr 100px', padding: '14px 18px', alignItems: 'center', borderBottom: i < unpaidOrders.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 450 }}>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>{dayjs(o.orderDate).format('DD MMM YYYY')}</div>
-                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{o.orderNumber}</div>
-                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{formatINR(o.totalAmount)}</div>
-                    <div style={{ fontWeight: 800, color: '#dc2626', fontSize: 13 }}>{formatINR(o.balanceAmount)}</div>
-                    <Button
-                      type="primary" size="small" icon={<WalletOutlined />}
-                      onClick={() => openCollect(o)}
-                      style={{ borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#059669' }}
-                    >
+                  <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 80px', padding: '11px 14px', alignItems: 'center', borderBottom: i < unpaidOrders.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 380 }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(o.orderDate).format('DD MMM YYYY')}</div>
+                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 12 }}>{o.orderNumber}</div>
+                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 12 }}>{formatINR(o.totalAmount)}</div>
+                    <div style={{ fontWeight: 800, color: '#dc2626', fontSize: 12 }}>{formatINR(o.balanceAmount)}</div>
+                    <Button type="primary" size="small" icon={<WalletOutlined />} onClick={() => openCollect(o)}
+                      style={{ borderRadius: 7, fontSize: 11, fontWeight: 700, background: '#059669', padding: '0 8px' }}>
                       Collect
                     </Button>
                   </div>
@@ -316,27 +301,26 @@ const CustomerOutstandingPage: React.FC = () => {
               </div>
             )}
 
-            {/* Payment History */}
             <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, marginTop: 4, marginLeft: 4 }}>Payment History</div>
             {historyLoading ? <Skeleton active paragraph={{ rows: 3 }} /> : (
               <div style={{ ...tableContainerStyle, overflowX: 'auto' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '110px 100px 1fr 100px 90px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 18px', minWidth: 480 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 14px', minWidth: 0 }}>
                   {['Date', 'Amount', 'Method', 'Order', 'Status'].map(h => (
-                    <div key={h} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
+                    <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
                   ))}
                 </div>
                 {paymentHistory.length === 0 ? (
-                  <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>No payments recorded</div>
+                  <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94a3b8' }}>No payments recorded</div>
                 ) : paymentHistory.slice().reverse().map((p: any, i: number) => (
-                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '110px 100px 1fr 100px 90px', padding: '12px 18px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 480 }}>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>{dayjs(p.collectionDate).format('DD MMM YYYY')}</div>
-                    <div style={{ fontWeight: 800, color: '#059669', fontSize: 13.5 }}>{formatINR(p.amount)}</div>
+                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr', padding: '10px 14px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(p.collectionDate).format('DD MMM YYYY')}</div>
+                    <div style={{ fontWeight: 800, color: '#059669', fontSize: 12 }}>{formatINR(p.amount)}</div>
                     <div>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280' }}>
                         {p.paymentMethodName || p.paymentMode}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: '#475569' }}>{p.order?.orderNumber}</div>
+                    <div style={{ fontSize: 11, color: '#475569' }}>{p.order?.orderNumber}</div>
                     <div style={{ fontSize: 11, color: p.cleared ? '#059669' : p.submitted ? '#0891b2' : '#d97706', fontWeight: 700 }}>
                       {p.cleared ? 'Cleared' : p.submitted ? 'Submitted' : 'Pending'}
                     </div>

@@ -29,6 +29,10 @@ export const orderApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/orders', method: 'POST', body }),
       invalidatesTags: ['Order'],
     }),
+    updateOrder: builder.mutation<any, { id: string; items: any[]; notes?: string }>({
+      query: ({ id, items, notes }) => ({ url: `/orders/${id}`, method: 'PUT', body: { items, notes } }),
+      invalidatesTags: ['Order'],
+    }),
     approveOrder: builder.mutation<any, string>({
       query: (id) => ({ url: `/orders/${id}/approve`, method: 'POST' }),
       invalidatesTags: ['Order'],
@@ -82,6 +86,7 @@ export const {
   useGetMyDeliveriesQuery,
   useGetOrderQuery,
   useCreateOrderMutation,
+  useUpdateOrderMutation,
   useApproveOrderMutation,
   useCancelOrderMutation,
   useAssignDeliveryMutation,

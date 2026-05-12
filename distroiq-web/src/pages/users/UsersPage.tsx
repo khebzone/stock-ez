@@ -3,8 +3,8 @@ import {
   Table, Button, Modal, Form, Input, Select, Space,
   Row, Col, Card, Popconfirm, message, Tooltip, Avatar, Badge, InputNumber,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
-import { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation } from '../../store/api/userApi';
+import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation, useReactivateUserMutation } from '../../store/api/userApi';
 import PageHeader from '../../components/PageHeader';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
 import { applyApiErrorToForm } from '../../utils/formError';
@@ -26,12 +26,14 @@ const roleCfg = (role: string) => ROLES.find(r => r.value === role) || { color: 
 const UsersPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [form] = Form.useForm();
 
-  const { data, isLoading } = useGetUsersQuery();
+  const { data, isLoading } = useGetUsersQuery({ includeInactive });
   const [createUser, { isLoading: creating }] = useCreateUserMutation();
   const [updateUser, { isLoading: updating }] = useUpdateUserMutation();
   const [deleteUser] = useDeleteUserMutation();
+  const [reactivateUser] = useReactivateUserMutation();
 
   const users = (data?.data?.content || data?.data || []).filter((u: any) => u.role !== 'SUPER_ADMIN');
 
@@ -74,6 +76,15 @@ const UsersPage: React.FC = () => {
     }
   };
 
+  const handleReactivate = async (id: string) => {
+    try {
+      await reactivateUser(id).unwrap();
+      message.success('User reactivated');
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to reactivate user');
+    }
+  };
+
   const columns = [
     {
       title: 'User',
@@ -82,10 +93,10 @@ const UsersPage: React.FC = () => {
         const cfg = roleCfg(r.role);
         return (
           <Space>
-            <Avatar size={36} style={{ background: cfg.color, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+            <Avatar size={36} style={{ background: cfg.color, fontWeight: 700, fontSize: 14, flexShrink: 0, opacity: r.active ? 1 : 0.5 }}>
               {r.fullName?.[0]}
             </Avatar>
-            <div>
+            <div style={{ opacity: r.active ? 1 : 0.5 }}>
               <div style={{ fontWeight: 600, color: '#1a1d2e', fontSize: 14 }}>{r.fullName}</div>
               <div style={{ color: '#9ca3af', fontSize: 12 }}>{r.email || r.phone}</div>
             </div>
@@ -94,19 +105,20 @@ const UsersPage: React.FC = () => {
       },
     },
     { title: 'Phone', dataIndex: 'phone', key: 'phone', width: 130,
-      render: (v: string) => <span style={{ color: '#374151' }}>{v}</span> },
+      render: (v: string, r: any) => <span style={{ color: '#374151', opacity: r.active ? 1 : 0.5 }}>{v}</span> },
     {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
       width: 160,
-      render: (role: string) => {
+      render: (role: string, r: any) => {
         const cfg = roleCfg(role);
         return (
           <span style={{
             background: cfg.bg, color: cfg.color,
             fontSize: 12, fontWeight: 700,
             padding: '3px 10px', borderRadius: 20,
+            opacity: r.active ? 1 : 0.5,
           }}>
             {roleLabel(role)}
           </span>
@@ -125,9 +137,9 @@ const UsersPage: React.FC = () => {
       dataIndex: 'employmentType',
       key: 'employmentType',
       width: 110,
-      render: (v: string) => v
-        ? <span style={{ fontSize: 13, color: '#374151' }}>{v === 'PERMANENT' ? 'Permanent' : 'Temporary'}</span>
-        : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>,
+      render: (v: string, r: any) => (v
+        ? <span style={{ fontSize: 13, color: '#374151', opacity: r.active ? 1 : 0.5 }}>{v === 'PERMANENT' ? 'Permanent' : 'Temporary'}</span>
+        : <span style={{ color: '#9ca3af', fontSize: 13, opacity: r.active ? 1 : 0.5 }}>—</span>),
     },
     {
       title: 'Salary',
@@ -135,24 +147,34 @@ const UsersPage: React.FC = () => {
       key: 'salary',
       width: 110,
       align: 'right' as const,
-      render: (v: number) => v != null
-        ? <span style={{ fontSize: 13, color: '#374151' }}>₹{Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-        : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>,
+      render: (v: number, r: any) => (v != null
+        ? <span style={{ fontSize: 13, color: '#374151', opacity: r.active ? 1 : 0.5 }}>₹{Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        : <span style={{ color: '#9ca3af', fontSize: 13, opacity: r.active ? 1 : 0.5 }}>—</span>),
     },
     {
       title: '',
       key: 'actions',
-      width: 110,
+      width: 130,
       render: (_: any, r: any) => (
         <Space>
-          <Tooltip title="Edit">
-            <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
-          </Tooltip>
-          <Popconfirm title="Deactivate this user?" onConfirm={() => handleDelete(r.id)}>
-            <Tooltip title="Deactivate">
-              <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
-            </Tooltip>
-          </Popconfirm>
+          {r.active ? (
+            <>
+              <Tooltip title="Edit">
+                <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
+              </Tooltip>
+              <Popconfirm title="Deactivate this user?" onConfirm={() => handleDelete(r.id)}>
+                <Tooltip title="Deactivate">
+                  <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
+                </Tooltip>
+              </Popconfirm>
+            </>
+          ) : (
+            <Popconfirm title="Reactivate this user?" onConfirm={() => handleReactivate(r.id)}>
+              <Tooltip title="Reactivate">
+                <Button icon={<ReloadOutlined />} size="small" shape="circle" style={{ color: '#059669', borderColor: '#059669' }} />
+              </Tooltip>
+            </Popconfirm>
+          )}
           <AuditHistoryButton entityType="USER" entityId={r.id} title={`Audit — ${r.fullName}`} />
         </Space>
       ),
@@ -166,7 +188,18 @@ const UsersPage: React.FC = () => {
         subtitle="Manage staff and access roles"
         count={users.length}
         countLabel="users"
-        action={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd} size="middle">Add User</Button>}
+        action={
+          <Space>
+            <Button
+              type={includeInactive ? 'primary' : 'default'}
+              onClick={() => setIncludeInactive(!includeInactive)}
+              style={{ borderRadius: 8 }}
+            >
+              {includeInactive ? 'Showing All' : 'Show Inactive'}
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} size="middle">Add User</Button>
+          </Space>
+        }
       />
 
       {/* Role summary strip */}

@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Input, message, Spin, Button, InputNumber, Grid, Tooltip } from 'antd';
+import { Input, message, Spin, Button, InputNumber, Grid, Tooltip, Modal, Form, Select, Switch } from 'antd';
 import {
   SearchOutlined, PlusOutlined, MinusOutlined, CheckCircleOutlined,
   ShoppingCartOutlined, ArrowLeftOutlined, CloseOutlined,
   UserOutlined, AppstoreOutlined, FileTextOutlined,
+  AimOutlined, LoadingOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useGetMyCustomersQuery } from '../../store/api/salesApi';
+import { useGetMyCustomersQuery, useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetProductsQuery } from '../../store/api/productApi';
 import { useCreateOrderMutation } from '../../store/api/orderApi';
-import { useGetCustomerOutstandingQuery } from '../../store/api/customerApi';
+import { useGetCustomerOutstandingQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
+import { useGetRoutePlanQuery } from '../../store/api/routeApi';
 
 const { useBreakpoint } = Grid;
 
@@ -90,6 +92,7 @@ const SalesOrderPage: React.FC = () => {
   const location  = useLocation();
   const screens   = useBreakpoint();
   const isMobile  = !screens.md;
+  const isSmall   = !screens.sm;
   const isTablet  = screens.md && !screens.lg;
 
   const [step, setStep] = useState(0);
@@ -97,12 +100,24 @@ const SalesOrderPage: React.FC = () => {
   const [customerSearch, setCustomerSearch]     = useState('');
   const [productSearch, setProductSearch]       = useState('');
   const [cart, setCart]                         = useState<CartItem[]>([]);
-  const [notes, setNotes]                       = useState('');
 
-  const { data: customersData, isLoading: custLoading } = useGetMyCustomersQuery();
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [gpsLoading, setGpsLoading]           = useState(false);
+  const [gpsCoords, setGpsCoords]             = useState<{ lat: number; lng: number } | null>(null);
+  const [newCustomerForm]                     = Form.useForm();
+
+  const { data: customersData, isLoading: custLoading, refetch: refetchCustomers } = useGetMyCustomersQuery();
   const { data: productsData,  isLoading: prodLoading  } = useGetProductsQuery({ size: 300 });
   const [createOrder, { isLoading: creating }]           = useCreateOrderMutation();
+  const [createCustomer, { isLoading: creatingCust }]    = useCreateCustomerMutation();
   const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id });
+  const { data: allocData }       = useGetMyAllocationQuery();
+  const { data: planData }        = useGetRoutePlanQuery(
+    allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId }
+  );
+
+  const allocation    = allocData?.data;
+  const routePlaces: any[] = planData?.data?.plan || [];
 
   const customers: any[] = customersData?.data || [];
   const products: any[]  = productsData?.data?.content || productsData?.data || [];
@@ -173,6 +188,48 @@ const SalesOrderPage: React.FC = () => {
     return (min != null && item.unitPrice < min) || (max != null && item.unitPrice > max);
   });
 
+  const openNewCustomer = () => {
+    newCustomerForm.resetFields();
+    setGpsCoords(null);
+    setNewCustomerOpen(true);
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsLoading(false); },
+      () => { setGpsLoading(false); message.warning('Could not get GPS location. You can still save without it.'); },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  };
+
+  const handleCreateCustomer = async () => {
+    try {
+      const values = await newCustomerForm.validateFields();
+      const payload: any = {
+        businessName:  values.businessName.trim(),
+        ownerName:     values.ownerName.trim(),
+        phone:         values.phone.trim(),
+        altPhone:      values.altPhone?.trim()  || undefined,
+        email:         values.email?.trim()     || undefined,
+        address:       values.address?.trim()   || undefined,
+        gstin:         values.gstin?.trim()     || undefined,
+        routeId:       allocation?.routeId,
+        routePlaceId:  values.routePlaceId,
+        creditAllowed: values.creditAllowed || false,
+        creditDays:    values.creditDays    || undefined,
+        creditLimit:   values.creditLimit   || undefined,
+      };
+      if (gpsCoords) { payload.latitude = gpsCoords.lat; payload.longitude = gpsCoords.lng; }
+      await createCustomer(payload).unwrap();
+      message.success('Customer added — select them below');
+      setNewCustomerOpen(false);
+      const refetched = await refetchCustomers();
+      const newCust = (refetched.data?.data as any[])?.find((c: any) => c.phone === values.phone.trim());
+      if (newCust) { setSelectedCustomer(newCust); setStep(1); }
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.data?.message || 'Failed to add customer');
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedCustomer) { message.error('No customer selected'); return; }
     if (cart.length === 0)  { message.error('Cart is empty'); return; }
@@ -184,7 +241,6 @@ const SalesOrderPage: React.FC = () => {
     try {
       await createOrder({
         customerId: selectedCustomer.id,
-        notes,
         items: cart.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
       }).unwrap();
       message.success('Order placed successfully!');
@@ -286,8 +342,95 @@ const SalesOrderPage: React.FC = () => {
               ))}
             </div>
           )}
+
+          {/* New Customer */}
+          <button
+            onClick={openNewCustomer}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', padding: '14px',
+              background: '#fff', border: '2px dashed #a7f3d0',
+              borderRadius: 10, cursor: 'pointer',
+              color: P, fontSize: 13, fontWeight: 700,
+            }}
+          >
+            <PlusOutlined />New Customer
+          </button>
         </div>
       )}
+
+      {/* New Customer Modal */}
+      <Modal
+        open={newCustomerOpen}
+        onCancel={() => setNewCustomerOpen(false)}
+        title={<span style={{ fontWeight: 700 }}>New Customer</span>}
+        onOk={handleCreateCustomer}
+        confirmLoading={creatingCust}
+        okText="Save Customer"
+        okButtonProps={{ style: { background: P, borderColor: P } }}
+        width={isMobile ? '92%' : 520}
+        centered
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: gpsCoords ? '#ecfdf5' : gpsLoading ? '#fffbeb' : '#fef2f2',
+          border: `1px solid ${gpsCoords ? '#a7f3d0' : gpsLoading ? '#fde68a' : '#fca5a5'}`,
+          borderRadius: 8, padding: '8px 12px', marginBottom: 16, marginTop: 4, fontSize: 12,
+        }}>
+          {gpsLoading ? (
+            <><LoadingOutlined style={{ color: '#f59e0b' }} /><span style={{ color: '#92400e' }}>Getting your location…</span></>
+          ) : gpsCoords ? (
+            <><AimOutlined style={{ color: P }} /><span style={{ color: '#065f46' }}>Location captured ({gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)})</span></>
+          ) : (
+            <><AimOutlined style={{ color: '#ef4444' }} /><span style={{ color: '#991b1b' }}>Location unavailable — customer saved without GPS</span></>
+          )}
+        </div>
+
+        <Form form={newCustomerForm} layout="vertical" requiredMark={false}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Basic Info</div>
+          <Form.Item name="businessName" label="Business / Shop Name *" rules={[{ required: true, message: 'Required' }]}>
+            <Input placeholder="e.g. Ravi General Stores" />
+          </Form.Item>
+          <Form.Item name="ownerName" label="Owner Name *" rules={[{ required: true, message: 'Required' }]}>
+            <Input placeholder="e.g. Ravi Kumar" />
+          </Form.Item>
+          <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
+            <Input placeholder="10-digit mobile number" maxLength={10} />
+          </Form.Item>
+          <Form.Item name="altPhone" label="Alt Mobile">
+            <Input placeholder="Optional" maxLength={10} />
+          </Form.Item>
+          <Form.Item name="address" label="Address">
+            <Input.TextArea rows={2} placeholder="Shop address (optional)" />
+          </Form.Item>
+          <Form.Item name="gstin" label="GSTIN">
+            <Input placeholder="Optional" />
+          </Form.Item>
+          <Form.Item name="email" label="Email">
+            <Input type="email" placeholder="Optional" />
+          </Form.Item>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Route Stop</div>
+          <Form.Item name="routePlaceId" label="Stop / Place *" rules={[{ required: true, message: 'Select a stop' }]}>
+            <Select placeholder="Select stop on this route" size="large">
+              {routePlaces.map((p: any) => (
+                <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Credit</div>
+          <Form.Item name="creditAllowed" label="Allow Credit" valuePropName="checked">
+            <Switch checkedChildren="Credit On" unCheckedChildren="Cash Only" />
+          </Form.Item>
+          <Form.Item name="creditDays" label="Credit Days">
+            <InputNumber style={{ width: '100%' }} min={0} max={365} placeholder="e.g. 30" addonAfter="days" />
+          </Form.Item>
+          <Form.Item name="creditLimit" label="Credit Limit" style={{ marginBottom: 0 }}>
+            <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 50000" addonBefore="₹" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* ── Step 1: Products ── */}
       {step === 1 && (
@@ -356,7 +499,7 @@ const SalesOrderPage: React.FC = () => {
               No products found
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: isSmall ? 8 : 8 }}>
               {filteredProducts.map((p: any) => {
                 const qty = getQty(p.id);
                 const inCart = qty > 0;
@@ -522,15 +665,17 @@ const SalesOrderPage: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                      {/* Mobile — bottom row: qty + rate input + error if any */}
-                      <div style={{ padding: '0 16px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {QtyControl}
-                        <Tooltip
-                          title={(min != null || max != null) ? `${min != null ? `min ₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `max ₹${Number(max).toFixed(2)}` : ''}` : undefined}
-                          placement="top"
-                        >
-                          <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: 90, height: 30 }} status={hasError ? 'error' : ''} />
-                        </Tooltip>
+                      {/* Mobile — bottom row: qty + rate input + optional error below */}
+                      <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {QtyControl}
+                          <Tooltip
+                            title={(min != null || max != null) ? `${min != null ? `min ₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `max ₹${Number(max).toFixed(2)}` : ''}` : undefined}
+                            placement="top"
+                          >
+                            <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: isSmall ? 100 : 110, height: 30 }} status={hasError ? 'error' : ''} />
+                          </Tooltip>
+                        </div>
                         {hasError && (
                           <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
                             {belowMin ? `Below min ₹${Number(min).toFixed(2)}` : `Above max ₹${Number(max).toFixed(2)}`}
@@ -569,39 +714,46 @@ const SalesOrderPage: React.FC = () => {
               );
             })}
 
-            {/* Totals block — same grid as table rows so amounts align with Total column */}
-            <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '8px 0 10px' }}>
-              {[
-                { label: 'Subtotal', value: cartSubtotal().toFixed(2), color: '#0f172a' },
-                { label: 'GST',      value: cartGst().toFixed(2),      color: '#64748b' },
-              ].map(row => (
-                <div key={row.label} style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 76px 68px 62px 52px 76px 20px' : '1fr 84px 76px 70px 60px 84px 22px', gap: '0 8px', padding: '2px 16px' }}>
-                  <div style={{ gridColumn: '1 / 6', textAlign: 'right', fontSize: 12, color: '#64748b' }}>{row.label}</div>
-                  <div style={{ textAlign: 'right', fontSize: 12, color: row.color }}>₹{row.value}</div>
-                  <div />
+            {/* Totals block */}
+            <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '10px 16px' }}>
+              {isMobile ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    { label: 'Subtotal', value: cartSubtotal().toFixed(2), color: '#475569', size: 13, weight: 500 },
+                    { label: 'GST',      value: cartGst().toFixed(2),      color: '#64748b', size: 13, weight: 500 },
+                  ].map(row => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: row.size, color: '#94a3b8' }}>{row.label}</span>
+                      <span style={{ fontSize: row.size, color: row.color, fontWeight: row.weight }}>₹{row.value}</span>
+                    </div>
+                  ))}
+                  <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Total</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotal().toFixed(2)}</span>
+                  </div>
                 </div>
-              ))}
-              <div style={{ height: 1, background: '#e2e8f0', margin: '6px 16px 4px' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 76px 68px 62px 52px 76px 20px' : '1fr 84px 76px 70px 60px 84px 22px', gap: '0 8px', padding: '2px 16px' }}>
-                <div style={{ gridColumn: '1 / 6', textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Total</div>
-                <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotal().toFixed(2)}</div>
-                <div />
-              </div>
+              ) : (
+                <>
+                  {[
+                    { label: 'Subtotal', value: cartSubtotal().toFixed(2), color: '#0f172a' },
+                    { label: 'GST',      value: cartGst().toFixed(2),      color: '#64748b' },
+                  ].map(row => (
+                    <div key={row.label} style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 76px 68px 62px 52px 76px 20px' : '1fr 84px 76px 70px 60px 84px 22px', gap: '0 8px', padding: '2px 0' }}>
+                      <div style={{ gridColumn: '1 / 6', textAlign: 'right', fontSize: 12, color: '#64748b' }}>{row.label}</div>
+                      <div style={{ textAlign: 'right', fontSize: 12, color: row.color }}>₹{row.value}</div>
+                      <div />
+                    </div>
+                  ))}
+                  <div style={{ height: 1, background: '#e2e8f0', margin: '6px 0 4px' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 76px 68px 62px 52px 76px 20px' : '1fr 84px 76px 70px 60px 84px 22px', gap: '0 8px', padding: '2px 0' }}>
+                    <div style={{ gridColumn: '1 / 6', textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Total</div>
+                    <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotal().toFixed(2)}</div>
+                    <div />
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <div style={{ ...colLabel, marginBottom: 6 }}>Notes (optional)</div>
-            <Input.TextArea
-              rows={2}
-              placeholder="Delivery instructions or special notes..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              maxLength={300}
-              showCount
-              style={{ borderRadius: 8, fontSize: 13 }}
-            />
           </div>
 
           {/* Credit limit block */}

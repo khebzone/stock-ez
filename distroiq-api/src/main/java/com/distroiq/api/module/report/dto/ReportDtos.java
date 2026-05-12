@@ -8,17 +8,13 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 public class ReportDtos {
 
     // ─── Aging Report ────────────────────────────────────────────────────────
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class AgingRow {
         private UUID customerId;
         private String businessName;
@@ -30,49 +26,70 @@ public class ReportDtos {
         private BigDecimal bucket90plus;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class AgingSummary {
+        private BigDecimal totalOutstanding;
+        private BigDecimal bucket0to30;
+        private BigDecimal bucket31to60;
+        private BigDecimal bucket61to90;
+        private BigDecimal bucket90plus;
+        private int customerCount;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class AgingReportResponse {
         private List<AgingRow> rows;
-        private BigDecimal summaryTotalOutstanding;
-        private BigDecimal summaryBucket0to30;
-        private BigDecimal summaryBucket31to60;
-        private BigDecimal summaryBucket61to90;
-        private BigDecimal summaryBucket90plus;
-        private int totalCustomers;
+        private AgingSummary summary;
     }
 
     // ─── Sales Trend ─────────────────────────────────────────────────────────
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class DailyRevenue {
         private LocalDate date;
+        private int orderCount;
+        private BigDecimal subTotal;
+        private BigDecimal totalGst;
         private BigDecimal totalAmount;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class SalesTrendResponse {
         private List<DailyRevenue> dailyBreakdown;
+        private int totalOrders;
+        private BigDecimal totalRevenue;
+        private BigDecimal totalGst;
+        private BigDecimal avgOrderValue;
     }
 
-    // ─── Sales Analysis ───────────────────────────────────────────────────────
+    // ─── Collection Report ───────────────────────────────────────────────────
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class DailyCollection {
+        private LocalDate date;
+        private int paymentCount;
+        private BigDecimal cashAmount;
+        private BigDecimal upiAmount;
+        private BigDecimal bankTransferAmount;
+        private BigDecimal totalAmount;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class CollectionReportResponse {
+        private List<DailyCollection> dailyBreakdown;
+        private BigDecimal totalCollected;
+        private BigDecimal totalCash;
+        private BigDecimal totalDigital;
+        private BigDecimal totalUncleared;
+    }
+
+    // ─── Sales Analysis ──────────────────────────────────────────────────────
 
     public enum SalesGroupBy {
         SALESMAN, PRODUCT, CATEGORY
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class SalesmanRow {
         private UUID salesPersonId;
         private String salesPersonName;
@@ -81,10 +98,7 @@ public class ReportDtos {
         private long totalOrders;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class ProductRow {
         private UUID productId;
         private String productName;
@@ -93,60 +107,66 @@ public class ReportDtos {
         private BigDecimal revenue;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class CategoryRow {
         private String category;
         private int qtySold;
         private BigDecimal revenue;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class DailyTrendPoint {
         private LocalDate date;
         private BigDecimal totalSales;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class SalesGroupRow {
+        private String name;
+        private String sub;
+        private BigDecimal totalSales;
+        private long orderCount;
+        private int qtySold;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class SalesKpi {
+        private BigDecimal totalSales;
+        private long totalOrders;
+        private BigDecimal avgOrderValue;
+        private String topPerformer;
+        private BigDecimal topPerformerSales;
+        private BigDecimal totalGst;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class SalesAnalysisResponse {
         private LocalDate from;
         private LocalDate to;
         private SalesGroupBy groupBy;
-        // Only one of these will be populated depending on groupBy
         private List<SalesmanRow> salesmanRows;
         private List<ProductRow> productRows;
         private List<CategoryRow> categoryRows;
         private List<DailyTrendPoint> dailyTrend;
         private BigDecimal grandTotal;
         private long totalOrders;
+        private List<SalesGroupRow> groups;
+        private SalesKpi kpi;
     }
 
-    // ─── Ledger Report ────────────────────────────────────────────────────────
+    // ─── Ledger Report ───────────────────────────────────────────────────────
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class LedgerEntry {
         private LocalDate date;
         private String description;
-        private BigDecimal debit;   // order amount
-        private BigDecimal credit;  // payment amount
+        private String type;   // "DEBIT" or "CREDIT"
+        private BigDecimal amount;
+        private String reference;
         private BigDecimal runningBalance;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class CustomerLedgerResponse {
         private UUID customerId;
         private String businessName;
@@ -155,27 +175,24 @@ public class ReportDtos {
         private LocalDate to;
         private BigDecimal openingBalance;
         private BigDecimal closingBalance;
+        private BigDecimal totalDebit;
+        private BigDecimal totalCredit;
         private List<LedgerEntry> entries;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class VendorLedgerRow {
         private String supplierName;
         private int entryCount;
-        private BigDecimal totalPurchases;
+        private BigDecimal totalAmount;
+        private LocalDate lastPurchaseDate;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class VendorLedgerResponse {
         private LocalDate from;
         private LocalDate to;
         private List<VendorLedgerRow> vendors;
-        private BigDecimal grandTotal;
+        private BigDecimal totalPurchases;
     }
 }

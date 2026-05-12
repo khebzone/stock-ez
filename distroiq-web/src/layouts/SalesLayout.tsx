@@ -3,7 +3,7 @@ import { Avatar, Dropdown, Badge } from 'antd';
 import { Grid } from 'antd';
 import {
   DashboardOutlined, EnvironmentOutlined,
-  PlusCircleOutlined, WalletOutlined, LogoutOutlined,
+  PlusCircleOutlined, WalletOutlined, LogoutOutlined, HistoryOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -14,6 +14,7 @@ const NAV = [
   { key: '/sales/route',     icon: <EnvironmentOutlined />, label: 'My Route'  },
   { key: '/sales/order',     icon: <PlusCircleOutlined />,  label: 'New Order' },
   { key: '/sales/payments',  icon: <WalletOutlined />,      label: 'Payments'  },
+  { key: '/sales/history',   icon: <HistoryOutlined />,     label: 'History'   },
 ];
 
 const P = '#059669';

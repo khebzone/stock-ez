@@ -410,21 +410,26 @@ const DailyHistoryTab: React.FC = () => {
     {
       title: 'Amount',
       dataIndex: 'amount',
+      width: 110,
       render: (v: number) => <span style={{ fontWeight: 800, color: '#0f172a' }}>₹{Number(v).toFixed(2)}</span>,
     },
     {
       title: 'Method',
       key: 'method',
-      render: (_: any, r: any) => <ModeBadge mode={r.paymentMode} name={r.paymentMethodName} />,
-    },
-    {
-      title: 'Ref #',
-      dataIndex: 'referenceNumber',
-      render: (v: string) => <span style={{ fontSize: 12, color: '#94a3b8' }}>{v || '—'}</span>,
+      width: 140,
+      render: (_: any, r: any) => (
+        <div>
+          <ModeBadge mode={r.paymentMode} name={r.paymentMethodName} />
+          {r.referenceNumber && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{r.referenceNumber}</div>
+          )}
+        </div>
+      ),
     },
     {
       title: 'Status',
       key: 'status',
+      width: 110,
       render: (_: any, r: any) => (
         r.cleared
           ? <Badge status="success" text="Cleared" />

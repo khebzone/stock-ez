@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Select, Modal, InputNumber, Input, Form, Button, Skeleton, Progress, message } from 'antd';
+import { Select, Modal, InputNumber, Form, Button, Skeleton, Progress, message } from 'antd';
 import { TrophyOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetTargetsQuery, useCreateTargetMutation } from '../../store/api/reportApi';
+import { useGetUsersQuery } from '../../store/api/userApi';
 
 const fmt = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 const fmtShort = (v: number) => v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${(v / 1000).toFixed(1)}K` : `₹${v}`;
@@ -32,13 +33,16 @@ interface SetTargetModalProps {
 const SetTargetModal: React.FC<SetTargetModalProps> = ({ open, onClose, month, year, existing }) => {
   const [form] = Form.useForm();
   const [createTarget, { isLoading }] = useCreateTargetMutation();
+  const { data: usersData } = useGetUsersQuery();
+  const allUsers: any[] = usersData?.data?.content || usersData?.data || [];
+  const salesUsers = allUsers.filter((u: any) => u.role === 'SALES' && u.active !== false);
 
   React.useEffect(() => {
     if (open && existing) {
       form.setFieldsValue({
-        salesmanId: existing.salesmanId,
+        userId: existing.userId,
         targetAmount: existing.targetAmount,
-        orderCountTarget: existing.orderCountTarget,
+        targetOrders: existing.targetOrders,
       });
     } else if (open) {
       form.resetFields();
@@ -72,8 +76,14 @@ const SetTargetModal: React.FC<SetTargetModalProps> = ({ open, onClose, month, y
       width={440}
     >
       <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-        <Form.Item name="salesmanName" label="Salesman Name" rules={[{ required: !existing, message: 'Required' }]}>
-          <Input placeholder="Enter salesman name" />
+        <Form.Item name="userId" label="Salesperson" rules={[{ required: true, message: 'Required' }]}>
+          <Select
+            showSearch
+            optionFilterProp="label"
+            placeholder="Select salesperson"
+            disabled={!!existing}
+            options={salesUsers.map((u: any) => ({ value: u.id, label: u.fullName || u.name }))}
+          />
         </Form.Item>
         <Form.Item name="targetAmount" label="Revenue Target (₹)" rules={[{ required: true, message: 'Required' }]}>
           <InputNumber
@@ -85,7 +95,7 @@ const SetTargetModal: React.FC<SetTargetModalProps> = ({ open, onClose, month, y
             placeholder="e.g. 500000"
           />
         </Form.Item>
-        <Form.Item name="orderCountTarget" label="Order Count Target">
+        <Form.Item name="targetOrders" label="Order Count Target" rules={[{ required: true, message: 'Required' }]}>
           <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 100" />
         </Form.Item>
       </Form>
@@ -207,7 +217,7 @@ const TargetsPage: React.FC = () => {
                 const color = achievementColor(pct);
                 const bg    = achievementBg(pct);
                 return (
-                  <div key={t.id || t.salesmanName} style={{
+                  <div key={t.id || t.userName} style={{
                     display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 80px',
                     padding: '16px 20px', alignItems: 'center',
                     borderBottom: i < targets.length - 1 ? '1px solid #f1f5f9' : 'none',
@@ -220,11 +230,11 @@ const TargetsPage: React.FC = () => {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontWeight: 800, color, fontSize: 15, flexShrink: 0,
                       }}>
-                        {(t.salesmanName || '?')[0].toUpperCase()}
+                        {(t.userName || '?')[0].toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>{t.salesmanName}</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{t.salesmanPhone || ''}</div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>{t.userName}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{t.userRole}</div>
                       </div>
                     </div>
 
@@ -237,9 +247,9 @@ const TargetsPage: React.FC = () => {
                     {/* Orders */}
                     <div>
                       <div style={{ fontWeight: 600, color: '#475569' }}>
-                        {t.achievedOrderCount || 0}
-                        {t.orderCountTarget > 0 && (
-                          <span style={{ color: '#94a3b8', fontWeight: 400 }}> / {t.orderCountTarget}</span>
+                        {t.achievedOrders || 0}
+                        {t.targetOrders > 0 && (
+                          <span style={{ color: '#94a3b8', fontWeight: 400 }}> / {t.targetOrders}</span>
                         )}
                       </div>
                     </div>
@@ -287,7 +297,7 @@ const TargetsPage: React.FC = () => {
                 <div style={{ fontWeight: 800, color: '#475569', fontSize: 14 }}>{fmt(totalTarget)}</div>
                 <div style={{ fontWeight: 800, color: achievementColor(overallPct), fontSize: 14 }}>{fmt(totalActual)}</div>
                 <div style={{ fontWeight: 600, color: '#475569' }}>
-                  {targets.reduce((s, t) => s + (t.achievedOrderCount || 0), 0)}
+                  {targets.reduce((s, t) => s + (t.achievedOrders || 0), 0)}
                 </div>
                 <div style={{ fontWeight: 900, color: achievementColor(overallPct), fontSize: 16 }}>{overallPct}%</div>
                 <div />
@@ -299,10 +309,10 @@ const TargetsPage: React.FC = () => {
               <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15, marginBottom: 16 }}>Achievement Distribution</div>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 {[
-                  { label: '≥ 100%', color: '#059669', bg: '#ecfdf5', count: targets.filter(t => (t.achievedAmount / t.targetAmount) >= 1).length },
-                  { label: '75–99%', color: '#2563eb', bg: '#eff6ff', count: targets.filter(t => { const p = t.achievedAmount / t.targetAmount; return p >= 0.75 && p < 1; }).length },
-                  { label: '50–74%', color: '#d97706', bg: '#fffbeb', count: targets.filter(t => { const p = t.achievedAmount / t.targetAmount; return p >= 0.5 && p < 0.75; }).length },
-                  { label: '< 50%',  color: '#dc2626', bg: '#fef2f2', count: targets.filter(t => (t.achievedAmount / t.targetAmount) < 0.5).length },
+                  { label: '≥ 100%', color: '#059669', bg: '#ecfdf5', count: targets.filter(t => t.targetAmount > 0 && (t.achievedAmount / t.targetAmount) >= 1).length },
+                  { label: '75–99%', color: '#2563eb', bg: '#eff6ff', count: targets.filter(t => { const p = t.targetAmount > 0 ? t.achievedAmount / t.targetAmount : 0; return p >= 0.75 && p < 1; }).length },
+                  { label: '50–74%', color: '#d97706', bg: '#fffbeb', count: targets.filter(t => { const p = t.targetAmount > 0 ? t.achievedAmount / t.targetAmount : 0; return p >= 0.5 && p < 0.75; }).length },
+                  { label: '< 50%',  color: '#dc2626', bg: '#fef2f2', count: targets.filter(t => t.targetAmount > 0 && (t.achievedAmount / t.targetAmount) < 0.5).length },
                 ].map(b => (
                   <div key={b.label} style={{ background: b.bg, borderRadius: 12, border: `1px solid ${b.color}30`, padding: '14px 20px', flex: 1, minWidth: 100 }}>
                     <div style={{ fontSize: 28, fontWeight: 900, color: b.color }}>{b.count}</div>

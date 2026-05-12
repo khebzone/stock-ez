@@ -19,8 +19,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByPhoneAndTenantId(String phone, UUID tenantId);
 
     org.springframework.data.domain.Page<User> findByTenantIdAndActiveTrueAndRoleNot(UUID tenantId, User.UserRole excludeRole, org.springframework.data.domain.Pageable pageable);
+    
+    org.springframework.data.domain.Page<User> findByTenantIdAndRoleNot(UUID tenantId, User.UserRole excludeRole, org.springframework.data.domain.Pageable pageable);
 
     long countByTenantIdAndActiveTrue(UUID tenantId);
+
+    long countByTenantIdAndActiveTrueAndRoleNotIn(UUID tenantId, java.util.List<User.UserRole> excludeRoles);
 
     Optional<User> findFirstByTenantIdAndRoleAndActiveTrue(UUID tenantId, User.UserRole role);
 }

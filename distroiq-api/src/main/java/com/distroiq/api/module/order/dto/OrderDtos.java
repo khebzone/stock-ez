@@ -16,8 +16,13 @@ public class OrderDtos {
 
     @Data
     public static class CreateOrderRequest {
-        @NotNull(message = "Customer is required")
         private UUID customerId;
+
+        @Size(max = 200)
+        private String walkInName;
+
+        @Size(max = 20)
+        private String walkInPhone;
 
         @NotEmpty(message = "Order must have at least one item")
         @Valid
@@ -38,6 +43,16 @@ public class OrderDtos {
         /** Negotiated unit price — if null, defaults to product's salesRate1 */
         @DecimalMin("0.01")
         private BigDecimal unitPrice;
+    }
+
+    @Data
+    public static class UpdateOrderRequest {
+        @NotEmpty(message = "Order must have at least one item")
+        @Valid
+        private List<OrderItemRequest> items;
+
+        @Size(max = 1000)
+        private String notes;
     }
 
     @Data
@@ -73,6 +88,8 @@ public class OrderDtos {
         private Order.OrderStatus status;
         private LocalDate orderDate;
         private CustomerInfo customer;
+        private String walkInName;
+        private String walkInPhone;
         private PersonInfo salesPerson;
         private PersonInfo deliveryPerson;
         private PersonInfo approvedBy;

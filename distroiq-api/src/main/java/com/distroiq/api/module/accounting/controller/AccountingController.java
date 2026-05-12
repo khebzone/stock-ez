@@ -2,6 +2,8 @@ package com.distroiq.api.module.accounting.controller;
 
 import com.distroiq.api.module.accounting.dto.AccountingDtos;
 import com.distroiq.api.module.accounting.service.AccountingService;
+import com.distroiq.api.module.report.dto.ReportDtos;
+import com.distroiq.api.module.report.service.ReportService;
 import com.distroiq.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class AccountingController {
 
     private final AccountingService accountingService;
+    private final ReportService reportService;
 
     @GetMapping("/sales")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
@@ -36,11 +39,11 @@ public class AccountingController {
 
     @GetMapping("/collections")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get collection report [ADMIN/ACCOUNTANT]")
-    public ResponseEntity<ApiResponse<AccountingDtos.CollectionReportResponse>> collectionReport(
+    @Operation(summary = "Get collection report with daily breakdown [ADMIN/ACCOUNTANT]")
+    public ResponseEntity<ApiResponse<ReportDtos.CollectionReportResponse>> collectionReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ResponseEntity.ok(ApiResponse.success(accountingService.getCollectionReport(tenantId, from, to)));
+        return ResponseEntity.ok(ApiResponse.success(reportService.getCollectionReport(tenantId, from, to)));
     }
 }

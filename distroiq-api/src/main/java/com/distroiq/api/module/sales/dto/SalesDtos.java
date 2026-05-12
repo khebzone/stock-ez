@@ -34,4 +34,29 @@ public class SalesDtos {
         private Double latitude;
         private Double longitude;
     }
+
+    @Data
+    public static class MyHistoryResponse {
+        private LocalDate date;
+        private String routeName;
+        private int ordersCount;
+        private BigDecimal totalSales;
+        private BigDecimal cashCollected;
+        private BigDecimal upiCollected;
+        private BigDecimal otherCollected;
+        private BigDecimal totalCollected;
+        private List<OrderSummary> orders;
+
+        @Data
+        public static class OrderSummary {
+            private UUID orderId;
+            private String orderNumber;
+            private String customerName;
+            private String customerPhone;
+            private BigDecimal totalAmount;
+            private BigDecimal paidAmount;
+            private String status;
+            private int itemCount;
+        }
+    }
 }

@@ -43,8 +43,9 @@ public class UserController {
     public ResponseEntity<ApiResponse<Page<UserDtos.UserResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(userService.getAllUsers(tenantId, PageRequest.of(page, size))));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getAllUsers(tenantId, includeInactive, PageRequest.of(page, size))));
     }
 
     @GetMapping("/{id}")
@@ -72,6 +73,15 @@ public class UserController {
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         userService.deactivateUser(id, tenantId);
         return ResponseEntity.ok(ApiResponse.success(null, "User deactivated"));
+    }
+
+    @PostMapping("/{id}/reactivate")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Reactivate user [ADMIN]")
+    public ResponseEntity<ApiResponse<Void>> reactivate(
+            @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        userService.reactivateUser(id, tenantId);
+        return ResponseEntity.ok(ApiResponse.success(null, "User reactivated"));
     }
 
     @PostMapping("/change-password")

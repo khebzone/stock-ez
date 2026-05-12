@@ -235,6 +235,7 @@ const LoginPage: React.FC = () => {
         /* Input styles */
         .lp-form .ant-form-item-label > label {
           font-size: 13px !important; font-weight: 600 !important; color: #475569 !important;
+          text-transform: none !important;
         }
         .lp-form .ant-input-affix-wrapper,
         .lp-form .ant-input {

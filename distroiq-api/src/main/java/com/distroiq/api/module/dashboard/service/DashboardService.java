@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.distroiq.api.module.user.entity.User;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -59,7 +61,8 @@ public class DashboardService {
         stats.setActiveCustomers(customerRepository.countByTenantIdAndActiveTrue(tenantId));
         stats.setTotalProducts(productRepository.countByTenantIdAndActiveTrue(tenantId));
         stats.setTotalRoutes(routeRepository.findByTenantIdAndActiveTrue(tenantId).size());
-        stats.setTotalUsers(userRepository.countByTenantIdAndActiveTrue(tenantId));
+        stats.setTotalUsers(userRepository.countByTenantIdAndActiveTrueAndRoleNotIn(
+                tenantId, List.of(User.UserRole.ADMIN, User.UserRole.SUPER_ADMIN)));
         stats.setPendingOrders(orderRepository.findAll().stream()
                 .filter(o -> o.getTenant().getId().equals(tenantId))
                 .filter(o -> o.getStatus() == Order.OrderStatus.SUBMITTED || o.getStatus() == Order.OrderStatus.APPROVED)

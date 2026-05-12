@@ -34,6 +34,7 @@ const SalesPaymentPage: React.FC = () => {
   const navigate = useNavigate();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+  const isSmall = !screens.sm;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -285,15 +286,15 @@ const SalesPaymentPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
             {[
               { label: 'Ordered', value: formatINR(selected.totalOrdered), color: '#0f172a' },
               { label: 'Paid', value: formatINR(selected.totalPaid), color: P },
               { label: 'Due', value: formatINR(selected.outstanding), color: '#dc2626' },
             ].map(s => (
-              <div key={s.label} style={{ background: '#fff', borderRadius: 12, padding: '12px 10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+              <div key={s.label} style={{ background: '#fff', borderRadius: 12, padding: '10px 8px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{s.label}</div>
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: s.color, marginTop: 4 }}>{s.value}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: s.color, marginTop: 4, wordBreak: 'break-all' }}>{s.value}</div>
               </div>
             ))}
           </div>
@@ -302,17 +303,17 @@ const SalesPaymentPage: React.FC = () => {
           {ordersLoading ? <Skeleton active paragraph={{ rows: 2 }} /> : unpaidOrders.length === 0 ? (
             <div style={{ background: '#f0fdf4', borderRadius: 14, padding: '24px', textAlign: 'center', color: '#059669', fontWeight: 600, border: '1px solid #dcfce7' }}>All orders paid</div>
           ) : unpaidOrders.map((o: any) => (
-            <div key={o.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '14px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div key={o.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '12px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>{o.orderNumber}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{dayjs(o.orderDate).format('DD MMM YYYY')} · Total {formatINR(o.totalAmount)}</div>
+                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.orderNumber}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{dayjs(o.orderDate).format('DD MMM YYYY')}</div>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 8 }}>
-                <div style={{ fontWeight: 800, color: '#dc2626', fontSize: 14 }}>{formatINR(o.balanceAmount)}</div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontWeight: 800, color: '#dc2626', fontSize: 13 }}>{formatINR(o.balanceAmount)}</div>
                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>DUE</div>
               </div>
               <button onClick={() => openCollect(o)}
-                style={{ background: P, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 12, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: `0 3px 10px ${P}33` }}>
+                style={{ background: P, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 12, padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', flexShrink: 0, boxShadow: `0 3px 10px ${P}33` }}>
                 <WalletOutlined style={{ fontSize: 13 }} />
               </button>
             </div>
@@ -363,17 +364,17 @@ const SalesPaymentPage: React.FC = () => {
             }}>
               <div style={{ position: 'absolute', top: -15, right: -15, width: 80, height: 80, borderRadius: '50%', background: alreadySubmitted ? 'rgba(5,150,105,0.05)' : 'rgba(217,119,6,0.05)' }} />
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: alreadySubmitted ? '#065f46' : '#92400e', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    {alreadySubmitted ? '✓ Collections Submitted' : "Today's Collections"}
+                  <div style={{ fontWeight: 800, fontSize: 13, color: alreadySubmitted ? '#065f46' : '#92400e', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {alreadySubmitted ? '✓ Submitted' : "Today's Collections"}
                   </div>
-                  <div style={{ fontSize: 12, color: alreadySubmitted ? '#059669' : '#b45309', marginTop: 2, fontWeight: 500 }}>
+                  <div style={{ fontSize: 11, color: alreadySubmitted ? '#059669' : '#b45309', marginTop: 2, fontWeight: 500 }}>
                     {daySummary?.totalPayments || 0} payment{(daySummary?.totalPayments || 0) !== 1 ? 's' : ''} recorded today
                   </div>
                 </div>
-                <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, background: alreadySubmitted ? '#86efac' : '#fbbf24', color: alreadySubmitted ? '#065f46' : '#92400e', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                  {alreadySubmitted ? 'COMPLETED' : `${unsubmittedCount} PENDING`}
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 20, background: alreadySubmitted ? '#86efac' : '#fbbf24', color: alreadySubmitted ? '#065f46' : '#92400e', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', whiteSpace: 'nowrap' }}>
+                  {alreadySubmitted ? 'DONE' : `${unsubmittedCount} PENDING`}
                 </span>
               </div>
 
@@ -398,16 +399,16 @@ const SalesPaymentPage: React.FC = () => {
 
               <Divider style={{ margin: '0 0 16px', opacity: 0.1, borderColor: '#000' }} />
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Collected</div>
-                  <div style={{ fontWeight: 900, fontSize: 26, color: '#0f172a', letterSpacing: -0.5 }}>{formatINR(totalCollected)}</div>
+                  <div style={{ fontWeight: 900, fontSize: isSmall ? 22 : 26, color: '#0f172a', letterSpacing: -0.5 }}>{formatINR(totalCollected)}</div>
                 </div>
                 {!alreadySubmitted && unsubmittedCount > 0 && (
                   <button onClick={() => setSubmitConfirm(true)}
-                    style={{ background: '#d97706', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: 14, padding: '12px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(217,119,6,0.3)', transition: 'transform 0.2s' }}>
-                    <SendOutlined style={{ fontSize: 14 }} />
-                    Submit to Accountant ({unsubmittedCount})
+                    style={{ background: '#d97706', border: 'none', borderRadius: 12, color: '#fff', fontWeight: 800, fontSize: 13, padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(217,119,6,0.3)' }}>
+                    <SendOutlined style={{ fontSize: 13 }} />
+                    Submit ({unsubmittedCount})
                   </button>
                 )}
               </div>
@@ -446,24 +447,24 @@ const SalesPaymentPage: React.FC = () => {
         onOk={handleCollect}
         onCancel={() => setCollectModal(false)}
         confirmLoading={collecting}
-        okText={isPartial ? 'Collect Partial' : 'Collect Full Payment'}
-        okButtonProps={{ style: { background: isPartial ? '#d97706' : P, borderColor: isPartial ? '#d97706' : P, fontWeight: 800, height: 42, borderRadius: 10 } }}
+        okText="Collect"
+        okButtonProps={{ style: { background: P, borderColor: P, fontWeight: 800, height: 42, borderRadius: 10 } }}
         cancelButtonProps={{ style: { height: 42, borderRadius: 10, fontWeight: 600 } }}
-        width={460}
+        width={isMobile ? '92%' : 460}
         centered
         styles={{ body: { paddingTop: 12 } }}
       >
         {selectedOrder && (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
               {[
-                { label: 'Order Total', value: formatINR(selectedOrder.totalAmount), color: '#0f172a' },
-                { label: 'Paid So Far', value: formatINR(selectedOrder.paidAmount || 0), color: P },
-                { label: 'Balance Due', value: formatINR(selectedOrder.balanceAmount), color: '#ef4444' },
+                { label: 'Total', value: formatINR(selectedOrder.totalAmount), color: '#0f172a' },
+                { label: 'Paid', value: formatINR(selectedOrder.paidAmount || 0), color: P },
+                { label: 'Balance', value: formatINR(selectedOrder.balanceAmount), color: '#ef4444' },
               ].map(col => (
-                <div key={col.label} style={{ background: '#f8fafc', borderRadius: 12, padding: '12px 10px', textAlign: 'center', border: '1px solid #f1f5f9' }}>
-                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 5, textTransform: 'uppercase' }}>{col.label}</div>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: col.color }}>{col.value}</div>
+                <div key={col.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 8px', textAlign: 'center', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>{col.label}</div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: col.color, wordBreak: 'break-all' }}>{col.value}</div>
                 </div>
               ))}
             </div>
@@ -510,9 +511,6 @@ const SalesPaymentPage: React.FC = () => {
                 </Form.Item>
               )}
 
-              <Form.Item name="notes" label={<span style={{ fontWeight: 700, color: '#475569' }}>Notes (Optional)</span>} style={{ marginBottom: 0 }}>
-                <Input.TextArea rows={2} placeholder="Any additional details..." style={{ borderRadius: 10 }} />
-              </Form.Item>
             </Form>
           </div>
         )}
@@ -529,7 +527,7 @@ const SalesPaymentPage: React.FC = () => {
         okButtonProps={{ style: { background: '#d97706', borderColor: '#d97706', fontWeight: 800, height: 42, borderRadius: 10 } }}
         cancelButtonProps={{ style: { height: 42, borderRadius: 10, fontWeight: 600 } }}
         centered
-        width={400}
+        width={isMobile ? '92%' : 400}
       >
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>

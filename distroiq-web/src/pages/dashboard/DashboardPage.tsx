@@ -399,21 +399,25 @@ const DashboardPage: React.FC = () => {
               locale={{ emptyText: <div style={{ padding: '28px 0', color: '#94a3b8' }}>No orders yet</div> }}
               columns={[
                 {
-                  title: 'Order', dataIndex: 'orderNumber', key: 'order', width: 130,
-                  render: (v: string) => <span style={{ fontWeight: 600, color: '#059669', fontSize: 13 }}>{v}</span>,
+                  title: 'Order', dataIndex: 'orderNumber', key: 'order', width: 140,
+                  render: (v: string) => <span style={{ fontWeight: 600, color: '#059669', fontSize: 13, whiteSpace: 'nowrap' }}>{v}</span>,
                 },
                 {
-                  title: 'Customer', key: 'customer',
+                  title: 'Customer', key: 'customer', ellipsis: true,
                   render: (_: any, r: any) => (
                     <span style={{ fontSize: 13 }}>{r.customer?.businessName || r.customerName || '—'}</span>
                   ),
                 },
                 {
-                  title: 'Amount', dataIndex: 'totalAmount', key: 'amount', width: 110,
+                  title: 'Date', dataIndex: 'createdAt', key: 'date', width: 105,
+                  render: (v: string) => <span style={{ fontSize: 12, color: '#64748b' }}>{v ? dayjs(v).format('DD MMM YYYY') : '—'}</span>,
+                },
+                {
+                  title: 'Amount', dataIndex: 'totalAmount', key: 'amount', width: 110, align: 'right' as const,
                   render: (v: number) => <span style={{ fontWeight: 700, color: '#0f172a' }}>{fmt(v)}</span>,
                 },
                 {
-                  title: 'Status', dataIndex: 'status', key: 'status', width: 130,
+                  title: 'Status', dataIndex: 'status', key: 'status', width: 105,
                   render: (v: string) => {
                     const cfg = STATUS_CFG[v] || { color: '#6b7280', label: v };
                     return (

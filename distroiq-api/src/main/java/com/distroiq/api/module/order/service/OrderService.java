@@ -52,14 +52,21 @@ public class OrderService {
     private final AuditService auditService;
 
     public OrderDtos.OrderResponse createOrder(OrderDtos.CreateOrderRequest req, UUID salesPersonId, UUID tenantId) {
-        Customer customer = customerRepository.findByIdAndTenantId(req.getCustomerId(), tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Customer", req.getCustomerId().toString()));
+        if (req.getCustomerId() == null && (req.getWalkInName() == null || req.getWalkInName().isBlank())) {
+            throw new BusinessException("Either customer or walk-in name is required", "CUSTOMER_REQUIRED");
+        }
+
+        Customer customer = null;
+        if (req.getCustomerId() != null) {
+            customer = customerRepository.findByIdAndTenantId(req.getCustomerId(), tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Customer", req.getCustomerId().toString()));
+        }
 
         User salesPerson = userRepository.findByIdAndTenantId(salesPersonId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", salesPersonId.toString()));
 
-        // Credit limit check — block if customer has exceeded their credit limit
-        if (customer.isCreditAllowed() && customer.getCreditLimit() != null
+        // Credit limit check — walk-in customers are always cash, no credit
+        if (customer != null && customer.isCreditAllowed() && customer.getCreditLimit() != null
                 && customer.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal outstanding = orderRepository.findTotalOutstandingByCustomer(tenantId, customer.getId(), Order.OrderStatus.CANCELLED);
             if (outstanding.compareTo(customer.getCreditLimit()) >= 0) {
@@ -154,10 +161,14 @@ public class OrderService {
 
         BigDecimal totalAmount = subTotal.add(totalGst);
 
+        String orderParty = customer != null ? customer.getBusinessName() : req.getWalkInName();
+
         Order order = Order.builder()
-                .tenant(customer.getTenant())
+                .tenant(customer != null ? customer.getTenant() : salesPerson.getTenant())
                 .orderNumber(orderNumber)
                 .customer(customer)
+                .walkInName(customer == null ? req.getWalkInName() : null)
+                .walkInPhone(customer == null ? req.getWalkInPhone() : null)
                 .salesPerson(salesPerson)
                 .orderDate(LocalDate.now())
                 .status(Order.OrderStatus.SUBMITTED)
@@ -173,7 +184,7 @@ public class OrderService {
 
         Order saved = orderRepository.save(order);
         auditService.record(tenantId, "ORDER", saved.getId(), "CREATED",
-                "Order " + saved.getOrderNumber() + " created for " + customer.getBusinessName() +
+                "Order " + saved.getOrderNumber() + " created for " + orderParty +
                 " — " + items.size() + " item(s), total ₹" + totalAmount.toPlainString());
 
         // FIFO batch deduction — reuse the already-fetched products and batches
@@ -232,6 +243,131 @@ public class OrderService {
         auditService.record(tenantId, "ORDER", approvedOrder.getId(), "APPROVED",
                 "Order " + approvedOrder.getOrderNumber() + " approved by " + invoicePerson.getFullName());
         return toResponse(approvedOrder);
+    }
+
+    public OrderDtos.OrderResponse updateOrder(UUID id, OrderDtos.UpdateOrderRequest req, UUID tenantId) {
+        Order order = getOrderEntity(id, tenantId);
+        if (order.getStatus() != Order.OrderStatus.SUBMITTED) {
+            throw new BusinessException("Order can only be edited while in SUBMITTED status", "INVALID_STATUS");
+        }
+
+        // Restore stock for existing items before replacing them
+        Map<UUID, Product> restoredProducts = new LinkedHashMap<>();
+        for (OrderItem oldItem : order.getItems()) {
+            Product product = oldItem.getProduct();
+            if (oldItem.getBatchNumber() != null) {
+                stockBatchRepository.findByTenantAndBatchNumber(tenantId, oldItem.getBatchNumber())
+                    .ifPresent(batch -> {
+                        batch.setQuantityAvailable(batch.getQuantityAvailable() + oldItem.getQuantity());
+                        if (!batch.isActive()) batch.setActive(true);
+                        stockBatchRepository.save(batch);
+                    });
+            }
+            restoredProducts.put(product.getId(), product);
+        }
+        for (Product product : restoredProducts.values()) {
+            Integer restored = stockBatchRepository.sumAvailableByProduct(tenantId, product.getId());
+            product.setStockQuantity(restored != null ? restored : 0);
+            productRepository.save(product);
+        }
+
+        // Replace items
+        order.getItems().clear();
+
+        // Process new items with FIFO deduction
+        Map<UUID, Product> productMap = new LinkedHashMap<>();
+        Map<UUID, List<StockBatch>> fifoBatchMap = new LinkedHashMap<>();
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            if (!productMap.containsKey(itemReq.getProductId())) {
+                productMap.put(itemReq.getProductId(),
+                    productRepository.findByIdAndTenantId(itemReq.getProductId(), tenantId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Product", itemReq.getProductId().toString())));
+                fifoBatchMap.put(itemReq.getProductId(),
+                    stockBatchRepository.findFifoByProduct(tenantId, itemReq.getProductId()));
+            }
+        }
+
+        List<OrderItem> newItems = new ArrayList<>();
+        BigDecimal subTotal = BigDecimal.ZERO;
+        BigDecimal totalGst  = BigDecimal.ZERO;
+
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            Product product = productMap.get(itemReq.getProductId());
+            List<StockBatch> fifo = fifoBatchMap.get(itemReq.getProductId());
+
+            if (!product.isActive()) {
+                throw new BusinessException("Product '" + product.getName() + "' is not active", "INACTIVE_PRODUCT");
+            }
+            int availableStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+            if (availableStock < itemReq.getQuantity()) {
+                throw new BusinessException(
+                    "Insufficient stock for '" + product.getName() + "'. Available: " + availableStock + ", Requested: " + itemReq.getQuantity(),
+                    "INSUFFICIENT_STOCK");
+            }
+
+            BigDecimal unitPrice = (itemReq.getUnitPrice() != null) ? itemReq.getUnitPrice() : product.getSalesRate1();
+            String primaryBatch   = fifo.isEmpty() ? null : fifo.get(0).getBatchNumber();
+            LocalDate primaryExpiry = fifo.isEmpty() ? null : fifo.get(0).getExpiryDate();
+
+            BigDecimal effectiveMin = !fifo.isEmpty() && fifo.get(0).getMinSaleRate() != null ? fifo.get(0).getMinSaleRate() : product.getMinSaleRate();
+            BigDecimal effectiveMax = !fifo.isEmpty() && fifo.get(0).getMaxSaleRate() != null ? fifo.get(0).getMaxSaleRate() : product.getMaxSaleRate();
+            if (effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0) {
+                throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' is below the minimum allowed rate of ₹" + effectiveMin, "PRICE_BELOW_MINIMUM");
+            }
+            if (effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0) {
+                throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' exceeds the maximum allowed rate of ₹" + effectiveMax, "PRICE_ABOVE_MAXIMUM");
+            }
+
+            BigDecimal gstPercent = product.getSalesGstPercent();
+            BigDecimal lineBase   = unitPrice.multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+            BigDecimal gstAmt     = lineBase.multiply(gstPercent).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            BigDecimal lineTotal  = lineBase.add(gstAmt);
+
+            newItems.add(OrderItem.builder()
+                .product(product).quantity(itemReq.getQuantity())
+                .unitPrice(unitPrice).gstPercent(gstPercent).gstAmount(gstAmt).lineTotal(lineTotal)
+                .batchNumber(primaryBatch).batchExpiryDate(primaryExpiry).build());
+            subTotal = subTotal.add(lineBase);
+            totalGst = totalGst.add(gstAmt);
+        }
+
+        BigDecimal totalAmount = subTotal.add(totalGst);
+        if (req.getNotes() != null) order.setNotes(req.getNotes());
+        order.setSubTotal(subTotal);
+        order.setTotalGst(totalGst);
+        order.setTotalAmount(totalAmount);
+        order.setBalanceAmount(totalAmount);
+        newItems.forEach(item -> item.setOrder(order));
+        order.getItems().addAll(newItems);
+        Order saved = orderRepository.save(order);
+
+        // FIFO batch deduction for new items
+        List<StockBatch> batchesToSave = new ArrayList<>();
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            Product product = productMap.get(itemReq.getProductId());
+            List<StockBatch> fifo = fifoBatchMap.get(itemReq.getProductId());
+            int remaining = itemReq.getQuantity();
+            if (fifo.isEmpty()) {
+                product.setStockQuantity(Math.max(0, (product.getStockQuantity() != null ? product.getStockQuantity() : 0) - itemReq.getQuantity()));
+            } else {
+                for (StockBatch batch : fifo) {
+                    if (remaining <= 0) break;
+                    int deduct = Math.min(batch.getQuantityAvailable(), remaining);
+                    batch.setQuantityAvailable(batch.getQuantityAvailable() - deduct);
+                    if (batch.getQuantityAvailable() == 0) batch.setActive(false);
+                    batchesToSave.add(batch);
+                    remaining -= deduct;
+                }
+                Integer newStock = stockBatchRepository.sumAvailableByProduct(tenantId, product.getId());
+                product.setStockQuantity(newStock != null ? newStock : 0);
+            }
+        }
+        stockBatchRepository.saveAll(batchesToSave);
+        productRepository.saveAll(productMap.values());
+
+        auditService.record(tenantId, "ORDER", saved.getId(), "UPDATED",
+            "Order " + saved.getOrderNumber() + " items updated by invoice approver — " + newItems.size() + " item(s), total ₹" + totalAmount.toPlainString());
+        return toResponse(saved);
     }
 
     public OrderDtos.OrderResponse startPreparing(UUID id, UUID tenantId) {
@@ -458,6 +594,8 @@ public class OrderService {
         res.setDispatchedAt(o.getDispatchedAt());
         res.setDeliveredAt(o.getDeliveredAt());
         res.setCreatedAt(o.getCreatedAt());
+        res.setWalkInName(o.getWalkInName());
+        res.setWalkInPhone(o.getWalkInPhone());
 
         if (o.getCustomer() != null) {
             OrderDtos.CustomerInfo ci = new OrderDtos.CustomerInfo();

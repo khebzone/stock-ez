@@ -64,8 +64,11 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public Page<UserDtos.UserResponse> getAllUsers(UUID tenantId, Pageable pageable) {
+    public Page<UserDtos.UserResponse> getAllUsers(UUID tenantId, boolean includeInactive, Pageable pageable) {
         // Never expose SUPER_ADMIN on the tenant's user management page — it's a platform-level account
+        if (includeInactive) {
+            return userRepository.findByTenantIdAndRoleNot(tenantId, User.UserRole.SUPER_ADMIN, pageable).map(this::toResponse);
+        }
         return userRepository.findByTenantIdAndActiveTrueAndRoleNot(tenantId, User.UserRole.SUPER_ADMIN, pageable).map(this::toResponse);
     }
 
@@ -98,6 +101,15 @@ public class UserService {
         userRepository.save(user);
         auditService.record(tenantId, "USER", user.getId(), "DEACTIVATED",
                 "User " + user.getFullName() + " deactivated");
+    }
+
+    public void reactivateUser(UUID id, UUID tenantId) {
+        User user = userRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id.toString()));
+        user.setActive(true);
+        userRepository.save(user);
+        auditService.record(tenantId, "USER", user.getId(), "REACTIVATED",
+                "User " + user.getFullName() + " reactivated");
     }
 
     public void changePassword(UUID id, UserDtos.ChangePasswordRequest request, UUID tenantId) {

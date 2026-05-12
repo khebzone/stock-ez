@@ -267,6 +267,7 @@ input[type=number] { -moz-appearance: textfield; }
   .ant-form-item { margin-bottom: 14px !important; }
 
   /* Bottom-sheet modals — scrollable on small screens */
+  .ant-modal-body { padding: 12px !important; }
   .ant-modal-wrap { align-items: flex-end !important; }
   .ant-modal-content {
     border-radius: 20px 20px 0 0 !important;

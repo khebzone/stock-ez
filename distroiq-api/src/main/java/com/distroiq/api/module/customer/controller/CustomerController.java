@@ -82,7 +82,7 @@ public class CustomerController {
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
+    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE')")
     @Operation(summary = "Search customers by name/phone")
     public ResponseEntity<ApiResponse<PagedResponse<CustomerDtos.CustomerResponse>>> search(
             @RequestParam String q,

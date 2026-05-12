@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Badge, Breadcrumb, Input, Tooltip, Modal, Form, message } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Badge, Breadcrumb, Input, Tooltip, Modal, Form, message, Grid, Drawer } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, UserOutlined, LogoutOutlined,
   GlobalOutlined, TeamOutlined, WalletOutlined, BarChartOutlined,
@@ -19,7 +19,6 @@ const SIDEBAR_W = 248;
 const SIDEBAR_COLLAPSED_W = 68;
 const HEADER_H = 56;
 
-/* ── Role config ── */
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   SUPER_ADMIN: { label: 'Super Admin', color: '#ef4444' },
   ADMIN: { label: 'Admin', color: '#4361ee' },
@@ -30,12 +29,11 @@ const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   ACCOUNTANT: { label: 'Accountant', color: '#8b5cf6' },
 };
 
-/* ── Nav items ── */
 const NAV_SECTIONS = [
   {
     section: 'MAIN',
     items: [
-      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', roles: null },
+      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', roles: ['ADMIN', 'SUPER_ADMIN', 'WAREHOUSE', 'ACCOUNTANT'] },
     ],
   },
   {
@@ -87,7 +85,6 @@ const NAV_SECTIONS = [
   },
 ];
 
-/* ── Breadcrumb map ── */
 const BREADCRUMBS: Record<string, string[]> = {
   '/dashboard': ['Dashboard'],
   '/products': ['Catalog', 'Products'],
@@ -122,7 +119,11 @@ const BREADCRUMBS: Record<string, string[]> = {
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const screens = Grid.useBreakpoint();
+  const isDesktop = !!screens.lg;
+
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [changePwdOpen, setChangePwdOpen] = useState(false);
   const [pwdForm] = Form.useForm();
   const [changePassword, { isLoading: changingPwd }] = useChangePasswordMutation();
@@ -141,6 +142,36 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         label: <Link to={item.key}>{item.label}</Link>,
       }))
   );
+
+  const renderNavExpanded = (onLinkClick?: () => void) =>
+    NAV_SECTIONS.map(section => {
+      const filtered = section.items.filter(item => !item.roles || item.roles.includes(role));
+      if (filtered.length === 0) return null;
+      return (
+        <div key={section.section} style={{ marginBottom: 4 }}>
+          <div style={{
+            padding: '10px 24px 6px',
+            fontSize: 10, fontWeight: 700,
+            color: colors.sidebarMuted,
+            letterSpacing: 1.2,
+            textTransform: 'uppercase',
+          }}>
+            {section.section}
+          </div>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            items={filtered.map(item => ({
+              key: item.key,
+              icon: item.icon,
+              label: <Link to={item.key} onClick={onLinkClick}>{item.label}</Link>,
+            }))}
+            style={{ background: 'transparent', border: 'none', padding: '0 10px' }}
+          />
+        </div>
+      );
+    });
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
@@ -191,122 +222,162 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const breadcrumbs = BREADCRUMBS[location.pathname] || [];
 
+  const sidebarUserStrip = (showText: boolean) => (
+    <div style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      height: 64,
+      padding: '0 18px',
+      borderTop: `1px solid ${colors.sidebarBorder}`,
+      background: 'rgba(0,0,0,0.12)',
+      display: 'flex', alignItems: 'center', gap: 10,
+    }}>
+      <Avatar size={34} style={{ background: roleCfg.color, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+        {user.fullName?.[0]}
+      </Avatar>
+      {showText && (
+        <div style={{ overflow: 'hidden', flex: 1 }}>
+          <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {user.fullName}
+          </div>
+          <div style={{ fontSize: 11, color: colors.sidebarMuted }}>{roleCfg.label}</div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* ── Sidebar ── */}
-      <Sider
-        collapsed={collapsed}
-        width={SIDEBAR_W}
-        collapsedWidth={SIDEBAR_COLLAPSED_W}
-        style={{
-          background: colors.sidebar,
-          position: 'fixed',
-          height: '100vh',
-          left: 0, top: 0,
-          zIndex: 100,
-          overflow: 'hidden',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
-        }}
-        trigger={null}
-      >
-        {/* Logo */}
-        <div style={{
-          height: HEADER_H,
-          display: 'flex',
-          alignItems: 'center',
-          padding: collapsed ? '0 18px' : '0 22px',
-          borderBottom: `1px solid ${colors.sidebarBorder}`,
-          gap: 10,
-          overflow: 'hidden',
-          flexShrink: 0,
-        }}>
+      {/* ── Desktop Sidebar ── */}
+      {isDesktop && (
+        <Sider
+          collapsed={collapsed}
+          width={SIDEBAR_W}
+          collapsedWidth={SIDEBAR_COLLAPSED_W}
+          style={{
+            background: colors.sidebar,
+            position: 'fixed',
+            height: '100vh',
+            left: 0, top: 0,
+            zIndex: 100,
+            overflow: 'hidden',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+          }}
+          trigger={null}
+        >
+          {/* Logo */}
           <div style={{
-            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-            background: 'linear-gradient(135deg, #059669, #047857)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
+            height: HEADER_H,
+            display: 'flex',
+            alignItems: 'center',
+            padding: collapsed ? '0 18px' : '0 22px',
+            borderBottom: `1px solid ${colors.sidebarBorder}`,
+            gap: 10,
+            overflow: 'hidden',
+            flexShrink: 0,
           }}>
-            <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>D</span>
-          </div>
-          {!collapsed && (
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ color: '#fff', fontWeight: 800, fontSize: 16, lineHeight: 1.2, whiteSpace: 'nowrap' }}>DistroIQ</div>
-              <div style={{ color: colors.sidebarMuted, fontSize: 10, letterSpacing: 0.5, fontWeight: 500 }}>Distribution Platform</div>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: 'linear-gradient(135deg, #059669, #047857)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
+            }}>
+              <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>D</span>
             </div>
-          )}
-        </div>
+            {!collapsed && (
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ color: '#fff', fontWeight: 800, fontSize: 16, lineHeight: 1.2, whiteSpace: 'nowrap' }}>DistroIQ</div>
+                <div style={{ color: colors.sidebarMuted, fontSize: 10, letterSpacing: 0.5, fontWeight: 500 }}>Distribution Platform</div>
+              </div>
+            )}
+          </div>
 
-        {/* Nav */}
-        <div style={{ overflowY: 'auto', height: `calc(100vh - ${HEADER_H}px - 64px)`, padding: '12px 0' }}>
-          {!collapsed && NAV_SECTIONS.map(section => {
-            const filtered = section.items.filter(item => !item.roles || item.roles.includes(role));
-            if (filtered.length === 0) return null;
-            return (
-              <div key={section.section} style={{ marginBottom: 4 }}>
-                <div style={{
-                  padding: '10px 24px 6px',
-                  fontSize: 10, fontWeight: 700,
-                  color: colors.sidebarMuted,
-                  letterSpacing: 1.2,
-                  textTransform: 'uppercase',
-                }}>
-                  {section.section}
-                </div>
+          {/* Nav */}
+          <div style={{ overflowY: 'auto', height: `calc(100vh - ${HEADER_H}px - 64px)`, padding: '12px 0' }}>
+            {!collapsed
+              ? renderNavExpanded()
+              : (
                 <Menu
                   theme="dark"
                   mode="inline"
                   selectedKeys={[location.pathname]}
-                  items={filtered.map(item => ({
-                    key: item.key,
-                    icon: item.icon,
-                    label: <Link to={item.key}>{item.label}</Link>,
-                  }))}
+                  items={menuItems}
                   style={{ background: 'transparent', border: 'none', padding: '0 10px' }}
                 />
-              </div>
-            );
-          })}
+              )
+            }
+          </div>
 
-          {collapsed && (
-            <Menu
-              theme="dark"
-              mode="inline"
-              selectedKeys={[location.pathname]}
-              items={menuItems}
-              style={{ background: 'transparent', border: 'none', padding: '0 10px' }}
-            />
-          )}
+          {sidebarUserStrip(!collapsed)}
+        </Sider>
+      )}
+
+      {/* ── Mobile / Tablet Nav Drawer ── */}
+      <Drawer
+        open={!isDesktop && mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        placement="left"
+        width={SIDEBAR_W}
+        title={null}
+        closable={false}
+        styles={{ body: { padding: 0, background: colors.sidebar, display: 'flex', flexDirection: 'column', height: '100%' } }}
+      >
+        {/* Logo row */}
+        <div style={{
+          height: HEADER_H,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 22px',
+          borderBottom: `1px solid ${colors.sidebarBorder}`,
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'linear-gradient(135deg, #059669, #047857)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
+            }}>
+              <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>D</span>
+            </div>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>DistroIQ</div>
+              <div style={{ color: colors.sidebarMuted, fontSize: 10, fontWeight: 500 }}>Distribution Platform</div>
+            </div>
+          </div>
+          <div
+            onClick={() => setMobileNavOpen(false)}
+            style={{ cursor: 'pointer', color: colors.sidebarMuted, fontSize: 20, lineHeight: 1, padding: 4 }}
+          >
+            ✕
+          </div>
         </div>
 
-        {/* Bottom user strip */}
+        {/* Nav sections */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 0' }}>
+          {renderNavExpanded(() => setMobileNavOpen(false))}
+        </div>
+
+        {/* User strip */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          height: 64,
-          padding: collapsed ? '0 18px' : '0 18px',
+          height: 64, padding: '0 18px',
           borderTop: `1px solid ${colors.sidebarBorder}`,
           background: 'rgba(0,0,0,0.12)',
-          display: 'flex', alignItems: 'center', gap: 10,
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
         }}>
-          <Avatar
-            size={34}
-            style={{ background: roleCfg.color, fontWeight: 700, fontSize: 14, flexShrink: 0 }}
-          >
+          <Avatar size={34} style={{ background: roleCfg.color, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
             {user.fullName?.[0]}
           </Avatar>
-          {!collapsed && (
-            <div style={{ overflow: 'hidden', flex: 1 }}>
-              <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.fullName}
-              </div>
-              <div style={{ fontSize: 11, color: colors.sidebarMuted }}>{roleCfg.label}</div>
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.fullName}
             </div>
-          )}
+            <div style={{ fontSize: 11, color: colors.sidebarMuted }}>{roleCfg.label}</div>
+          </div>
         </div>
-      </Sider>
+      </Drawer>
 
       {/* ── Main content area ── */}
       <Layout style={{
-        marginLeft: sideW,
+        marginLeft: isDesktop ? sideW : 0,
         transition: 'margin-left 0.25s cubic-bezier(0.4,0,0.2,1)',
         minHeight: '100vh',
       }}>
@@ -314,20 +385,20 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <Header style={{
           position: 'sticky', top: 0, zIndex: 99,
           background: '#fff',
-          padding: '0 24px',
+          padding: `0 ${isDesktop ? 24 : 16}px`,
           height: HEADER_H,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: '1px solid #edf0f4',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          gap: 16,
+          gap: 12,
         }}>
-          {/* Left: collapse + breadcrumbs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-            <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          {/* Left: toggle + breadcrumbs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+            <Tooltip title={isDesktop ? (collapsed ? 'Expand sidebar' : 'Collapse sidebar') : 'Menu'}>
               <div
-                onClick={() => setCollapsed(!collapsed)}
+                onClick={() => isDesktop ? setCollapsed(!collapsed) : setMobileNavOpen(true)}
                 style={{
                   cursor: 'pointer', width: 34, height: 34,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -337,11 +408,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                {isDesktop ? (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />) : <MenuUnfoldOutlined />}
               </div>
             </Tooltip>
 
-            {breadcrumbs.length > 0 && (
+            {isDesktop && breadcrumbs.length > 0 && (
               <Breadcrumb
                 items={breadcrumbs.map((crumb, i) => ({
                   title: i === breadcrumbs.length - 1
@@ -351,62 +422,74 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 separator={<span style={{ color: '#cbd5e1', margin: '0 2px' }}>/</span>}
               />
             )}
+
+            {!isDesktop && breadcrumbs.length > 0 && (
+              <span style={{ color: '#1e293b', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {breadcrumbs[breadcrumbs.length - 1]}
+              </span>
+            )}
           </div>
 
-          {/* Center: Search */}
-          <div style={{ flex: '0 0 320px' }}>
-            <Input
-              prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 14 }} />}
-              placeholder="Search orders, customers, products..."
-              style={{
-                borderRadius: 8,
-                background: '#f8fafc',
-                border: '1px solid #edf0f4',
-                fontSize: 13,
-                height: 36,
-              }}
-              styles={{ input: { background: '#f8fafc' } }}
-            />
-          </div>
+          {/* Center: Search (desktop only) */}
+          {isDesktop && (
+            <div style={{ flex: '0 0 320px' }}>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 14 }} />}
+                placeholder="Search orders, customers, products..."
+                style={{
+                  borderRadius: 8,
+                  background: '#f8fafc',
+                  border: '1px solid #edf0f4',
+                  fontSize: 13,
+                  height: 36,
+                }}
+                styles={{ input: { background: '#f8fafc' } }}
+              />
+            </div>
+          )}
 
           {/* Right: actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <Tooltip title="Help & Support">
-              <div style={{
-                cursor: 'pointer', width: 34, height: 34,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 8, color: '#94a3b8', fontSize: 16,
-                transition: 'all 0.2s',
-              }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLElement).style.color = '#64748b'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
-              >
-                <QuestionCircleOutlined />
-              </div>
-            </Tooltip>
+            {isDesktop && (
+              <>
+                <Tooltip title="Help & Support">
+                  <div style={{
+                    cursor: 'pointer', width: 34, height: 34,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 8, color: '#94a3b8', fontSize: 16,
+                    transition: 'all 0.2s',
+                  }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLElement).style.color = '#64748b'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+                  >
+                    <QuestionCircleOutlined />
+                  </div>
+                </Tooltip>
 
-            <Tooltip title="Notifications">
-              <Badge count={3} size="small" offset={[-4, 4]}>
-                <div style={{
-                  cursor: 'pointer', width: 34, height: 34,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 8, color: '#64748b', fontSize: 16,
-                  transition: 'all 0.2s',
-                }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  <BellOutlined />
-                </div>
-              </Badge>
-            </Tooltip>
+                <Tooltip title="Notifications">
+                  <Badge count={3} size="small" offset={[-4, 4]}>
+                    <div style={{
+                      cursor: 'pointer', width: 34, height: 34,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: 8, color: '#64748b', fontSize: 16,
+                      transition: 'all 0.2s',
+                    }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    >
+                      <BellOutlined />
+                    </div>
+                  </Badge>
+                </Tooltip>
 
-            <div style={{ width: 1, height: 28, background: '#edf0f4', margin: '0 4px' }} />
+                <div style={{ width: 1, height: 28, background: '#edf0f4', margin: '0 4px' }} />
+              </>
+            )}
 
             <Dropdown menu={{ items: userDropdown }} placement="bottomRight" trigger={['click']}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                cursor: 'pointer', padding: '4px 12px 4px 4px',
+                cursor: 'pointer', padding: '4px 8px 4px 4px',
                 borderRadius: 8,
                 transition: 'all 0.2s',
               }}
@@ -416,18 +499,24 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <Avatar size={28} style={{ background: roleCfg.color, fontWeight: 700, fontSize: 12 }}>
                   {user.fullName?.[0]}
                 </Avatar>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', lineHeight: 1.2 }}>
-                    {user.fullName?.split(' ')[0]}
+                {isDesktop && (
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b', lineHeight: 1.2 }}>
+                      {user.fullName?.split(' ')[0]}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </Dropdown>
           </div>
         </Header>
 
         {/* ── Page Content ── */}
-        <Content style={{ padding: '24px 28px', minHeight: `calc(100vh - ${HEADER_H}px)`, background: colors.pageBg }}>
+        <Content style={{
+          padding: isDesktop ? '24px 28px' : '16px',
+          minHeight: `calc(100vh - ${HEADER_H}px)`,
+          background: colors.pageBg,
+        }}>
           <div className="page-enter">
             {children}
           </div>

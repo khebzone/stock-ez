@@ -10,7 +10,11 @@ export const salesApi = baseApi.injectEndpoints({
       query: () => '/sales/my-customers',
       providesTags: ['Customer'],
     }),
+    getMyHistory: builder.query<any, string>({
+      query: (date) => `/sales/my-history?date=${date}`,
+      providesTags: ['Order', 'Payment'],
+    }),
   }),
 });
 
-export const { useGetMyAllocationQuery, useGetMyCustomersQuery } = salesApi;
+export const { useGetMyAllocationQuery, useGetMyCustomersQuery, useGetMyHistoryQuery } = salesApi;
