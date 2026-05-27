@@ -452,14 +452,46 @@ public class OrderService {
 
     public OrderDtos.OrderResponse cancelOrder(UUID id, String reason, UUID tenantId) {
         Order order = getOrderEntity(id, tenantId);
-        if (order.getStatus() != Order.OrderStatus.DRAFT && order.getStatus() != Order.OrderStatus.SUBMITTED) {
-            throw new BusinessException("Cannot cancel order in status: " + order.getStatus(), "INVALID_STATUS");
+
+        List<Order.OrderStatus> cancellable = List.of(
+            Order.OrderStatus.DRAFT, Order.OrderStatus.SUBMITTED,
+            Order.OrderStatus.APPROVED, Order.OrderStatus.PREPARING, Order.OrderStatus.PREPARED
+        );
+        if (!cancellable.contains(order.getStatus())) {
+            throw new BusinessException(
+                "Cannot cancel order in status: " + order.getStatus() +
+                ". Orders can only be cancelled before dispatch.",
+                "INVALID_STATUS");
         }
+
+        // Restore stock back to the batches
+        Map<UUID, Product> affectedProducts = new LinkedHashMap<>();
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            if (item.getBatchNumber() != null) {
+                stockBatchRepository.findByTenantAndBatchNumber(tenantId, item.getBatchNumber())
+                    .ifPresent(batch -> {
+                        batch.setQuantityAvailable(batch.getQuantityAvailable() + item.getQuantity());
+                        if (!batch.isActive()) batch.setActive(true);
+                        stockBatchRepository.save(batch);
+                    });
+            }
+            affectedProducts.put(product.getId(), product);
+        }
+        for (Product product : affectedProducts.values()) {
+            Integer restored = stockBatchRepository.sumAvailableByProduct(tenantId, product.getId());
+            product.setStockQuantity(restored != null ? restored : 0);
+            productRepository.save(product);
+        }
+
         order.setStatus(Order.OrderStatus.CANCELLED);
-        order.setNotes(reason);
+        order.setBalanceAmount(BigDecimal.ZERO);
+        if (reason != null && !reason.isBlank()) order.setNotes(reason);
         Order saved = orderRepository.save(order);
         auditService.record(tenantId, "ORDER", saved.getId(), "CANCELLED",
-                "Order " + saved.getOrderNumber() + " cancelled" + (reason != null && !reason.isBlank() ? ": " + reason : ""));
+                "Order " + saved.getOrderNumber() + " cancelled" +
+                (reason != null && !reason.isBlank() ? ": " + reason : "") +
+                " — stock restored for " + order.getItems().size() + " item(s)");
         return toResponse(saved);
     }
 
