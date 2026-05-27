@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
@@ -12,16 +12,16 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.distroiq</groupId>
-    <artifactId>distroiq-parent</artifactId>
+    <groupId>com.stockez</groupId>
+    <artifactId>stockez-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>DistroIQ Platform</name>
+    <name>StockEz Platform</name>
     <description>Enterprise FMCG Distribution Management Platform</description>
 
     <modules>
-        <module>distroiq-common</module>
-        <module>distroiq-api</module>
+        <module>stockez-common</module>
+        <module>stockez-api</module>
     </modules>
 
     <properties>
@@ -41,8 +41,8 @@
         <dependencies>
             <!-- Internal Modules -->
             <dependency>
-                <groupId>com.distroiq</groupId>
-                <artifactId>distroiq-common</artifactId>
+                <groupId>com.stockez</groupId>
+                <artifactId>stockez-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

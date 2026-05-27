@@ -174,6 +174,8 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 - Every purchase creates a new batch with auto-generated `batchNumber`
 - If `purchaseRate` differs from product's current `purchaseRate` → price discrepancy warning
 - User sets `batchMinSaleRate` and `batchMaxSaleRate` for the new batch
+- `minSaleRate` / `maxSaleRate` are **inclusive of GST** — the salesperson enters and sees GST-inclusive prices
+- Sale order line: `lineTotal = unitPrice × qty` (already inclusive); `gstAmt = lineTotal × gstPercent / (100 + gstPercent)`; `lineBase (excl.) = lineTotal − gstAmt`
 - Salesperson cannot sell below `minSaleRate` or above `maxSaleRate` of the batch
 
 ### Day Closure
