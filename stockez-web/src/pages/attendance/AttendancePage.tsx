@@ -252,7 +252,7 @@ const AttendancePage: React.FC = () => {
           onChange={setFilterUserId}
           showSearch
           filterOption={(input, option) =>
-            (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
+            ((option?.children as unknown) as string)?.toLowerCase().includes(input.toLowerCase())
           }
         >
           {users.map((u: any) => (

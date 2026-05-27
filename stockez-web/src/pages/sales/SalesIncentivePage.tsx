@@ -262,7 +262,7 @@ const SalesIncentivePage: React.FC = () => {
     setLastUpdated(dayjs());
 
     if (!isInitializedRef.current) {
-      view.brands.forEach(c => { prevBrandsRef.current[c.brand] = Number(c.achievedValue); });
+      view.brands.forEach((c: BrandCard) => { prevBrandsRef.current[c.brand] = Number(c.achievedValue); });
       isInitializedRef.current = true;
       return;
     }
@@ -270,7 +270,7 @@ const SalesIncentivePage: React.FC = () => {
     const newIncs: Increment[] = [];
     const newGlows = new Set<string>();
 
-    view.brands.forEach(c => {
+    view.brands.forEach((c: BrandCard) => {
       const prev = prevBrandsRef.current[c.brand] ?? Number(c.achievedValue);
       const curr = Number(c.achievedValue);
       if (curr > prev) {
