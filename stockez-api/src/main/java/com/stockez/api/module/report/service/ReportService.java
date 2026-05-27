@@ -507,6 +507,83 @@ public class ReportService {
                 .build();
     }
 
+    // ─── 5. Brand Profit Report ───────────────────────────────────────────────
+
+    public ReportDtos.BrandProfitResponse getBrandProfitReport(UUID tenantId, LocalDate from, LocalDate to) {
+        List<Order> orders = orderRepository.findByTenantDateRangeAndStatus(tenantId, from, to, Order.OrderStatus.DELIVERED);
+
+        Set<String> batchNumbers = orders.stream()
+                .flatMap(o -> o.getItems().stream())
+                .map(OrderItem::getBatchNumber)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<String, StockBatch> batchMap = batchNumbers.isEmpty()
+                ? Collections.emptyMap()
+                : stockBatchRepository.findByTenantAndBatchNumbers(tenantId, batchNumbers)
+                        .stream()
+                        .collect(Collectors.toMap(StockBatch::getBatchNumber, b -> b));
+
+        List<OrderItem> allItems = orders.stream()
+                .flatMap(o -> o.getItems().stream())
+                .collect(Collectors.toList());
+
+        Map<String, List<OrderItem>> byBrand = allItems.stream()
+                .collect(Collectors.groupingBy(i -> {
+                    String brand = i.getProduct().getBrand();
+                    return brand != null ? brand : "Unbranded";
+                }));
+
+        List<ReportDtos.BrandProfitRow> brandRows = byBrand.entrySet().stream()
+                .map(e -> {
+                    List<OrderItem> items = e.getValue();
+                    int qtySold = items.stream().mapToInt(OrderItem::getQuantity).sum();
+                    long orderCount = items.stream().map(i -> i.getOrder().getId()).distinct().count();
+
+                    BigDecimal revenue = items.stream()
+                            .map(i -> i.getLineTotal().subtract(i.getGstAmount()))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    BigDecimal cogs = items.stream()
+                            .map(i -> computeItemCogs(i, batchMap))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    BigDecimal grossProfit = revenue.subtract(cogs);
+                    BigDecimal marginPercent = revenue.compareTo(BigDecimal.ZERO) > 0
+                            ? grossProfit.multiply(BigDecimal.valueOf(100)).divide(revenue, 2, RoundingMode.HALF_UP)
+                            : BigDecimal.ZERO;
+
+                    return ReportDtos.BrandProfitRow.builder()
+                            .brand(e.getKey())
+                            .qtySold(qtySold)
+                            .orderCount((int) orderCount)
+                            .revenue(revenue)
+                            .cogs(cogs)
+                            .grossProfit(grossProfit)
+                            .marginPercent(marginPercent)
+                            .build();
+                })
+                .sorted(Comparator.comparing(ReportDtos.BrandProfitRow::getGrossProfit).reversed())
+                .collect(Collectors.toList());
+
+        BigDecimal totalRevenue     = brandRows.stream().map(ReportDtos.BrandProfitRow::getRevenue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCogs        = brandRows.stream().map(ReportDtos.BrandProfitRow::getCogs).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalGrossProfit = totalRevenue.subtract(totalCogs);
+        BigDecimal totalMargin      = totalRevenue.compareTo(BigDecimal.ZERO) > 0
+                ? totalGrossProfit.multiply(BigDecimal.valueOf(100)).divide(totalRevenue, 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        return ReportDtos.BrandProfitResponse.builder()
+                .from(from).to(to)
+                .totalOrders(orders.size())
+                .totalRevenue(totalRevenue)
+                .totalCogs(totalCogs)
+                .totalGrossProfit(totalGrossProfit)
+                .totalMarginPercent(totalMargin)
+                .brands(brandRows)
+                .build();
+    }
+
     private BigDecimal computeItemCogs(OrderItem item, Map<String, StockBatch> batchMap) {
         if (item.getBatchNumber() == null) return BigDecimal.ZERO;
         StockBatch batch = batchMap.get(item.getBatchNumber());

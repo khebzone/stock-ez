@@ -84,7 +84,7 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getVendorLedger(tenantId, from, to)));
     }
 
-    // ─── 4. Profit Report ─────────────────────────────────────────────────────
+    // ─── 4. Profit Report (by Route) ─────────────────────────────────────────
 
     @GetMapping("/profit")
     @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
@@ -94,5 +94,17 @@ public class ReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ResponseEntity.ok(ApiResponse.success(reportService.getProfitReport(tenantId, from, to)));
+    }
+
+    // ─── 5. Brand Profit Report ───────────────────────────────────────────────
+
+    @GetMapping("/profit/brand")
+    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @Operation(summary = "Gross profit by brand for a date range (DELIVERED orders only) [ADMIN/ACCOUNTANT]")
+    public ResponseEntity<ApiResponse<ReportDtos.BrandProfitResponse>> brandProfitReport(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(reportService.getBrandProfitReport(tenantId, from, to)));
     }
 }

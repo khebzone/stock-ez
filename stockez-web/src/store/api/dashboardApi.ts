@@ -20,6 +20,9 @@ export const dashboardApi = baseApi.injectEndpoints({
     getProfitReport: builder.query<any, { from: string; to: string }>({
       query: ({ from, to }) => `/reports/profit?from=${from}&to=${to}`,
     }),
+    getBrandProfitReport: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/reports/profit/brand?from=${from}&to=${to}`,
+    }),
   }),
 });
 
@@ -30,4 +33,5 @@ export const {
   useGetSalesReportQuery,
   useGetCollectionReportQuery,
   useGetProfitReportQuery,
+  useGetBrandProfitReportQuery,
 } = dashboardApi;

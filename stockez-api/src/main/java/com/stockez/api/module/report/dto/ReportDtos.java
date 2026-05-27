@@ -196,7 +196,7 @@ public class ReportDtos {
         private BigDecimal totalPurchases;
     }
 
-    // ─── Profit Report ───────────────────────────────────────────────────────
+    // ─── Profit Report (by Route) ────────────────────────────────────────────
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class ProfitRouteRow {
@@ -219,5 +219,30 @@ public class ReportDtos {
         private BigDecimal totalGrossProfit;
         private BigDecimal totalMarginPercent;
         private List<ProfitRouteRow> routeBreakdown;
+    }
+
+    // ─── Brand Profit Report ─────────────────────────────────────────────────
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class BrandProfitRow {
+        private String brand;
+        private int qtySold;
+        private int orderCount;
+        private BigDecimal revenue;
+        private BigDecimal cogs;
+        private BigDecimal grossProfit;
+        private BigDecimal marginPercent;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class BrandProfitResponse {
+        private LocalDate from;
+        private LocalDate to;
+        private int totalOrders;
+        private BigDecimal totalRevenue;
+        private BigDecimal totalCogs;
+        private BigDecimal totalGrossProfit;
+        private BigDecimal totalMarginPercent;
+        private List<BrandProfitRow> brands;
     }
 }
