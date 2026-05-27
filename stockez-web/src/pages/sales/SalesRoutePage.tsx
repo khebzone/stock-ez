@@ -139,16 +139,16 @@ const SalesRoutePage: React.FC = () => {
       }}>
         <div style={{ position: 'absolute', top: -24, right: -24, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
             <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
               Today's Route
             </div>
-            <div style={{ color: '#fff', fontSize: 21, fontWeight: 800, marginTop: 4, letterSpacing: -0.3 }}>{allocation.routeName}</div>
+            <div style={{ color: '#fff', fontSize: 21, fontWeight: 800, marginTop: 4, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{allocation.routeName}</div>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 3 }}>
               {new Date(allocation.allocationDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div style={{ color: '#fff', fontSize: 32, fontWeight: 900, lineHeight: 1 }}>{visitedCount}</div>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>of {customers.length} visited</div>
           </div>

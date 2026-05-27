@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Select, Spin, Progress, Badge } from 'antd';
+import { Select, Spin, Progress, Badge, Grid } from 'antd';
 import { TrophyOutlined, FireOutlined, RocketOutlined, CheckCircleFilled, LockOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetMyIncentivesQuery } from '../../store/api/incentiveApi';
@@ -32,6 +32,8 @@ if (!document.getElementById(STYLE_ID)) {
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const { useBreakpoint } = Grid;
 
 const fmt = (v: any) =>
   `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -238,6 +240,8 @@ const SalesIncentivePage: React.FC = () => {
   const now = dayjs();
   const [month, setMonth] = useState(now.month() + 1);
   const [year, setYear]   = useState(now.year());
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const [increments, setIncrements]       = useState<Increment[]>([]);
   const [glowingCards, setGlowingCards]   = useState<Set<string>>(new Set());
@@ -308,7 +312,7 @@ const SalesIncentivePage: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row', gap: 12, marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <TrophyOutlined style={{ fontSize: 22, color: '#f59e0b' }} />
@@ -329,7 +333,7 @@ const SalesIncentivePage: React.FC = () => {
           </div>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {MONTHS[month - 1]} {year} · Updates every 30 seconds
-            {lastUpdated && (
+            {lastUpdated && !isMobile && (
               <span style={{ marginLeft: 8, color: '#94a3b8' }}>
                 · Last refreshed {lastUpdated.format('h:mm:ss A')}
               </span>

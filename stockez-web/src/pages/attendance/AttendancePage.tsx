@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Table, Button, DatePicker, Select, Tag, Space, Form, InputNumber,
-  TimePicker, message, Spin, Alert, Card, Statistic, Row, Col, Tooltip,
+  TimePicker, message, Spin, Alert, Card, Statistic, Row, Col, Tooltip, Grid,
 } from 'antd';
 import {
   SettingOutlined, ReloadOutlined, EnvironmentOutlined, ClockCircleOutlined,
@@ -17,6 +17,7 @@ import {
 import { useGetUsersQuery } from '../../store/api/userApi';
 
 const { Option } = Select;
+const { useBreakpoint } = Grid;
 
 const STATUS_CONFIG: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
   PRESENT: { color: 'success', icon: <CheckCircleOutlined />, label: 'Present' },
@@ -32,6 +33,8 @@ const AttendancePage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [filterUserId, setFilterUserId] = useState<string | undefined>();
   const [settingsForm] = Form.useForm();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const { data: settingsData, isLoading: settingsLoading } = useGetAttendanceSettingsQuery();
   const settings = settingsData?.data;
@@ -175,7 +178,7 @@ const AttendancePage: React.FC = () => {
             }
             setSettingsOpen(true);
           }}>
-            Office Settings
+            {!isMobile && 'Office Settings'}
           </Button>
         </Space>
       </div>
@@ -242,11 +245,11 @@ const AttendancePage: React.FC = () => {
           format="DD MMM YYYY"
           picker={filterUserId ? 'month' : 'date'}
           allowClear={false}
-          style={{ width: 180 }}
+          style={{ width: isMobile ? '100%' : 180 }}
         />
         <Select
           placeholder="Filter by staff member"
-          style={{ width: 220 }}
+          style={{ width: isMobile ? '100%' : 220 }}
           allowClear
           value={filterUserId}
           onChange={setFilterUserId}
@@ -292,6 +295,7 @@ const AttendancePage: React.FC = () => {
           columns={columns}
           rowKey="id"
           size="small"
+          scroll={{ x: 480 }}
           pagination={{ pageSize: 50, hideOnSinglePage: true }}
           locale={{
             emptyText: filterUserId

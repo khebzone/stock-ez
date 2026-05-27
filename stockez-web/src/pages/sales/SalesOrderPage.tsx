@@ -164,7 +164,7 @@ const SalesOrderPage: React.FC = () => {
         if (exists) return prev.map(i => i.productId === product.id ? { ...i, quantity: qty } : i);
         return [...prev, {
           productId: product.id, product, quantity: qty,
-          unitPrice:       product.maxSaleRate || product.minSaleRate || 0,
+          unitPrice:       product.fifoMaxSaleRate ?? product.maxSaleRate ?? product.fifoMinSaleRate ?? product.minSaleRate ?? 0,
           discountPercent: 0,
           gstPercent:      product.salesGstPercent || 0,
         }];
