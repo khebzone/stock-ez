@@ -100,6 +100,7 @@ const SalesOrderPage: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch]     = useState('');
   const [productSearch, setProductSearch]       = useState('');
+  const [selectedBrand, setSelectedBrand]       = useState<string>('ALL');
   const [cart, setCart]                         = useState<CartItem[]>([]);
 
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
@@ -129,9 +130,16 @@ const SalesOrderPage: React.FC = () => {
     const state = location.state as any;
     if (state?.customerId && customers.length) {
       const c = customers.find((c: any) => c.id === state.customerId);
-      if (c) { setSelectedCustomer(c); setStep(1); }
+      if (c) handleSelectCustomer(c);
     }
   }, [location.state, customers]);
+
+  const handleSelectCustomer = (c: any) => {
+    setSelectedCustomer(c);
+    setSelectedBrand('ALL');
+    setProductSearch('');
+    setStep(1);
+  };
 
   const filteredCustomers = customers.filter((c: any) =>
     !customerSearch ||
@@ -140,11 +148,17 @@ const SalesOrderPage: React.FC = () => {
     c.phone?.includes(customerSearch)
   );
 
+  const brandList: string[] = [
+    'ALL',
+    ...Array.from(new Set(products.map((p: any) => p.brand).filter(Boolean))).sort() as string[],
+  ];
+
   const filteredProducts = products.filter((p: any) =>
-    !productSearch ||
-    p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.brand?.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.code?.toLowerCase().includes(productSearch.toLowerCase())
+    (selectedBrand === 'ALL' || p.brand === selectedBrand) &&
+    (!productSearch ||
+      p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
+      p.brand?.toLowerCase().includes(productSearch.toLowerCase()) ||
+      p.code?.toLowerCase().includes(productSearch.toLowerCase()))
   );
 
   const getQty = (id: string) => cart.find(i => i.productId === id)?.quantity || 0;
@@ -317,7 +331,7 @@ const SalesOrderPage: React.FC = () => {
               {filteredCustomers.map((c: any, idx: number) => (
                 <div
                   key={c.id}
-                  onClick={() => { setSelectedCustomer(c); setStep(1); }}
+                  onClick={() => handleSelectCustomer(c)}
                   style={{
                     background: selectedCustomer?.id === c.id ? PL : '#fff',
                     borderBottom: idx < filteredCustomers.length - 1 ? '1px solid #f1f5f9' : 'none',
@@ -473,9 +487,49 @@ const SalesOrderPage: React.FC = () => {
             </div>
           )}
 
+          {/* Brand chips */}
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, msOverflowStyle: 'none', scrollbarWidth: 'none' as any }}>
+            {brandList.map(brand => {
+              const active = selectedBrand === brand;
+              const inStockCount = brand === 'ALL'
+                ? products.filter((p: any) => p.stockQuantity > 0).length
+                : products.filter((p: any) => p.brand === brand && p.stockQuantity > 0).length;
+              return (
+                <button
+                  key={brand}
+                  onClick={() => setSelectedBrand(brand)}
+                  style={{
+                    flexShrink: 0,
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    border: `1.5px solid ${active ? P : '#e2e8f0'}`,
+                    background: active ? P : '#fff',
+                    color: active ? '#fff' : '#475569',
+                    fontWeight: active ? 700 : 500,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {brand === 'ALL' ? 'All' : brand}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700,
+                    background: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                    color: active ? '#fff' : '#64748b',
+                    borderRadius: 10, padding: '0 5px', lineHeight: '16px',
+                  }}>
+                    {inStockCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <Input
             prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-            placeholder="Search products..."
+            placeholder={selectedBrand === 'ALL' ? 'Search products...' : `Search in ${selectedBrand}...`}
             value={productSearch}
             onChange={e => setProductSearch(e.target.value)}
             size="large"

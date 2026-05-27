@@ -31,6 +31,109 @@ if (!document.getElementById(STYLE_ID)) {
   document.head.appendChild(style);
 }
 
+// ── Confetti shower ────────────────────────────────────────────────────────
+interface ConfettiParticle {
+  x: number; y: number;
+  vx: number; vy: number;
+  color: string; size: number;
+  rotation: number; rotSpeed: number;
+  opacity: number; shape: 'rect' | 'circle' | 'star';
+}
+
+const CONFETTI_COLORS = ['#f59e0b','#059669','#2563eb','#dc2626','#7c3aed','#ea580c','#0891b2','#db2777','#65a30d'];
+
+function drawStar(ctx: CanvasRenderingContext2D, r: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const outer = (i * Math.PI * 2) / 5 - Math.PI / 2;
+    const inner = outer + Math.PI / 5;
+    if (i === 0) ctx.moveTo(Math.cos(outer) * r, Math.sin(outer) * r);
+    else         ctx.lineTo(Math.cos(outer) * r, Math.sin(outer) * r);
+    ctx.lineTo(Math.cos(inner) * (r * 0.45), Math.sin(inner) * (r * 0.45));
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+const ConfettiShower: React.FC<{ trigger: number; count?: number }> = ({ trigger, count = 130 }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef   = useRef<number>();
+
+  useEffect(() => {
+    if (trigger === 0) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const shapes: ConfettiParticle['shape'][] = ['rect', 'circle', 'star'];
+    const particles: ConfettiParticle[] = Array.from({ length: count }, () => ({
+      x:        Math.random() * canvas.width,
+      y:        -20 - Math.random() * 120,
+      vx:       (Math.random() - 0.5) * 5,
+      vy:       2.5 + Math.random() * 4,
+      color:    CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      size:     5 + Math.random() * 9,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.18,
+      opacity:  1,
+      shape:    shapes[Math.floor(Math.random() * shapes.length)],
+    }));
+
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+
+      for (const p of particles) {
+        if (p.opacity <= 0.02) continue;
+        alive = true;
+
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vy += 0.06;
+        p.vx += Math.sin(p.y * 0.04) * 0.08;
+        p.rotation += p.rotSpeed;
+        if (p.y > canvas.height * 0.65) p.opacity -= 0.018;
+
+        ctx.save();
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle   = p.color;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+
+        if (p.shape === 'rect') {
+          ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.55);
+        } else if (p.shape === 'circle') {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          drawStar(ctx, p.size / 2);
+        }
+        ctx.restore();
+      }
+
+      if (alive) animRef.current = requestAnimationFrame(animate);
+      else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
+    animRef.current = requestAnimationFrame(animate);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [trigger, count]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 9999 }}
+    />
+  );
+};
+
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const { useBreakpoint } = Grid;
@@ -247,6 +350,8 @@ const SalesIncentivePage: React.FC = () => {
   const [glowingCards, setGlowingCards]   = useState<Set<string>>(new Set());
   const [totalPopKey, setTotalPopKey]     = useState(0);
   const [lastUpdated, setLastUpdated]     = useState<dayjs.Dayjs | null>(null);
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [confettiCount, setConfettiCount]     = useState(130);
   const prevBrandsRef    = useRef<Record<string, number>>({});
   const isInitializedRef = useRef(false);
 
@@ -268,11 +373,18 @@ const SalesIncentivePage: React.FC = () => {
     if (!isInitializedRef.current) {
       view.brands.forEach((c: BrandCard) => { prevBrandsRef.current[c.brand] = Number(c.achievedValue); });
       isInitializedRef.current = true;
+      // Fire big confetti on load if any brand is already achieved
+      const hasAchieved = view.brands.some((c: BrandCard) => Number(c.achievementPct) >= 100);
+      if (hasAchieved) {
+        setConfettiCount(160);
+        setConfettiTrigger(t => t + 1);
+      }
       return;
     }
 
     const newIncs: Increment[] = [];
     const newGlows = new Set<string>();
+    let pushedToAchieved = false;
 
     view.brands.forEach((c: BrandCard) => {
       const prev = prevBrandsRef.current[c.brand] ?? Number(c.achievedValue);
@@ -282,6 +394,7 @@ const SalesIncentivePage: React.FC = () => {
         newIncs.push({ id, brand: c.brand, amount: curr - prev });
         newGlows.add(c.brand);
         prevBrandsRef.current[c.brand] = curr;
+        if (Number(c.achievementPct) >= 100) pushedToAchieved = true;
       } else {
         prevBrandsRef.current[c.brand] = curr;
       }
@@ -291,6 +404,9 @@ const SalesIncentivePage: React.FC = () => {
       setIncrements(prev => [...prev, ...newIncs]);
       setGlowingCards(newGlows);
       setTotalPopKey(k => k + 1);
+      // Big shower when crossing 100%, small burst for any new sale
+      setConfettiCount(pushedToAchieved ? 180 : 70);
+      setConfettiTrigger(t => t + 1);
       setTimeout(() => {
         setIncrements(prev => prev.filter(i => !newIncs.find(n => n.id === i.id)));
         setGlowingCards(new Set());
@@ -311,6 +427,7 @@ const SalesIncentivePage: React.FC = () => {
 
   return (
     <div>
+      <ConfettiShower trigger={confettiTrigger} count={confettiCount} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexDirection: isMobile ? 'column' : 'row', gap: 12, marginBottom: 20 }}>
         <div>
