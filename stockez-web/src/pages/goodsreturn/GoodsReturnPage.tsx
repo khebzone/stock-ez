@@ -74,6 +74,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 
   const handleSave = () => {
     if (!returnDate) { message.error('Return date is required'); return; }
+    if (type === 'SALES_RETURN' && !orderId) { message.error('Select the reference order for sales return'); return; }
     if (type === 'PURCHASE_RETURN' && !supplierName.trim()) { message.error('Supplier name is required'); return; }
     for (const l of lines) {
       if (!l.productId) { message.error('Select product for all lines'); return; }
@@ -141,8 +142,8 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 
           {type === 'SALES_RETURN' && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Reference Order (optional)</div>
-              <Select size="large" showSearch optionFilterProp="label" allowClear
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Reference Order *</div>
+              <Select size="large" showSearch optionFilterProp="label"
                 placeholder="Select order..." style={{ width: '100%' }}
                 value={orderId || undefined} onChange={setOrderId}
                 options={orders.map((o: any) => ({ value: o.id, label: `${o.orderNumber} — ${o.customerName || o.customer?.businessName}` }))}

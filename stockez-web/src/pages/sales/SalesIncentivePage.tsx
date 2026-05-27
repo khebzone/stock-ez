@@ -412,7 +412,7 @@ const SalesIncentivePage: React.FC = () => {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-              {brands
+              {[...brands]
                 .sort((a, b) => Number(b.achievementPct) - Number(a.achievementPct))
                 .map(card => (
                   <BrandIncentiveCard

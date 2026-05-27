@@ -63,6 +63,11 @@ public class GoodsReturnService {
         int seq = goodsReturnRepository.findMaxReturnSequence(tenantId, year) + 1;
         String returnNumber = String.format("RTN-%d-%05d", year, seq);
 
+        if (returnType == GoodsReturn.ReturnType.SALES_RETURN && req.getOrderId() == null) {
+            throw new BusinessException(
+                    "Order reference is required for Sales Return", "ORDER_REQUIRED");
+        }
+
         Order referenceOrder = null;
         if (returnType == GoodsReturn.ReturnType.SALES_RETURN && req.getOrderId() != null) {
             referenceOrder = orderRepository.findByIdAndTenantId(req.getOrderId(), tenantId)
