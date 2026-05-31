@@ -13,4 +13,7 @@ public interface ProductMasterRepository extends JpaRepository<ProductMaster, UU
     List<ProductMaster> findByTenantIdAndTypeAndActiveTrueOrderBySortOrderAscNameAsc(UUID tenantId, String type);
     Optional<ProductMaster> findByIdAndTenantId(UUID id, UUID tenantId);
     boolean existsByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(UUID tenantId, String type, String name);
+    Optional<ProductMaster> findFirstByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(UUID tenantId, String type, String name);
+    boolean existsByTenantIdAndTypeAndNameIgnoreCaseAndParentNameIgnoreCaseAndActiveTrue(UUID tenantId, String type, String name, String parentName);
+    Optional<ProductMaster> findFirstByTenantIdAndTypeAndNameIgnoreCaseAndParentNameIgnoreCaseAndActiveTrue(UUID tenantId, String type, String name, String parentName);
 }

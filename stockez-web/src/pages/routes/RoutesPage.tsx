@@ -9,7 +9,7 @@ import {
   PlusCircleOutlined, GlobalOutlined,
   ArrowUpOutlined, ArrowDownOutlined, UnorderedListOutlined,
   UserOutlined, PhoneOutlined, ShopOutlined, DeleteOutlined, EditOutlined, DownloadOutlined,
-  WarningFilled, TeamOutlined, ArrowRightOutlined,
+  WarningFilled, TeamOutlined, ArrowRightOutlined, SearchOutlined,
 } from '@ant-design/icons';
 
 /* ── Animated block error dialog ── */
@@ -338,6 +338,7 @@ const BeatPlanDrawer: React.FC<{ routeId: string | null; onClose: () => void }> 
 
 /* ── Main Page ── */
 const RoutesPage: React.FC = () => {
+  const [search, setSearch]             = useState('');
   const [routeModal, setRouteModal]     = useState(false);
   const [placeModal, setPlaceModal]     = useState(false);
   const [editingRoute, setEditingRoute] = useState<any>(null);   // null = create, object = edit
@@ -379,7 +380,10 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  const routes = routesData?.data || [];
+  const allRoutes = routesData?.data || [];
+  const routes = search.trim()
+    ? allRoutes.filter((r: any) => r.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : allRoutes;
 
   const handleRouteSubmit = async () => {
     try {
@@ -464,6 +468,17 @@ const RoutesPage: React.FC = () => {
         }
       />
 
+      <div style={{ marginBottom: 16 }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+          placeholder="Search routes..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          allowClear
+          style={{ maxWidth: 320 }}
+        />
+      </div>
+
       {isLoading ? (
         <Row gutter={[16, 16]}>
           {[1, 2].map(i => <Col key={i} xs={24} lg={12}><Card loading style={{ borderRadius: 12 }} /></Col>)}
@@ -471,11 +486,20 @@ const RoutesPage: React.FC = () => {
       ) : routes.length === 0 ? (
         <Card style={{ borderRadius: 12, textAlign: 'center', padding: '60px 0' }}>
           <GlobalOutlined style={{ fontSize: 52, color: '#d1d5db' }} />
-          <div style={{ marginTop: 16, color: '#9ca3af', fontSize: 15, fontWeight: 500 }}>No routes yet</div>
-          <div style={{ color: '#cbd5e1', fontSize: 13, marginTop: 4 }}>Create your first delivery route to get started</div>
-          <Button type="primary" style={{ marginTop: 20 }} onClick={() => { setEditingRoute(null); routeForm.resetFields(); setRouteModal(true); }}>
-            Create First Route
-          </Button>
+          {search.trim() ? (
+            <>
+              <div style={{ marginTop: 16, color: '#9ca3af', fontSize: 15, fontWeight: 500 }}>No routes match "{search}"</div>
+              <div style={{ color: '#cbd5e1', fontSize: 13, marginTop: 4 }}>Try a different search term</div>
+            </>
+          ) : (
+            <>
+              <div style={{ marginTop: 16, color: '#9ca3af', fontSize: 15, fontWeight: 500 }}>No routes yet</div>
+              <div style={{ color: '#cbd5e1', fontSize: 13, marginTop: 4 }}>Create your first delivery route to get started</div>
+              <Button type="primary" style={{ marginTop: 20 }} onClick={() => { setEditingRoute(null); routeForm.resetFields(); setRouteModal(true); }}>
+                Create First Route
+              </Button>
+            </>
+          )}
         </Card>
       ) : (
         <Row gutter={[16, 16]}>

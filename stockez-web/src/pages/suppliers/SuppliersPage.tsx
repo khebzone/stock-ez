@@ -1,11 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Table, Button, Modal, Form, Input, Space, Card, Popconfirm, message, Row, Col, Drawer, Alert, Grid,
+  Table, Button, Modal, Form, Input, Space, Card, Popconfirm, message, Row, Col, Drawer, Grid,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons';
 import {
   useGetSuppliersQuery, useCreateSupplierMutation,
-  useUpdateSupplierMutation, useDeleteSupplierMutation, useImportSuppliersMutation,
+  useUpdateSupplierMutation, useDeleteSupplierMutation,
 } from '../../store/api/supplierApi';
 import PageHeader from '../../components/PageHeader';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
@@ -16,19 +16,14 @@ const SuppliersPage: React.FC = () => {
   const [search, setSearch]           = useState('');
   const [modalOpen, setModalOpen]     = useState(false);
   const [drawerOpen, setDrawerOpen]   = useState(false);
-  const [importOpen, setImportOpen]   = useState(false);
-  const [importing, setImporting]     = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
   const [editing, setEditing]         = useState<any>(null);
   const [viewing, setViewing]         = useState<any>(null);
   const [form] = Form.useForm();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, refetch } = useGetSuppliersQuery({ search });
   const [createSupplier, { isLoading: creating }] = useCreateSupplierMutation();
   const [updateSupplier, { isLoading: updating }] = useUpdateSupplierMutation();
   const [deleteSupplier] = useDeleteSupplierMutation();
-  const [importSuppliers] = useImportSuppliersMutation();
 
   const handleExport = () => {
     const token    = localStorage.getItem('token');
@@ -52,41 +47,6 @@ const SuppliersPage: React.FC = () => {
       .catch(() => message.error('Export failed'));
   };
 
-  const handleTemplateDownload = () => {
-    const token    = localStorage.getItem('token');
-    const tenantId = localStorage.getItem('tenantId');
-    fetch('/api/v1/suppliers/import/template', {
-      headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Id': tenantId || '' },
-    })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'supplier-import-template.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(a.href);
-        document.body.removeChild(a);
-      })
-      .catch(() => message.error('Download failed'));
-  };
-
-  const handleImportFile = async (file: File) => {
-    setImporting(true);
-    setImportResult(null);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await importSuppliers(fd).unwrap();
-      setImportResult(res.data);
-      refetch();
-    } catch (err: any) {
-      message.error(err?.data?.message || 'Import failed');
-    } finally {
-      setImporting(false);
-    }
-  };
-
   const suppliers = data?.data?.content || data?.data || [];
 
   const openAdd = () => { setEditing(null); form.resetFields(); setModalOpen(true); };
@@ -107,7 +67,10 @@ const SuppliersPage: React.FC = () => {
       setModalOpen(false);
       refetch();
     } catch (err: any) {
-      if (err?.errorFields) return;
+      if (err?.errorFields) {
+        form.scrollToField(err.errorFields[0].name);
+        return;
+      }
       message.error(err?.data?.message || 'Failed');
     }
   };
@@ -193,7 +156,6 @@ const SuppliersPage: React.FC = () => {
         action={
           <Space>
             <Button icon={<DownloadOutlined />} onClick={handleExport}>Export Excel</Button>
-            <Button icon={<UploadOutlined />} onClick={() => { setImportResult(null); setImportOpen(true); }}>Import</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}
               style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}>
               Add Supplier
@@ -316,8 +278,11 @@ const SuppliersPage: React.FC = () => {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="contactPerson" label="Contact Person">
-                <Input placeholder="Sales representative name" />
+              <Form.Item name="contactPerson" label="Contact Person *" rules={[
+                { required: true, message: 'Contact Person is required' },
+                { pattern: /^[A-Za-z\s.]+$/, message: 'Only letters are allowed' },
+              ]}>
+                <Input placeholder="Sales representative name" maxLength={100} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
@@ -326,12 +291,13 @@ const SuppliersPage: React.FC = () => {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="altPhone" label="Alt Phone">
-                <Input placeholder="Optional" maxLength={15} />
+              <Form.Item name="altPhone" label="Alt Phone"
+                rules={[{ pattern: /^\d{10}$/, message: 'Must be exactly 10 digits' }]}>
+                <Input placeholder="Optional" maxLength={10} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Valid email' }]}>
+              <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Enter a valid email (e.g. name@domain.com)' }]}>
                 <Input placeholder="supplier@company.com" />
               </Form.Item>
             </Col>
@@ -342,17 +308,20 @@ const SuppliersPage: React.FC = () => {
           </div>
           <Row gutter={16}>
             <Col span={24}>
-              <Form.Item name="address" label="Address">
+              <Form.Item name="address" label="Address"
+                rules={[{ pattern: /.*[a-zA-Z0-9].*/, message: 'Must contain at least one letter or number' }]}>
                 <Input.TextArea rows={2} placeholder="Street, Area" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="city" label="City">
+              <Form.Item name="city" label="City"
+                rules={[{ pattern: /.*[a-zA-Z].*/, message: 'Must contain at least one letter' }]}>
                 <Input placeholder="City" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="state" label="State">
+              <Form.Item name="state" label="State"
+                rules={[{ pattern: /.*[a-zA-Z].*/, message: 'Must contain at least one letter' }]}>
                 <Input placeholder="State" />
               </Form.Item>
             </Col>
@@ -363,15 +332,17 @@ const SuppliersPage: React.FC = () => {
           </div>
           <Row gutter={16}>
             <Col xs={24} sm={12}>
-              <Form.Item name="gstin" label="GSTIN">
+              <Form.Item name="gstin" label="GSTIN"
+                rules={[{ pattern: /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z]$/, message: 'Invalid GSTIN — expected format: 29AADCB2230M1ZV' }]}>
                 <Input placeholder="22AAAAA0000A1Z5" maxLength={15}
                   onChange={e => form.setFieldValue('gstin', e.target.value.toUpperCase())}
                   style={{ textTransform: 'uppercase' }} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="fssaiNumber" label="FSSAI License No.">
-                <Input placeholder="10012345678901" maxLength={20} />
+              <Form.Item name="fssaiNumber" label="FSSAI License No."
+                rules={[{ pattern: /^[0-9]{14}$/, message: 'Must be exactly 14 digits (e.g. 10012345678901)' }]}>
+                <Input placeholder="10012345678901" maxLength={14} />
               </Form.Item>
             </Col>
           </Row>
@@ -381,91 +352,28 @@ const SuppliersPage: React.FC = () => {
           </div>
           <Row gutter={16}>
             <Col xs={24} sm={12}>
-              <Form.Item name="bankName" label="Bank Name">
+              <Form.Item name="bankName" label="Bank Name"
+                rules={[{ pattern: /.*[a-zA-Z].*/, message: 'Must contain at least one letter' }]}>
                 <Input placeholder="e.g. SBI" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item name="bankIfsc" label="IFSC Code">
-                <Input placeholder="SBIN0001234" maxLength={15}
+              <Form.Item name="bankIfsc" label="IFSC Code"
+                rules={[{ pattern: /^[A-Za-z]{4}[0][A-Za-z0-9]{6}$/, message: 'Invalid IFSC — expected format: SBIN0001234' }]}>
+                <Input placeholder="SBIN0001234" maxLength={11}
                   onChange={e => form.setFieldValue('bankIfsc', e.target.value.toUpperCase())}
                   style={{ textTransform: 'uppercase' }} />
               </Form.Item>
             </Col>
             <Col span={24}>
-              <Form.Item name="bankAccount" label="Account Number" style={{ marginBottom: 0 }}>
-                <Input placeholder="Account number" maxLength={30} />
+              <Form.Item name="bankAccount" label="Account Number" style={{ marginBottom: 0 }}
+                rules={[{ pattern: /^[0-9]{6,20}$/, message: 'Must be 6 to 20 digits' }]}>
+                <Input placeholder="Account number" maxLength={20} />
               </Form.Item>
             </Col>
           </Row>
           <button type="submit" style={{ display: 'none' }} />
         </Form>
-      </Modal>
-
-      {/* Import Modal */}
-      <Modal
-        title={<span style={{ fontWeight: 700 }}>Import Suppliers from Excel</span>}
-        open={importOpen}
-        onCancel={() => { setImportOpen(false); setImportResult(null); }}
-        footer={null}
-        width={520}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Before you start</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#64748b', lineHeight: 1.8 }}>
-              <li>Download the template, fill in your supplier data, then upload.</li>
-              <li>Columns marked <strong>*</strong> (Name, Phone) are required.</li>
-              <li>Phone must be 10–15 digits. Duplicate phones are skipped.</li>
-              <li>Row 2 in the template is a sample — delete it before uploading.</li>
-            </ul>
-            <Button
-              size="small" icon={<FileExcelOutlined />}
-              onClick={handleTemplateDownload}
-              style={{ marginTop: 10, fontSize: 12 }}
-            >
-              Download Template
-            </Button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            style={{ display: 'none' }}
-            onChange={e => {
-              const file = e.target.files?.[0];
-              if (file) handleImportFile(file);
-              e.target.value = '';
-            }}
-          />
-
-          <Button
-            type="primary" icon={<UploadOutlined />} size="large" block
-            loading={importing}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}
-          >
-            {importing ? 'Importing…' : 'Choose Excel File & Import'}
-          </Button>
-
-          {importResult && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Alert
-                type={importResult.skipped > 0 ? 'warning' : 'success'}
-                message={`${importResult.created} supplier(s) imported${importResult.skipped > 0 ? `, ${importResult.skipped} skipped` : ''}`}
-                showIcon
-              />
-              {importResult.errors?.length > 0 && (
-                <div style={{ background: '#fff5f5', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', maxHeight: 160, overflowY: 'auto' }}>
-                  {importResult.errors.map((e: string, i: number) => (
-                    <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: 3 }}>{e}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </Modal>
 
       {/* View Drawer */}

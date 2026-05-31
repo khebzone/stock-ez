@@ -15,6 +15,8 @@ public interface RoutePlaceRepository extends JpaRepository<RoutePlace, UUID> {
     List<RoutePlace> findByRouteIdAndActiveTrue(UUID routeId);
     Optional<RoutePlace> findByIdAndRouteId(UUID id, UUID routeId);
 
+    Optional<RoutePlace> findFirstByRouteIdAndNameIgnoreCaseAndActiveTrue(UUID routeId, String name);
+
     @Query("SELECT COALESCE(MAX(p.sortOrder), -1) FROM RoutePlace p WHERE p.route.id = :routeId")
     Integer findMaxSortOrderByRouteId(UUID routeId);
 }

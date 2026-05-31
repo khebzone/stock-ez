@@ -48,7 +48,10 @@ const CompanySettingsPage: React.FC = () => {
       await updateProfile(values).unwrap();
       message.success('Company profile updated');
     } catch (err: any) {
-      if (err?.errorFields) return;
+      if (err?.errorFields) {
+        message.warning('Please fill in all required fields before saving');
+        return;
+      }
       message.error(err?.data?.message || 'Failed to save');
     }
   };
@@ -71,30 +74,30 @@ const CompanySettingsPage: React.FC = () => {
       <Row gutter={[20, 0]}>
         <Col xs={24} lg={14}>
           <Card style={{ borderRadius: 12 }} styles={{ body: { padding: '24px' } }}>
-            <Form form={form} layout="vertical">
+            <Form form={form} layout="vertical" scrollToFirstError>
 
               <Section title="Business Identity">
                 <Row gutter={16}>
                   <Col span={24}>
-                    <Form.Item name="name" label="Company / Business Name *"
+                    <Form.Item name="name" label="Company / Business Name"
                       rules={[{ required: true, message: 'Required' }]}>
                       <Input size="large" placeholder="e.g. Sri Murugan Distributors" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
-                    <Form.Item name="ownerName" label="Owner / Proprietor Name *"
+                    <Form.Item name="ownerName" label="Owner / Proprietor Name"
                       rules={[{ required: true, message: 'Required' }]}>
                       <Input size="large" placeholder="e.g. K. Murugan" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
-                    <Form.Item name="phone" label="Phone *"
+                    <Form.Item name="phone" label="Phone"
                       rules={[{ required: true }, { pattern: /^[6-9]\d{9}$/, message: '10-digit mobile' }]}>
                       <Input size="large" placeholder="9876543210" maxLength={10} />
                     </Form.Item>
                   </Col>
                   <Col span={24}>
-                    <Form.Item name="email" label="Email *"
+                    <Form.Item name="email" label="Email"
                       rules={[{ required: true }, { type: 'email', message: 'Valid email required' }]}>
                       <Input size="large" placeholder="info@company.com" />
                     </Form.Item>
@@ -105,22 +108,26 @@ const CompanySettingsPage: React.FC = () => {
               <Divider style={{ margin: '8px 0 20px' }} />
 
               <Section title="Address">
-                <Form.Item name="address" label="Street Address">
+                <Form.Item name="address" label="Street Address"
+                  rules={[{ required: true, message: 'Required' }]}>
                   <Input.TextArea rows={2} placeholder="Door No, Street, Area" />
                 </Form.Item>
                 <Row gutter={16}>
                   <Col xs={24} sm={8}>
-                    <Form.Item name="city" label="City">
+                    <Form.Item name="city" label="City"
+                      rules={[{ required: true, message: 'Required' }]}>
                       <Input placeholder="e.g. Coimbatore" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={8}>
-                    <Form.Item name="state" label="State">
+                    <Form.Item name="state" label="State"
+                      rules={[{ required: true, message: 'Required' }]}>
                       <Input placeholder="e.g. Tamil Nadu" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={8}>
-                    <Form.Item name="pinCode" label="PIN Code">
+                    <Form.Item name="pinCode" label="PIN Code"
+                      rules={[{ required: true, message: 'Required' }, { pattern: /^\d{6}$/, message: '6-digit PIN' }]}>
                       <Input placeholder="641001" maxLength={6} />
                     </Form.Item>
                   </Col>
@@ -133,19 +140,20 @@ const CompanySettingsPage: React.FC = () => {
                 <Row gutter={16}>
                   <Col xs={24} sm={12}>
                     <Form.Item name="gstin" label="GSTIN"
-                      rules={[{ pattern: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, message: 'Invalid GSTIN format' }]}>
+                      rules={[{ required: true, message: 'Required' }, { pattern: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, message: 'Invalid GSTIN format' }]}>
                       <Input placeholder="22AAAAA0000A1Z5" maxLength={15} style={{ textTransform: 'uppercase' }}
                         onChange={e => form.setFieldValue('gstin', e.target.value.toUpperCase())} />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
-                    <Form.Item name="fssaiNumber" label="FSSAI License No.">
+                    <Form.Item name="fssaiNumber" label="FSSAI License No."
+                      rules={[{ required: true, message: 'Required' }]}>
                       <Input placeholder="10012345678901" maxLength={20} />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
                     <Form.Item name="panNumber" label="PAN Number"
-                      rules={[{ pattern: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, message: 'Invalid PAN format' }]}>
+                      rules={[{ required: true, message: 'Required' }, { pattern: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, message: 'Invalid PAN format' }]}>
                       <Input placeholder="ABCDE1234F" maxLength={10} style={{ textTransform: 'uppercase' }}
                         onChange={e => form.setFieldValue('panNumber', e.target.value.toUpperCase())} />
                     </Form.Item>
@@ -174,8 +182,8 @@ const CompanySettingsPage: React.FC = () => {
               </div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>Invoice Preview</div>
             </div>
-            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '16px', fontSize: 20, lineHeight: 2, color: '#374151' }}>
-              <div style={{ fontWeight: 700, fontSize: 24, color: '#0f172a', marginBottom: 4 }}>
+            <div style={{ background: '#f8fafc', borderRadius: 10, padding: '16px', fontSize: 13, lineHeight: 1.7, color: '#374151' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: 4 }}>
                 {wName || 'Your Company Name'}
               </div>
               {wOwner   && <div>Prop: {wOwner}</div>}

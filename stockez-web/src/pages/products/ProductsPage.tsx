@@ -510,7 +510,7 @@ const ProductsPage: React.FC = () => {
           </div>
         }
       >
-        <Form form={form} layout="vertical" requiredMark={false}>
+        <Form form={form} layout="vertical" scrollToFirstError>
 
           {/* Section 1 — Product Image */}
           <Card style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: '16px 20px' } }}>
@@ -554,7 +554,7 @@ const ProductsPage: React.FC = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="hsnCode" label="HSN Code">
+                <Form.Item name="hsnCode" label="HSN Code" rules={[{ required: true, message: 'HSN code is required' }]}>
                   <Input placeholder="e.g. 9103030" size="large" />
                 </Form.Item>
               </Col>
@@ -581,7 +581,7 @@ const ProductsPage: React.FC = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="subCategory" label="Sub Category">
+                <Form.Item name="subCategory" label="Sub Category" rules={[{ required: true, message: 'Required' }]}>
                   <Select
                     placeholder={selectedCategory ? 'Select sub-category' : 'Select category first'}
                     size="large" showSearch allowClear
@@ -602,9 +602,9 @@ const ProductsPage: React.FC = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="stockQuantity" label="Opening Stock">
+                <Form.Item name="stockQuantity" label="Opening Stock" initialValue={0}>
                   <InputNumber
-                    style={{ width: '100%' }} min={0} precision={0} placeholder="0"
+                    style={{ width: '100%' }} min={0} precision={0}
                     size="large" addonAfter="units"
                   />
                 </Form.Item>
@@ -699,8 +699,8 @@ const ProductsPage: React.FC = () => {
             {sectionLabel('Tax & Expiry')}
             <Row gutter={16}>
               <Col xs={24} sm={8}>
-                <Form.Item name="purchaseGstPercent" label="Purchase GST" tooltip="GST you pay when buying from supplier (input tax credit)">
-                  <Select placeholder="Select GST %" size="large" allowClear>
+                <Form.Item name="purchaseGstPercent" label="Purchase GST" tooltip="GST you pay when buying from supplier (input tax credit)" rules={[{ required: true, message: 'Required' }]}>
+                  <Select placeholder="Select GST %" size="large">
                     {taxRates.map((t: any) => (
                       <Option key={t.id} value={Number(t.value || t.name.match(/\d+/)?.[0] || 0)}>
                         {t.name}
@@ -747,7 +747,7 @@ const ProductsPage: React.FC = () => {
               <Col xs={24} sm={12}>
                 <Form.Item
                   name="expiryDate"
-                  label="Expiry Date *"
+                  label="Expiry Date"
                   rules={[
                     { required: true, message: 'Expiry date is required' },
                     ({ getFieldValue }) => ({

@@ -80,7 +80,7 @@ CREATE TABLE product_masters (
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 CREATE UNIQUE INDEX uq_master_type_name_per_tenant
-    ON product_masters (tenant_id, type, lower(name)) WHERE active = true;
+    ON product_masters (tenant_id, type, lower(name), lower(coalesce(parent_name, ''))) WHERE active = true;
 
 -- =========== PRODUCTS ===========
 CREATE TABLE products (

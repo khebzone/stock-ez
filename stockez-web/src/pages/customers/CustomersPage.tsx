@@ -395,6 +395,7 @@ const CustomersPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [viewMode, setViewMode] = useState<'table' | 'grouped'>('table');
   const [form] = Form.useForm();
+  const creditOn = Form.useWatch('creditAllowed', form);
   const [ownerImageUrl, setOwnerImageUrl] = useState('');
   const [shopImageUrl, setShopImageUrl] = useState('');
   const [lat, setLat] = useState<number | undefined>();
@@ -457,7 +458,7 @@ const CustomersPage: React.FC = () => {
     1: ['routeId', 'routePlaceId'],
     2: [],
     3: [],
-    4: ['creditDays', 'creditLimit'],
+    4: ['creditAllowed', 'creditDays', 'creditLimit'],
   };
 
   const handleNext = async () => {
@@ -473,28 +474,6 @@ const CustomersPage: React.FC = () => {
     try {
       await form.validateFields();
       const allValues = form.getFieldsValue(true);
-
-      if (!allValues.businessName?.trim()) {
-        setCurrentStep(0);
-        form.setFields([{ name: 'businessName', errors: ['Business name is required'] }]);
-        return;
-      }
-      if (!allValues.phone?.trim()) {
-        setCurrentStep(0);
-        form.setFields([{ name: 'phone', errors: ['Phone is required'] }]);
-        return;
-      }
-      if (!allValues.routeId) {
-        setCurrentStep(1);
-        form.setFields([{ name: 'routeId', errors: ['Please select a route'] }]);
-        return;
-      }
-      if (!allValues.routePlaceId) {
-        setCurrentStep(1);
-        form.setFields([{ name: 'routePlaceId', errors: ['Please select a stop'] }]);
-        return;
-      }
-
       const payload = { ...allValues, latitude: lat, longitude: lng, ownerImageUrl, shopImageUrl };
 
       if (editingCustomer) {
@@ -511,6 +490,7 @@ const CustomersPage: React.FC = () => {
         for (let s = 0; s < STEPS.length; s++) {
           if (stepFields[s].some((f) => errFields.includes(f))) { setCurrentStep(s); break; }
         }
+        message.error('Please fill in all required fields before submitting');
         return;
       }
       const msg = applyApiErrorToForm(err, form, 'phone');
@@ -543,7 +523,7 @@ const CustomersPage: React.FC = () => {
         </Row>
         <Row gutter={16}>
           <Col xs={24} sm={12}>
-            <Form.Item name="phone" label="Mobile Number" rules={[{ required: true }, { len: 10, message: '10 digits required' }]}>
+            <Form.Item name="phone" label="Mobile Number" rules={[{ required: true, message: 'Mobile number is required' }, { len: 10, message: '10 digits required' }]}>
               <Input prefix={<PhoneOutlined style={{ color: '#94a3b8' }} />} placeholder="9876543210" maxLength={10} size="large" />
             </Form.Item>
           </Col>
@@ -625,21 +605,23 @@ const CustomersPage: React.FC = () => {
     ),
     4: (
       <div>
-        <div style={{ background: '#f9fafb', borderRadius: 8, padding: '12px 14px', marginBottom: 20, border: '1px solid #e5e7eb', fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
-          Credit settings define if the shop can take goods on credit. Leave credit off for cash-on-delivery customers.
+        <div style={{ background: '#f9fafb', borderRadius: 8, padding: '12px 14px', marginBottom: 20, border: '1px solid #e5e7eb', fontSize: 12, color: '#374151', lineHeight: 1.8 }}>
+          <div><strong>Credit Allowed</strong> — Toggle ON if the shop can take goods and pay later. Leave OFF for cash-on-delivery.</div>
+          <div><strong>Credit Days</strong> — Number of days allowed before payment is due (e.g. 30 days). After this period, the amount shows as overdue in the aging report.</div>
+          <div><strong>Credit Limit</strong> — Maximum unpaid amount allowed (e.g. ₹50,000). Once reached, no more goods can be given on credit until they pay.</div>
         </div>
         <Form.Item name="creditAllowed" label="Allow Credit" valuePropName="checked">
           <Switch checkedChildren="Credit On" unCheckedChildren="Cash Only" />
         </Form.Item>
         <Row gutter={16}>
           <Col xs={24} sm={12}>
-            <Form.Item name="creditDays" label="Credit Days">
-              <InputNumber style={{ width: '100%' }} min={0} max={365} placeholder="e.g. 30" size="large" addonAfter="days" />
+            <Form.Item name="creditDays" label="Credit Days" rules={[{ required: creditOn, message: 'Credit days is required' }]}>
+              <InputNumber style={{ width: '100%' }} min={0} max={365} placeholder="e.g. 30" size="large" addonAfter="days" disabled={!creditOn} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
-            <Form.Item name="creditLimit" label="Credit Limit">
-              <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 50000" size="large" addonBefore="₹" />
+            <Form.Item name="creditLimit" label="Credit Limit" rules={[{ required: creditOn, message: 'Credit limit is required' }]}>
+              <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 50000" size="large" addonBefore="₹" disabled={!creditOn} />
             </Form.Item>
           </Col>
         </Row>
@@ -917,8 +899,12 @@ const CustomersPage: React.FC = () => {
           />
         </div>
         <div style={{ padding: '24px' }}>
-          <Form form={form} layout="vertical" requiredMark={false}>
-            {stepContent[currentStep]}
+          <Form form={form} layout="vertical">
+            {([0, 1, 2, 3, 4] as const).map(step => (
+              <div key={step} style={{ display: step === currentStep ? 'block' : 'none' }}>
+                {stepContent[step]}
+              </div>
+            ))}
           </Form>
         </div>
       </Drawer>

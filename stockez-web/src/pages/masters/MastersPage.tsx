@@ -29,6 +29,8 @@ const useIsMobile = () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const hasAlphanumeric = (name: string) => /[a-zA-Z0-9]/.test(name);
+
 // Auto-detect payment mode from display name
 const detectMode = (name: string): string => {
   const n = name.toLowerCase();
@@ -71,6 +73,9 @@ const FlatMasterTab: React.FC<{ masterType: typeof SIMPLE_TYPES[0] }> = ({ maste
     const name = newName.trim();
     if (!name) { message.warning(`Enter a ${singular.toLowerCase()} name`); return; }
     if (name.length < 2) { message.warning(`${singular} name must be at least 2 characters`); return; }
+    if (['BRAND', 'CATEGORY', 'SUB_CATEGORY', 'UNIT'].includes(masterType.key) && !hasAlphanumeric(name)) {
+      message.error(`${singular} name must contain at least one letter or number — special characters only are not allowed`); return;
+    }
     const exists = items.some((i: any) => i.name.toLowerCase() === name.toLowerCase());
     if (exists) { message.error(`"${name}" already exists in ${masterType.label.toLowerCase()}`); return; }
     try {
@@ -262,6 +267,7 @@ const CategoryRow: React.FC<{
     const name = subName.trim();
     if (!name) { message.warning('Please enter a sub-category name'); return; }
     if (name.length < 2) { message.warning('Sub-category name must be at least 2 characters'); return; }
+    if (!hasAlphanumeric(name)) { message.error('Sub-category name must contain at least one letter or number — special characters only are not allowed'); return; }
     const exists = subCategories.some((s: any) => s.name.toLowerCase() === name.toLowerCase());
     if (exists) { message.error(`"${name}" already exists under ${category.name}`); return; }
     try {
@@ -409,6 +415,7 @@ const CategoriesTab: React.FC = () => {
     const name = newCatName.trim();
     if (!name) { message.warning('Please enter a category name'); return; }
     if (name.length < 2) { message.warning('Category name must be at least 2 characters'); return; }
+    if (!hasAlphanumeric(name)) { message.error('Category name must contain at least one letter or number — special characters only are not allowed'); return; }
     const exists = categories.some((c: any) => c.name.toLowerCase() === name.toLowerCase());
     if (exists) { message.error(`Category "${name}" already exists`); return; }
     try {

@@ -24,7 +24,17 @@ public class ProductMasterService {
     private final TenantRepository tenantRepository;
 
     public ProductMasterDtos.MasterResponse create(ProductMasterDtos.CreateMasterRequest req, UUID tenantId) {
-        if (masterRepository.existsByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(tenantId, req.getType(), req.getName())) {
+        String upperType = req.getType().toUpperCase();
+        if (List.of("BRAND", "CATEGORY", "SUB_CATEGORY", "UNIT").contains(upperType)
+                && !req.getName().matches(".*[a-zA-Z0-9].*")) {
+            throw new BusinessException(
+                "Name must contain at least one letter or number — special characters only are not allowed",
+                "INVALID_NAME");
+        }
+        boolean duplicate = req.getParentName() != null
+                ? masterRepository.existsByTenantIdAndTypeAndNameIgnoreCaseAndParentNameIgnoreCaseAndActiveTrue(tenantId, req.getType(), req.getName(), req.getParentName())
+                : masterRepository.existsByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(tenantId, req.getType(), req.getName());
+        if (duplicate) {
             throw new BusinessException(req.getType().toLowerCase() + " '" + req.getName() + "' already exists.", "DUPLICATE_MASTER");
         }
         Tenant tenant = tenantRepository.findById(tenantId)

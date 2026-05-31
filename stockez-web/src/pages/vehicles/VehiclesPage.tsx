@@ -311,17 +311,25 @@ const VehiclesPage: React.FC = () => {
                 },
               },
             ]}
-            normalize={(v) => v ? v.toUpperCase().replace(/[\s\-]/g, '') : v}
           >
-            <Input placeholder="e.g. TN45AB1234" maxLength={12} />
+            <Input
+              placeholder="e.g. TN45AB1234"
+              maxLength={12}
+              style={{ textTransform: 'uppercase', fontFamily: 'monospace' }}
+              onChange={e => form.setFieldValue('vehicleNumber', e.target.value.toUpperCase().replace(/[\s\-]/g, ''))}
+            />
           </Form.Item>
           <Form.Item name="vehicleType" label="Vehicle Type *" rules={[{ required: true, message: 'Required' }]}>
             <Select placeholder="Select type" onChange={(v) => setSelectedType(v)}>
               {VEHICLE_TYPES.map(t => <Select.Option key={t} value={t}>{t}</Select.Option>)}
             </Select>
           </Form.Item>
-          <Form.Item name="model" label="Model / Description">
-            <Input placeholder="e.g. Tata Ace, Hero Splendor" />
+          <Form.Item
+            name="model"
+            label="Model / Description"
+            rules={[{ pattern: /^[A-Za-z0-9\s.\-]+$/, message: 'Only letters, numbers, spaces, . and - are allowed' }]}
+          >
+            <Input placeholder="e.g. Tata Ace, Hero Splendor" maxLength={100} />
           </Form.Item>
 
           {sectionLabel('TN Compliance')}
@@ -330,7 +338,14 @@ const VehiclesPage: React.FC = () => {
               <DatePicker format={DATE_FMT} style={{ width: '100%' }} placeholder="Select expiry date" />
             </Form.Item>
           )}
-          <Form.Item name="insuranceNumber" label="Insurance Number *" rules={[{ required: true, message: 'Required' }]}>
+          <Form.Item
+            name="insuranceNumber"
+            label="Insurance Number *"
+            rules={[
+              { required: true, message: 'Required' },
+              { pattern: /^[A-Za-z0-9\/\-]+$/, message: 'Only letters, numbers, / and - are allowed' },
+            ]}
+          >
             <Input placeholder="e.g. INS/2024/00123" maxLength={50} />
           </Form.Item>
           <Form.Item name="insuranceExpiryDate" label="Insurance Expiry Date *" rules={[{ required: true, message: 'Required' }]}>

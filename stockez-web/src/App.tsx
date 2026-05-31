@@ -50,10 +50,29 @@ import IncentiveSlabPage from './pages/incentives/IncentiveSlabPage';
 import IncentiveCreditsPage from './pages/incentives/IncentiveCreditsPage';
 import SalesIncentivePage from './pages/sales/SalesIncentivePage';
 
+// ── Token validity check (expiry decoded from JWT payload) ──
+const isTokenValid = (token: string | null): boolean => {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+};
+
+const clearAuth = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('tenantId');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('user');
+};
+
 // ── Protected Route for admin/regular users ──
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
   const role = JSON.parse(localStorage.getItem('user') || '{}').role;
   if (role === 'SALES') return <Navigate to="/sales/dashboard" replace />;
   if (role === 'DELIVERY') return <Navigate to="/delivery/dashboard" replace />;
@@ -64,21 +83,21 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 // ── Protected Route for SALES role ──
 const SalesProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
   return <SalesLayout>{children}</SalesLayout>;
 };
 
 // ── Protected Route for DELIVERY role ──
 const DeliveryProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
   return <DeliveryLayout>{children}</DeliveryLayout>;
 };
 
 // ── Protected Route for SUPER_ADMIN role ──
 const SuperAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
   const role = JSON.parse(localStorage.getItem('user') || '{}').role;
   if (role !== 'SUPER_ADMIN') return <Navigate to="/dashboard" replace />;
   return <SuperAdminLayout>{children}</SuperAdminLayout>;
@@ -87,7 +106,7 @@ const SuperAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 // ── Root redirect: check role after login ──
 const RootRedirect: React.FC = () => {
   const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const role = user.role;
