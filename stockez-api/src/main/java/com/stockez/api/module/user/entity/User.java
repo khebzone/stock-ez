@@ -1,5 +1,6 @@
 package com.stockez.api.module.user.entity;
 
+import com.stockez.api.module.role.entity.CustomRole;
 import com.stockez.api.module.tenant.entity.Tenant;
 import jakarta.persistence.*;
 import lombok.*;
@@ -50,6 +51,10 @@ public class User {
     @Column(nullable = false)
     private UserRole role;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "custom_role_id")
+    private CustomRole customRole;
+
     @Column(length = 500)
     private String profileImageUrl;
 
@@ -73,12 +78,14 @@ public class User {
     private Instant updatedAt;
 
     public enum UserRole {
-        SUPER_ADMIN,   // Platform owner (you)
-        ADMIN,         // Distributor owner
-        SALES,         // Sales person (mobile)
-        INVOICE,       // Invoice/billing person (web)
-        WAREHOUSE,     // Warehouse picker (mobile/tablet)
-        DELIVERY,      // Delivery person (mobile)
-        ACCOUNTANT     // Accountant (web)
+        SUPER_ADMIN,
+        ADMIN,
+        STAFF,
+        // Legacy roles kept for backward compatibility during migration
+        SALES,
+        INVOICE,
+        WAREHOUSE,
+        DELIVERY,
+        ACCOUNTANT
     }
 }

@@ -34,7 +34,7 @@ public class ProductMasterController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<List<ProductMasterDtos.MasterResponse>>> getByType(
             @RequestParam String type,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

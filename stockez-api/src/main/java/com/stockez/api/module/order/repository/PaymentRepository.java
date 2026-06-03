@@ -44,4 +44,7 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     @Query("SELECT p FROM Payment p WHERE p.tenant.id = :tenantId AND p.collectionDate BETWEEN :from AND :to ORDER BY p.collectionDate ASC")
     List<Payment> findByTenantAndDateRange(@Param("tenantId") UUID tenantId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.tenant.id = :tenantId AND p.collectedBy.id = :salesPersonId AND p.collectionDate BETWEEN :from AND :to")
+    java.math.BigDecimal sumCollectionsByPerson(@Param("tenantId") UUID tenantId, @Param("salesPersonId") UUID salesPersonId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 }

@@ -28,8 +28,8 @@ public class AccountingController {
     private final ReportService reportService;
 
     @GetMapping("/sales")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get sales report [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Get sales report")
     public ResponseEntity<ApiResponse<AccountingDtos.SalesReportResponse>> salesReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -38,8 +38,8 @@ public class AccountingController {
     }
 
     @GetMapping("/collections")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get collection report with daily breakdown [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Get collection report with daily breakdown")
     public ResponseEntity<ApiResponse<ReportDtos.CollectionReportResponse>> collectionReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

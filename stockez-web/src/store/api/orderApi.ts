@@ -77,6 +77,10 @@ export const orderApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/orders/route-mark-prepared', method: 'POST', body }),
       invalidatesTags: ['Order'],
     }),
+    counterSale: builder.mutation<any, any>({
+      query: (body) => ({ url: '/orders/counter-sale', method: 'POST', body }),
+      invalidatesTags: ['Order'],
+    }),
   }),
 });
 
@@ -98,4 +102,5 @@ export const {
   useGetRoutePicklistQuery,
   useRouteStartPreparingMutation,
   useRouteMarkPreparedMutation,
+  useCounterSaleMutation,
 } = orderApi;

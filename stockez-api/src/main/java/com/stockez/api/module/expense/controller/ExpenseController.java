@@ -27,7 +27,7 @@ public class ExpenseController {
     private final ExpenseService expenseService;
 
     @GetMapping("/categories")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_VIEW')")
     public ResponseEntity<ApiResponse<List<ExpenseDtos.CategoryResponse>>> getCategories(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(expenseService.getCategories(tenantId)));
@@ -52,7 +52,7 @@ public class ExpenseController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_VIEW')")
     public ResponseEntity<ApiResponse<List<ExpenseDtos.ExpenseResponse>>> getExpenses(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -64,14 +64,14 @@ public class ExpenseController {
     }
 
     @GetMapping("/summary")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_VIEW')")
     public ResponseEntity<ApiResponse<ExpenseDtos.ExpenseSummary>> getSummary(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(expenseService.getSummary(tenantId)));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_CREATE')")
     public ResponseEntity<ApiResponse<ExpenseDtos.ExpenseResponse>> create(
             @Valid @RequestBody ExpenseDtos.CreateExpenseRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -81,7 +81,7 @@ public class ExpenseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_CREATE')")
     public ResponseEntity<ApiResponse<ExpenseDtos.ExpenseResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody ExpenseDtos.UpdateExpenseRequest request,
@@ -90,7 +90,7 @@ public class ExpenseController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_DELETE')")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

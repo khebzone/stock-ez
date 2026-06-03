@@ -45,7 +45,7 @@ const BrandTargetPage: React.FC = () => {
 
   const targets: any[] = targetsData?.data?.targets || [];
   const brands: string[] = brandsData?.data || [];
-  const users: any[] = (usersData?.data?.content || usersData?.data || []).filter((u: any) => u.role === 'SALES' && u.active !== false);
+  const users: any[] = (usersData?.data?.content || usersData?.data || []).filter((u: any) => u.roleName !== 'ADMIN' && u.active !== false);
 
   const summary = targetsData?.data;
 
@@ -170,7 +170,7 @@ const BrandTargetPage: React.FC = () => {
             <Select allowClear placeholder="All salespersons" style={{ width: 190 }}
               value={filterPerson} onChange={setFilterPerson}
               showSearch optionFilterProp="label"
-              options={users.map((u: any) => ({ value: u.id, label: u.fullName }))} />
+              options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName})` : u.fullName }))} />
             <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Set Target</Button>
           </Space>
         }
@@ -218,7 +218,7 @@ const BrandTargetPage: React.FC = () => {
           <Form.Item name="salesPersonId" label="Sales Person *" rules={[{ required: true, message: 'Select a sales person' }]}>
             <Select placeholder="Select sales person" showSearch optionFilterProp="label"
               disabled={!!editRow}
-              options={users.map((u: any) => ({ value: u.id, label: `${u.fullName} — ${u.phone}` }))} />
+              options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName}) — ${u.phone}` : `${u.fullName} — ${u.phone}` }))} />
           </Form.Item>
           <Form.Item name="brand" label="Brand *" rules={[{ required: true, message: 'Select a brand' }]}>
             <Select placeholder="Select brand" showSearch disabled={!!editRow}

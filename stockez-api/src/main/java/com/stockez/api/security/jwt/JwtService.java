@@ -1,5 +1,6 @@
 package com.stockez.api.security.jwt;
 
+import com.stockez.api.module.role.entity.Permission;
 import com.stockez.api.module.user.entity.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,6 +44,19 @@ public class JwtService {
         claims.put("tenantId", user.getTenant().getId().toString());
         claims.put("role", user.getRole().name());
         claims.put("type", "ACCESS");
+
+        List<String> permissions;
+        if (user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN) {
+            permissions = List.of("ALL");
+        } else if (user.getCustomRole() != null) {
+            permissions = user.getCustomRole().getPermissions().stream()
+                    .map(Permission::name)
+                    .sorted()
+                    .toList();
+        } else {
+            permissions = List.of();
+        }
+        claims.put("permissions", permissions);
 
         return Jwts.builder()
                 .claims(claims)
@@ -91,6 +106,15 @@ public class JwtService {
 
     public String extractRole(String token) {
         return (String) extractAllClaims(token).get("role");
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> extractPermissions(String token) {
+        Object perms = extractAllClaims(token).get("permissions");
+        if (perms instanceof List<?> list) {
+            return (List<String>) list;
+        }
+        return List.of();
     }
 
     public boolean isTokenValid(String token) {

@@ -39,6 +39,8 @@ public class AuthDtos {
         private String fullName;
         private String phone;
         private String role;
+        private String roleName;
+        private java.util.List<String> permissions;
         private String tenantId;
         private String tenantName;
         private String profileImageUrl;

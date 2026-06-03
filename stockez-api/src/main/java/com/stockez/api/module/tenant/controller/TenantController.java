@@ -100,6 +100,23 @@ public class TenantController {
         return ResponseEntity.ok(ApiResponse.success(tenantService.updateProfile(tenantId, request), "Profile updated"));
     }
 
+    @GetMapping("/settings")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get workflow settings [ADMIN]")
+    public ResponseEntity<ApiResponse<TenantDtos.WorkflowSettingsResponse>> getSettings(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(tenantService.getSettings(tenantId)));
+    }
+
+    @PutMapping("/settings")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update workflow settings [ADMIN]")
+    public ResponseEntity<ApiResponse<TenantDtos.WorkflowSettingsResponse>> updateSettings(
+            @RequestBody TenantDtos.WorkflowSettingsRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(tenantService.updateSettings(tenantId, request), "Settings updated"));
+    }
+
     private <T> PagedResponse<T> toPagedResponse(Page<T> page) {
         return PagedResponse.<T>builder()
                 .content(page.getContent())

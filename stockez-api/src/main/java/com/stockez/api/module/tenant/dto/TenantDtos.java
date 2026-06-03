@@ -1,9 +1,11 @@
 package com.stockez.api.module.tenant.dto;
 
 import com.stockez.api.module.tenant.entity.Tenant;
+import com.stockez.api.module.tenant.entity.TenantSettings;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -108,5 +110,27 @@ public class TenantDtos {
         @Size(max = 20)            private String fssaiNumber;
         @Size(max = 10)            private String panNumber;
         @Size(max = 500)           private String logoUrl;
+    }
+
+    @Data
+    public static class WorkflowSettingsRequest {
+        private boolean invoiceApprovalRequired;
+        private boolean picklistEnabled;
+        private boolean goodsReturnApprovalRequired;
+        private TenantSettings.CreditLimitEnforcement creditLimitEnforcement;
+        private BigDecimal maxDiscountPercent;
+        private boolean lockBillingAfterCheckout;
+        private boolean separateDeliveryAllocation;
+    }
+
+    @Data
+    public static class WorkflowSettingsResponse {
+        private boolean invoiceApprovalRequired;
+        private boolean picklistEnabled;
+        private boolean goodsReturnApprovalRequired;
+        private TenantSettings.CreditLimitEnforcement creditLimitEnforcement;
+        private BigDecimal maxDiscountPercent;
+        private boolean lockBillingAfterCheckout;
+        private boolean separateDeliveryAllocation;
     }
 }

@@ -33,8 +33,8 @@ public class RouteController {
     private final RouteExcelService routeExcelService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create a new route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_CREATE')")
+    @Operation(summary = "Create a new route")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> create(
             @Valid @RequestBody RouteDtos.CreateRouteRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -43,7 +43,7 @@ public class RouteController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
     @Operation(summary = "List all routes")
     public ResponseEntity<ApiResponse<List<RouteDtos.RouteResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -51,7 +51,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
     @Operation(summary = "Get route by ID")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -59,8 +59,8 @@ public class RouteController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Rename a route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Rename a route")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody RouteDtos.UpdateRouteRequest request,
@@ -69,8 +69,8 @@ public class RouteController {
     }
 
     @PutMapping("/{id}/places/{placeId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Rename a stop on a route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Rename a stop on a route")
     public ResponseEntity<ApiResponse<RouteDtos.RoutePlaceResponse>> updatePlace(
             @PathVariable UUID id,
             @PathVariable UUID placeId,
@@ -90,8 +90,8 @@ public class RouteController {
     }
 
     @PostMapping("/{id}/places")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Add a place to route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Add a place to route")
     public ResponseEntity<ApiResponse<RouteDtos.RoutePlaceResponse>> addPlace(
             @PathVariable UUID id,
             @Valid @RequestBody RouteDtos.AddRoutePlaceRequest request,
@@ -101,8 +101,8 @@ public class RouteController {
     }
 
     @PutMapping("/{id}/places/reorder")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Reorder places within a route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Reorder places within a route")
     public ResponseEntity<ApiResponse<List<RouteDtos.RoutePlaceResponse>>> reorderPlaces(
             @PathVariable UUID id,
             @Valid @RequestBody RouteDtos.ReorderPlacesRequest request,
@@ -121,7 +121,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/plan")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
     @Operation(summary = "Get beat plan for route — places and customers in visit order")
     public ResponseEntity<ApiResponse<RouteDtos.RoutePlanResponse>> getPlan(
             @PathVariable UUID id,
@@ -130,7 +130,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/export")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_VIEW')")
     @Operation(summary = "Export route customers to Excel, ordered by stop")
     public ResponseEntity<byte[]> exportRoute(
             @PathVariable UUID id,
@@ -145,7 +145,7 @@ public class RouteController {
     }
 
     @GetMapping("/export/all")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_VIEW')")
     @Operation(summary = "Export all routes customers to Excel — one sheet per route")
     public ResponseEntity<byte[]> exportAllRoutes(
             @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
@@ -159,8 +159,8 @@ public class RouteController {
     }
 
     @GetMapping("/my-route")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Get assigned route for current sales person [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_VIEW')")
+    @Operation(summary = "Get assigned route for current sales person")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> myRoute(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {

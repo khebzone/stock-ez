@@ -31,8 +31,8 @@ public class GoodsReturnController {
     private final GoodsReturnService goodsReturnService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Create goods return or damage entry — adjusts stock [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('RETURNS_CREATE')")
+    @Operation(summary = "Create goods return or damage entry — adjusts stock")
     public ResponseEntity<ApiResponse<GoodsReturnDtos.GoodsReturnResponse>> create(
             @Valid @RequestBody GoodsReturnDtos.CreateGoodsReturnRequest request,
             @AuthenticationPrincipal UserDetails userDetails,
@@ -45,8 +45,8 @@ public class GoodsReturnController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE','ACCOUNTANT')")
-    @Operation(summary = "List goods returns [ADMIN/WAREHOUSE/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_VIEW','RETURNS_APPROVE')")
+    @Operation(summary = "List goods returns")
     public ResponseEntity<ApiResponse<PagedResponse<GoodsReturnDtos.GoodsReturnResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
@@ -57,8 +57,8 @@ public class GoodsReturnController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE','ACCOUNTANT')")
-    @Operation(summary = "Get goods return detail [ADMIN/WAREHOUSE/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_VIEW','RETURNS_APPROVE')")
+    @Operation(summary = "Get goods return detail")
     public ResponseEntity<ApiResponse<GoodsReturnDtos.GoodsReturnResponse>> getById(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

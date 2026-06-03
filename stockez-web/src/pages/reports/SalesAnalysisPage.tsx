@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DatePicker, Select, Skeleton, Button } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
-import { exportToCSV } from '../../components/TableToolbar';
+import { FileExcelOutlined } from '@ant-design/icons';
+import { exportToXLSX } from '../../components/TableToolbar';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line,
@@ -78,9 +78,9 @@ const SalesAnalysisPage: React.FC = () => {
             ]}
           />
           <Button
-            icon={<DownloadOutlined />}
+            icon={<FileExcelOutlined />}
             disabled={groups.length === 0}
-            onClick={() => exportToCSV(
+            onClick={() => exportToXLSX(
               groups.map((g: any) => ({
                 name: g.name,
                 orders: g.orderCount || g.qtySold || 0,
@@ -97,7 +97,7 @@ const SalesAnalysisPage: React.FC = () => {
             )}
             style={{ borderRadius: 8 }}
           >
-            Export CSV
+            Export Excel
           </Button>
         </div>
       </div>

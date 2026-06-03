@@ -24,6 +24,20 @@ CREATE TABLE tenants (
     updated_at     TIMESTAMPTZ
 );
 
+-- =========== TENANT SETTINGS ===========
+CREATE TABLE tenant_settings (
+    id                              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id                       UUID NOT NULL UNIQUE REFERENCES tenants(id),
+    invoice_approval_required       BOOLEAN NOT NULL DEFAULT true,
+    picklist_enabled                BOOLEAN NOT NULL DEFAULT true,
+    goods_return_approval_required  BOOLEAN NOT NULL DEFAULT false,
+    credit_limit_enforcement        VARCHAR(20) NOT NULL DEFAULT 'HARD_BLOCK',
+    max_discount_percent            DECIMAL(5,2),
+    lock_billing_after_checkout     BOOLEAN NOT NULL DEFAULT false,
+    separate_delivery_allocation    BOOLEAN NOT NULL DEFAULT false,
+    updated_at                      TIMESTAMPTZ
+);
+
 -- =========== SUPPLIERS ===========
 CREATE TABLE suppliers (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -41,6 +55,7 @@ CREATE TABLE suppliers (
     bank_name        VARCHAR(100),
     bank_account     VARCHAR(30),
     bank_ifsc        VARCHAR(15),
+    opening_balance  DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     active           BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ
@@ -56,6 +71,7 @@ CREATE TABLE users (
     email               VARCHAR(100),
     password_hash       VARCHAR(255) NOT NULL,
     role                VARCHAR(20)  NOT NULL,
+    custom_role_id      UUID,
     profile_image_url   VARCHAR(500),
     active              BOOLEAN NOT NULL DEFAULT TRUE,
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
@@ -618,3 +634,74 @@ CREATE TABLE incentive_credits (
 CREATE INDEX idx_incentive_credit_tenant ON incentive_credits(tenant_id);
 CREATE INDEX idx_incentive_credit_person ON incentive_credits(tenant_id, sales_person_id);
 CREATE INDEX idx_incentive_credit_period ON incentive_credits(tenant_id, target_month, target_year);
+
+-- =========== COLLECTION TARGETS ===========
+CREATE TABLE collection_targets (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        UUID NOT NULL REFERENCES tenants(id),
+    sales_person_id  UUID NOT NULL REFERENCES users(id),
+    target_month     INT NOT NULL,
+    target_year      INT NOT NULL,
+    target_value     DECIMAL(14,2) NOT NULL DEFAULT 0,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ,
+    UNIQUE(tenant_id, sales_person_id, target_month, target_year)
+);
+CREATE INDEX idx_collection_target_tenant ON collection_targets(tenant_id);
+CREATE INDEX idx_collection_target_person ON collection_targets(tenant_id, sales_person_id);
+
+-- =========== COLLECTION INCENTIVE SLABS ===========
+CREATE TABLE collection_incentive_slabs (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        UUID NOT NULL REFERENCES tenants(id),
+    from_pct         INT NOT NULL,
+    to_pct           INT,
+    incentive_amount DECIMAL(10,2) NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_collection_slab_tenant ON collection_incentive_slabs(tenant_id);
+
+-- =========== COLLECTION INCENTIVE CREDITS ===========
+CREATE TABLE collection_incentive_credits (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        UUID NOT NULL REFERENCES tenants(id),
+    sales_person_id  UUID NOT NULL REFERENCES users(id),
+    target_month     INT NOT NULL,
+    target_year      INT NOT NULL,
+    target_value     DECIMAL(14,2) NOT NULL,
+    achieved_value   DECIMAL(14,2) NOT NULL,
+    achievement_pct  DECIMAL(6,2) NOT NULL,
+    incentive_amount DECIMAL(10,2) NOT NULL,
+    status           VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    credited_at      TIMESTAMPTZ,
+    notes            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ,
+    UNIQUE(tenant_id, sales_person_id, target_month, target_year)
+);
+CREATE INDEX idx_collection_credit_tenant ON collection_incentive_credits(tenant_id);
+CREATE INDEX idx_collection_credit_person ON collection_incentive_credits(tenant_id, sales_person_id);
+CREATE INDEX idx_collection_credit_period ON collection_incentive_credits(tenant_id, target_month, target_year);
+
+-- =========== CUSTOM ROLES ===========
+CREATE TABLE custom_roles (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    name        VARCHAR(100) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ,
+    UNIQUE(tenant_id, name)
+);
+
+CREATE TABLE role_permissions (
+    role_id    UUID NOT NULL REFERENCES custom_roles(id) ON DELETE CASCADE,
+    permission VARCHAR(50) NOT NULL,
+    PRIMARY KEY (role_id, permission)
+);
+
+ALTER TABLE users ADD CONSTRAINT fk_user_custom_role
+    FOREIGN KEY (custom_role_id) REFERENCES custom_roles(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_custom_roles_tenant     ON custom_roles(tenant_id);
+CREATE INDEX idx_role_permissions_role   ON role_permissions(role_id);
+CREATE INDEX idx_users_custom_role       ON users(custom_role_id);

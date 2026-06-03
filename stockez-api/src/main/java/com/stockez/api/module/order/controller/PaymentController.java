@@ -27,8 +27,8 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY','ADMIN')")
-    @Operation(summary = "Collect payment from customer [SALES/DELIVERY/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_CREATE','DELIVERY_UPDATE')")
+    @Operation(summary = "Collect payment from customer")
     public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> collect(
             @Valid @RequestBody OrderDtos.CreatePaymentRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -38,8 +38,8 @@ public class PaymentController {
     }
 
     @GetMapping("/daily")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get daily collection summary [ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "Get daily collection summary")
     public ResponseEntity<ApiResponse<List<OrderDtos.DailySummaryResponse>>> daily(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) LocalDate date) {
@@ -48,8 +48,8 @@ public class PaymentController {
     }
 
     @GetMapping("/uncleared/{personId}")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get uncleared payments for a person [ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "Get uncleared payments for a person")
     public ResponseEntity<ApiResponse<List<OrderDtos.PaymentResponse>>> uncleared(
             @PathVariable UUID personId,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -57,8 +57,8 @@ public class PaymentController {
     }
 
     @PostMapping("/clear")
-    @PreAuthorize("hasRole('ACCOUNTANT')")
-    @Operation(summary = "Clear/verify payments [ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Clear/verify payments")
     public ResponseEntity<ApiResponse<Void>> clear(
             @Valid @RequestBody OrderDtos.ClearPaymentsRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -68,7 +68,7 @@ public class PaymentController {
     }
 
     @GetMapping("/order/{orderId}")
-    @PreAuthorize("hasAnyRole('ADMIN','INVOICE','ACCOUNTANT')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('INVOICE_VIEW','DAY_CLOSURE_VIEW')")
     @Operation(summary = "Get payments for an order")
     public ResponseEntity<ApiResponse<List<OrderDtos.PaymentResponse>>> byOrder(
             @PathVariable UUID orderId,
@@ -77,8 +77,8 @@ public class PaymentController {
     }
 
     @GetMapping("/my-day")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY')")
-    @Operation(summary = "Get my today's collection summary [SALES/DELIVERY]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','PAYMENTS_CREATE','DELIVERY_UPDATE')")
+    @Operation(summary = "Get my today's collection summary")
     public ResponseEntity<ApiResponse<OrderDtos.MyDaySummaryResponse>> myDay(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
@@ -86,8 +86,8 @@ public class PaymentController {
     }
 
     @PostMapping("/submit-day")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY')")
-    @Operation(summary = "Submit today's collections to accountant [SALES/DELIVERY]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_CREATE','DELIVERY_UPDATE')")
+    @Operation(summary = "Submit today's collections")
     public ResponseEntity<ApiResponse<OrderDtos.MyDaySummaryResponse>> submitDay(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
@@ -96,15 +96,15 @@ public class PaymentController {
     }
 
     @GetMapping("/pending-verification")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get submitted-but-uncleared collections grouped by person [ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "Get submitted-but-uncleared collections grouped by person")
     public ResponseEntity<ApiResponse<List<OrderDtos.DailySummaryResponse>>> pendingVerification(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(paymentService.getPendingVerifications(tenantId)));
     }
 
     @GetMapping("/customer-outstanding")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','DELIVERY_UPDATE','CUSTOMERS_VIEW')")
     @Operation(summary = "Get all customers with outstanding balances")
     public ResponseEntity<ApiResponse<List<OrderDtos.CustomerOutstandingSummary>>> customerOutstanding(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -113,7 +113,7 @@ public class PaymentController {
     }
 
     @GetMapping("/customer/{customerId}/orders")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','DELIVERY_UPDATE','CUSTOMERS_VIEW')")
     @Operation(summary = "Get unpaid orders for a customer")
     public ResponseEntity<ApiResponse<List<OrderDtos.OrderSummary>>> customerOrders(
             @PathVariable UUID customerId,
@@ -122,7 +122,7 @@ public class PaymentController {
     }
 
     @GetMapping("/customer/{customerId}/history")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','CUSTOMERS_VIEW')")
     @Operation(summary = "Get payment history for a customer")
     public ResponseEntity<ApiResponse<List<OrderDtos.PaymentResponse>>> customerHistory(
             @PathVariable UUID customerId,

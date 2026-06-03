@@ -27,14 +27,14 @@ public class SupplierPaymentController {
     private final SupplierPaymentService service;
 
     @GetMapping("/summaries")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT','WAREHOUSE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_VIEW')")
     public ResponseEntity<ApiResponse<List<SupplierPaymentDtos.SupplierSummary>>> getSummaries(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(service.getSupplierSummaries(tenantId)));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT','WAREHOUSE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_VIEW')")
     public ResponseEntity<ApiResponse<List<SupplierPaymentDtos.SupplierPaymentResponse>>> getPayments(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) String supplierName) {
@@ -42,7 +42,7 @@ public class SupplierPaymentController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT','WAREHOUSE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_CREATE')")
     public ResponseEntity<ApiResponse<SupplierPaymentDtos.SupplierPaymentResponse>> createPayment(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @AuthenticationPrincipal UserDetails userDetails,
@@ -53,7 +53,7 @@ public class SupplierPaymentController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_DELETE')")
     public ResponseEntity<ApiResponse<Void>> deletePayment(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID id) {

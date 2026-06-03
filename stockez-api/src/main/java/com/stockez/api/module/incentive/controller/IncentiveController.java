@@ -24,21 +24,17 @@ public class IncentiveController {
 
     private final IncentiveService incentiveService;
 
-    // ── Brands ────────────────────────────────────────────────────────────────
-
     @GetMapping("/brands")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get distinct product brands for the tenant [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Get distinct product brands for the tenant")
     public ResponseEntity<ApiResponse<List<String>>> getBrands(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.getDistinctBrands(tenantId)));
     }
 
-    // ── Targets ────────────────────────────────────────────────────────────────
-
     @PostMapping("/targets")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update a brand target for a salesperson [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Create or update a brand target for a salesperson")
     public ResponseEntity<ApiResponse<IncentiveDtos.BrandTargetRow>> saveTarget(
             @Valid @RequestBody IncentiveDtos.SaveTargetRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -46,8 +42,8 @@ public class IncentiveController {
     }
 
     @GetMapping("/targets")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
-    @Operation(summary = "Get brand targets with live achievement for a month [ADMIN/SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get brand targets with live achievement for a month")
     public ResponseEntity<ApiResponse<IncentiveDtos.TargetSummary>> getTargets(
             @RequestParam int month,
             @RequestParam int year,
@@ -60,19 +56,17 @@ public class IncentiveController {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.getTargetsSummary(tenantId, month, year, filterPerson)));
     }
 
-    // ── Slabs ─────────────────────────────────────────────────────────────────
-
     @GetMapping("/slabs")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
-    @Operation(summary = "Get all incentive slabs grouped by brand [ADMIN/SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get all incentive slabs grouped by brand")
     public ResponseEntity<ApiResponse<List<IncentiveDtos.BrandSlabSummary>>> getAllSlabs(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.getAllSlabs(tenantId)));
     }
 
     @GetMapping("/slabs/{brand}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
-    @Operation(summary = "Get incentive slabs for a specific brand [ADMIN/SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get incentive slabs for a specific brand")
     public ResponseEntity<ApiResponse<List<IncentiveDtos.IncentiveSlabResponse>>> getSlabsForBrand(
             @PathVariable String brand,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -80,19 +74,17 @@ public class IncentiveController {
     }
 
     @PostMapping("/slabs")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Replace all incentive slabs for a brand [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Replace all incentive slabs for a brand")
     public ResponseEntity<ApiResponse<List<IncentiveDtos.IncentiveSlabResponse>>> saveSlabs(
             @Valid @RequestBody IncentiveDtos.SaveSlabsRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.saveSlabs(request, tenantId), "Slabs saved"));
     }
 
-    // ── Credits ────────────────────────────────────────────────────────────────
-
     @PostMapping("/calculate")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Calculate and create incentive credit records for a month [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Calculate and create incentive credit records for a month")
     public ResponseEntity<ApiResponse<IncentiveDtos.CreditSummary>> calculate(
             @Valid @RequestBody IncentiveDtos.CreditRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -100,8 +92,8 @@ public class IncentiveController {
     }
 
     @GetMapping("/credits")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get incentive credit summary for a month [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Get incentive credit summary for a month")
     public ResponseEntity<ApiResponse<IncentiveDtos.CreditSummary>> getCredits(
             @RequestParam int month,
             @RequestParam int year,
@@ -110,19 +102,87 @@ public class IncentiveController {
     }
 
     @PostMapping("/credits/{id}/mark-credited")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Mark an incentive credit as formally credited [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Mark an incentive credit as formally credited")
     public ResponseEntity<ApiResponse<IncentiveDtos.IncentiveCreditResponse>> markCredited(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.markCredited(id, tenantId), "Incentive credited"));
     }
 
-    // ── Employee view ─────────────────────────────────────────────────────────
+    // ── Collection Targets ────────────────────────────────────────────────────
+
+    @PostMapping("/collection/targets")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Create or update a collection target for a salesperson")
+    public ResponseEntity<ApiResponse<IncentiveDtos.CollectionTargetRow>> saveCollectionTarget(
+            @Valid @RequestBody IncentiveDtos.SaveCollectionTargetRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.saveCollectionTarget(request, tenantId), "Target saved"));
+    }
+
+    @GetMapping("/collection/targets")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get collection targets with live achievement for a month")
+    public ResponseEntity<ApiResponse<IncentiveDtos.CollectionTargetSummary>> getCollectionTargets(
+            @RequestParam int month,
+            @RequestParam int year,
+            @RequestParam(required = false) UUID salesPersonId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            org.springframework.security.core.Authentication auth) {
+        boolean isAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        UUID filterPerson = isAdmin ? salesPersonId : null;
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.getCollectionTargetsSummary(tenantId, month, year, filterPerson)));
+    }
+
+    @GetMapping("/collection/slabs")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get collection incentive slabs")
+    public ResponseEntity<ApiResponse<List<IncentiveDtos.CollectionSlabResponse>>> getCollectionSlabs(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.getCollectionSlabs(tenantId)));
+    }
+
+    @PostMapping("/collection/slabs")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Replace all collection incentive slabs")
+    public ResponseEntity<ApiResponse<List<IncentiveDtos.CollectionSlabResponse>>> saveCollectionSlabs(
+            @Valid @RequestBody IncentiveDtos.SaveCollectionSlabsRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.saveCollectionSlabs(request, tenantId), "Slabs saved"));
+    }
+
+    @PostMapping("/collection/calculate")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Calculate and create collection incentive credit records for a month")
+    public ResponseEntity<ApiResponse<IncentiveDtos.CollectionCreditSummary>> calculateCollections(
+            @Valid @RequestBody IncentiveDtos.CreditRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.calculateAndCreditCollections(request, tenantId), "Collection incentives calculated"));
+    }
+
+    @GetMapping("/collection/credits")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Get collection incentive credit summary for a month")
+    public ResponseEntity<ApiResponse<IncentiveDtos.CollectionCreditSummary>> getCollectionCredits(
+            @RequestParam int month,
+            @RequestParam int year,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.getCollectionCreditSummary(tenantId, month, year)));
+    }
+
+    @PostMapping("/collection/credits/{id}/mark-credited")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Mark a collection incentive credit as formally credited")
+    public ResponseEntity<ApiResponse<IncentiveDtos.CollectionCreditResponse>> markCollectionCredited(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(incentiveService.markCollectionCredited(id, tenantId), "Collection incentive credited"));
+    }
 
     @GetMapping("/my")
-    @PreAuthorize("hasAnyRole('SALES','ADMIN')")
-    @Operation(summary = "Get my incentive progress for a month [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_VIEW')")
+    @Operation(summary = "Get my incentive progress for a month")
     public ResponseEntity<ApiResponse<IncentiveDtos.MyIncentiveView>> getMyIncentives(
             @RequestParam int month,
             @RequestParam int year,

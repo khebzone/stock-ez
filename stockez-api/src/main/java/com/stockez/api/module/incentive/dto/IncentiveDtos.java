@@ -138,5 +138,99 @@ public class IncentiveDtos {
         private BigDecimal totalEarned;
         private BigDecimal totalPotential;
         private List<BrandIncentiveCard> brands;
+        private CollectionIncentiveCard collectionCard;
+    }
+
+    // ── Collection Target DTOs ──
+
+    @Data
+    public static class SaveCollectionTargetRequest {
+        @NotNull(message = "Sales person is required")
+        private UUID salesPersonId;
+        @NotNull(message = "Month is required")
+        private Integer targetMonth;
+        @NotNull(message = "Year is required")
+        private Integer targetYear;
+        @NotNull(message = "Target value is required")
+        private BigDecimal targetValue;
+    }
+
+    @Data
+    public static class CollectionTargetRow {
+        private UUID id;
+        private UUID salesPersonId;
+        private String salesPersonName;
+        private String salesPersonPhone;
+        private int targetMonth;
+        private int targetYear;
+        private BigDecimal targetValue;
+        private BigDecimal achievedValue;
+        private BigDecimal achievementPct;
+        private BigDecimal earnedIncentive;
+        private String achievementStatus;
+    }
+
+    @Data
+    public static class CollectionTargetSummary {
+        private int month;
+        private int year;
+        private List<CollectionTargetRow> targets;
+        private BigDecimal totalTarget;
+        private BigDecimal totalAchieved;
+    }
+
+    @Data
+    public static class SaveCollectionSlabsRequest {
+        @NotNull(message = "Slabs list is required")
+        private List<SlabRequest> slabs;
+    }
+
+    @Data
+    public static class CollectionSlabResponse {
+        private UUID id;
+        private int fromPct;
+        private Integer toPct;
+        private BigDecimal incentiveAmount;
+    }
+
+    @Data
+    public static class CollectionCreditResponse {
+        private UUID id;
+        private UUID salesPersonId;
+        private String salesPersonName;
+        private String salesPersonPhone;
+        private int targetMonth;
+        private int targetYear;
+        private BigDecimal targetValue;
+        private BigDecimal achievedValue;
+        private BigDecimal achievementPct;
+        private BigDecimal incentiveAmount;
+        private String status;
+        private Instant creditedAt;
+        private String notes;
+    }
+
+    @Data
+    public static class CollectionCreditSummary {
+        private int month;
+        private int year;
+        private List<CollectionCreditResponse> credits;
+        private BigDecimal totalIncentive;
+        private long totalPending;
+        private long totalCredited;
+    }
+
+    @Data
+    public static class CollectionIncentiveCard {
+        private BigDecimal targetValue;
+        private BigDecimal achievedValue;
+        private BigDecimal achievementPct;
+        private String achievementStatus;
+        private BigDecimal earnedIncentive;
+        private BigDecimal nextTierIncentive;
+        private BigDecimal gapToNextTier;
+        private BigDecimal nextTierTargetPct;
+        private List<CollectionSlabResponse> slabs;
+        private boolean credited;
     }
 }

@@ -25,21 +25,17 @@ public class DayClosureController {
 
     private final DayClosureService dayClosureService;
 
-    // ─── 1. Today's live counter ──────────────────────────────────────────────
-
     @GetMapping("/today")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Get today's live cash counter with per-collector breakdown [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "Get today's live cash counter with per-collector breakdown")
     public ResponseEntity<ApiResponse<DayClosureDtos.TodayCounterResponse>> getTodayCounter(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(dayClosureService.getTodayCounter(tenantId)));
     }
 
-    // ─── 2. Close the day ─────────────────────────────────────────────────────
-
     @PostMapping("/close")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Close today's cash counter — enter physical cash count [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Close today's cash counter — enter physical cash count")
     public ResponseEntity<ApiResponse<DayClosureDtos.DayClosureResponse>> closeDay(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @Valid @RequestBody DayClosureDtos.CloseDayRequest req) {
@@ -49,11 +45,9 @@ public class DayClosureController {
                 "Day closed successfully"));
     }
 
-    // ─── 3. History ───────────────────────────────────────────────────────────
-
     @GetMapping("/history")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "List all past day closures in descending date order [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "List all past day closures in descending date order")
     public ResponseEntity<ApiResponse<List<DayClosureDtos.DayClosureResponse>>> getHistory(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(dayClosureService.getHistory(tenantId)));

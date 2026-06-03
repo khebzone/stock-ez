@@ -31,8 +31,8 @@ public class DashboardController {
     }
 
     @GetMapping("/sales")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Get sales person dashboard overview [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ORDERS_VIEW')")
+    @Operation(summary = "Get sales person dashboard overview")
     public ResponseEntity<ApiResponse<DashboardDtos.SalesDashboardStats>> salesStats(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
@@ -40,8 +40,8 @@ public class DashboardController {
     }
 
     @GetMapping("/warehouse")
-    @PreAuthorize("hasRole('WAREHOUSE')")
-    @Operation(summary = "Get warehouse dashboard overview [WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_VIEW')")
+    @Operation(summary = "Get warehouse dashboard overview")
     public ResponseEntity<ApiResponse<DashboardDtos.WarehouseDashboardStats>> warehouseStats(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(dashboardService.getWarehouseStats(tenantId)));

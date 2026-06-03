@@ -26,8 +26,6 @@ public class AttendanceController {
 
     private final AttendanceService attendanceService;
 
-    // ── Settings ──────────────────────────────────────────────────────────────
-
     @PostMapping("/settings")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Save office location and attendance settings [ADMIN]")
@@ -39,17 +37,15 @@ public class AttendanceController {
     }
 
     @GetMapping("/settings")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
     @Operation(summary = "Get attendance settings")
     public ResponseEntity<ApiResponse<AttendanceDtos.SettingsResponse>> getSettings(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(attendanceService.getSettings(tenantId)));
     }
 
-    // ── Check In / Out ────────────────────────────────────────────────────────
-
     @PostMapping("/check-in")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY','ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_CHECKIN')")
     @Operation(summary = "Check in with GPS location")
     public ResponseEntity<ApiResponse<AttendanceDtos.AttendanceResponse>> checkIn(
             @Valid @RequestBody AttendanceDtos.CheckInRequest request,
@@ -60,7 +56,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/check-out")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY','ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_CHECKIN')")
     @Operation(summary = "Check out")
     public ResponseEntity<ApiResponse<AttendanceDtos.AttendanceResponse>> checkOut(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -70,15 +66,13 @@ public class AttendanceController {
     }
 
     @GetMapping("/today-status")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY','ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
     @Operation(summary = "Get today's check-in status for the current user")
     public ResponseEntity<ApiResponse<AttendanceDtos.TodayStatusResponse>> todayStatus(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
         return ResponseEntity.ok(ApiResponse.success(attendanceService.getTodayStatus(tenantId, userId)));
     }
-
-    // ── Admin views ───────────────────────────────────────────────────────────
 
     @GetMapping("/by-date")
     @PreAuthorize("hasRole('ADMIN')")

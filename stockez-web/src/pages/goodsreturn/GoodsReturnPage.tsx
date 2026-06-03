@@ -70,6 +70,24 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     }));
   };
 
+  const handleOrderChange = (newOrderId: string | null) => {
+    setOrderId(newOrderId);
+    if (!newOrderId) return;
+    const selectedOrder = orders.find((o: any) => o.id === newOrderId);
+    if (selectedOrder?.items?.length > 0) {
+      const autoLines: ReturnLine[] = selectedOrder.items.map((item: any, idx: number) => ({
+        id: idx + 1,
+        productId: item.product?.id || null,
+        batchNumber: item.batchNumber || '',
+        quantity: item.quantity || null,
+        unitRate: item.unitPrice != null ? Number(item.unitPrice) : null,
+        reason: '',
+      }));
+      setLines(autoLines);
+      setNextId(autoLines.length + 1);
+    }
+  };
+
   const totalAmount = lines.reduce((s, l) => s + (l.unitRate || 0) * (l.quantity || 0), 0);
 
   const handleSave = () => {
@@ -145,7 +163,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
               <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Reference Order *</div>
               <Select size="large" showSearch optionFilterProp="label"
                 placeholder="Select order..." style={{ width: '100%' }}
-                value={orderId || undefined} onChange={setOrderId}
+                value={orderId || undefined} onChange={handleOrderChange}
                 options={orders.map((o: any) => ({ value: o.id, label: `${o.orderNumber} — ${o.customerName || o.customer?.businessName}` }))}
               />
             </div>

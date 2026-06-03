@@ -23,8 +23,7 @@ public class UserDtos {
         @Email(message = "Enter a valid email")
         private String email;
 
-        @NotNull(message = "Role is required")
-        private User.UserRole role;
+        private UUID customRoleId;
 
         @NotBlank(message = "Password is required")
         @Size(min = 8, message = "Password must be at least 8 characters")
@@ -46,7 +45,7 @@ public class UserDtos {
         @Email
         private String email;
 
-        private User.UserRole role;
+        private UUID customRoleId;
 
         private Boolean active;
 
@@ -70,14 +69,14 @@ public class UserDtos {
         private String newPassword;
     }
 
-
     @Data
     public static class UserResponse {
         private UUID id;
         private String fullName;
         private String phone;
         private String email;
-        private User.UserRole role;
+        private String roleName;
+        private UUID customRoleId;
         private String profileImageUrl;
         private boolean active;
         private BigDecimal salary;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Input, Skeleton, Button, Grid } from 'antd';
-import { SearchOutlined, WarningOutlined, ExclamationCircleOutlined, DownloadOutlined } from '@ant-design/icons';
-import { exportToCSV } from '../../components/TableToolbar';
+import { SearchOutlined, WarningOutlined, ExclamationCircleOutlined, FileExcelOutlined } from '@ant-design/icons';
+import { exportToXLSX } from '../../components/TableToolbar';
 import { useGetAgingReportQuery } from '../../store/api/reportApi';
 
 const fmt = (v: number) => v > 0 ? `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—';
@@ -71,9 +71,9 @@ const AgingReportPage: React.FC = () => {
           allowClear style={{ borderRadius: 10, maxWidth: 380 }}
         />
         <Button
-          icon={<DownloadOutlined />}
+          icon={<FileExcelOutlined />}
           disabled={filtered.length === 0}
-          onClick={() => exportToCSV(
+          onClick={() => exportToXLSX(
             filtered.map((r: any) => ({
               customer: r.businessName,
               phone: r.phone,
@@ -96,7 +96,7 @@ const AgingReportPage: React.FC = () => {
           )}
           style={{ borderRadius: 8 }}
         >
-          Export CSV
+          Export Excel
         </Button>
       </div>
 

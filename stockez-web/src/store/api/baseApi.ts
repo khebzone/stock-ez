@@ -60,6 +60,6 @@ export const baseApi = createApi({
   baseQuery: baseQueryWithReauth,
   refetchOnFocus: true,
   refetchOnReconnect: true,
-  tagTypes: ['User', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive'],
+  tagTypes: ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive'],
   endpoints: () => ({}),
 });

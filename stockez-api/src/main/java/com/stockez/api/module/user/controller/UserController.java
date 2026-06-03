@@ -1,7 +1,6 @@
 package com.stockez.api.module.user.controller;
 
 import com.stockez.api.module.user.dto.UserDtos;
-import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.service.UserService;
 import com.stockez.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,7 +33,7 @@ public class UserController {
             @Valid @RequestBody UserDtos.CreateUserRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(userService.createUser(request, tenantId, User.UserRole.ADMIN), "User created"));
+                .body(ApiResponse.success(userService.createUser(request, tenantId), "User created"));
     }
 
     @GetMapping

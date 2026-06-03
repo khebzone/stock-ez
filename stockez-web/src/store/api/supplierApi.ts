@@ -36,6 +36,14 @@ export const supplierApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/tenants/profile', method: 'PUT', body }),
       invalidatesTags: ['CompanyProfile'],
     }),
+    getWorkflowSettings: builder.query<any, void>({
+      query: () => '/tenants/settings',
+      providesTags: ['WorkflowSettings'],
+    }),
+    updateWorkflowSettings: builder.mutation<any, any>({
+      query: (body) => ({ url: '/tenants/settings', method: 'PUT', body }),
+      invalidatesTags: ['WorkflowSettings'],
+    }),
   }),
 });
 
@@ -48,4 +56,6 @@ export const {
   useImportSuppliersMutation,
   useGetCompanyProfileQuery,
   useUpdateCompanyProfileMutation,
+  useGetWorkflowSettingsQuery,
+  useUpdateWorkflowSettingsMutation,
 } = supplierApi;

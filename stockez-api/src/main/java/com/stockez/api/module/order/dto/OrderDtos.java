@@ -302,4 +302,33 @@ public class OrderDtos {
         @NotNull private UUID routeId;
         @NotNull private LocalDate date;
     }
+
+    @Data
+    public static class CounterSaleRequest {
+        @NotNull(message = "Customer is required")
+        private UUID customerId;
+
+        @NotEmpty(message = "Order must have at least one item")
+        @Valid
+        private List<OrderItemRequest> items;
+
+        @Size(max = 1000)
+        private String notes;
+
+        @DecimalMin("0")
+        private BigDecimal paymentAmount;
+
+        private UUID paymentMethodId;
+
+        private Payment.PaymentMode paymentMode;
+
+        @Size(max = 200)
+        private String paymentReference;
+    }
+
+    @Data
+    public static class CounterSaleResponse {
+        private OrderResponse order;
+        private PaymentResponse payment;
+    }
 }

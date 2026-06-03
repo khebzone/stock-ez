@@ -34,8 +34,8 @@ public class PurchaseController {
     private final PurchaseService purchaseService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Create purchase entry — adds stock batches [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_CREATE')")
+    @Operation(summary = "Create purchase entry — adds stock batches")
     public ResponseEntity<ApiResponse<PurchaseDtos.PurchaseEntryResponse>> create(
             @Valid @RequestBody PurchaseDtos.CreatePurchaseRequest request,
             @AuthenticationPrincipal UserDetails userDetails,
@@ -46,8 +46,8 @@ public class PurchaseController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "List purchase entries with optional filters [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
+    @Operation(summary = "List purchase entries with optional filters")
     public ResponseEntity<ApiResponse<PagedResponse<PurchaseDtos.PurchaseEntryResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
@@ -61,16 +61,16 @@ public class PurchaseController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Get purchase entry detail [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
+    @Operation(summary = "Get purchase entry detail")
     public ResponseEntity<ApiResponse<PurchaseDtos.PurchaseEntryResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(purchaseService.getPurchaseEntry(id, tenantId)));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Update purchase entry header [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_EDIT')")
+    @Operation(summary = "Update purchase entry header")
     public ResponseEntity<ApiResponse<PurchaseDtos.PurchaseEntryResponse>> update(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -81,16 +81,16 @@ public class PurchaseController {
     }
 
     @GetMapping("/{id}/audit")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Get audit history for a purchase entry [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
+    @Operation(summary = "Get audit history for a purchase entry")
     public ResponseEntity<ApiResponse<List<PurchaseDtos.AuditLogResponse>>> getAudit(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(purchaseService.getAuditHistory(id, tenantId)));
     }
 
     @GetMapping("/batches")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "List all stock batches [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_VIEW')")
+    @Operation(summary = "List all stock batches")
     public ResponseEntity<ApiResponse<PagedResponse<PurchaseDtos.StockBatchResponse>>> getAllBatches(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "active") String status,
@@ -101,7 +101,7 @@ public class PurchaseController {
     }
 
     @GetMapping("/batches/product/{productId}")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE','SALES')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('STOCK_VIEW','ORDERS_VIEW','ORDERS_CREATE')")
     @Operation(summary = "Get stock batches for a product")
     public ResponseEntity<ApiResponse<List<PurchaseDtos.StockBatchResponse>>> getBatchesByProduct(
             @PathVariable UUID productId, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -109,8 +109,8 @@ public class PurchaseController {
     }
 
     @GetMapping("/alerts/near-expiry")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Get near-expiry stock alerts (default 30 days) [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_VIEW')")
+    @Operation(summary = "Get near-expiry stock alerts (default 30 days)")
     public ResponseEntity<ApiResponse<List<PurchaseDtos.NearExpiryAlert>>> getNearExpiry(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "30") int days) {

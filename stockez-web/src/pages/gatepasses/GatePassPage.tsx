@@ -72,9 +72,10 @@ const GatePassPage: React.FC = () => {
     allocations.filter((a: any) => a.deliveryPerson && a.id !== editingAllocId).map((a: any) => a.deliveryPerson.id)
   );
 
-  const salesPersons = users.filter((u: any) => u.role === 'SALES' && u.active && !allocatedSalesPersonIds.has(u.id));
-  const deliveryPersons = users.filter((u: any) => u.role === 'DELIVERY' && u.active);
-  const warehousePersons = users.filter((u: any) => u.role === 'WAREHOUSE' && u.active);
+  const fieldUsers = users.filter((u: any) => u.active && u.roleName !== 'ADMIN' && u.roleName !== 'SUPER_ADMIN');
+  const salesPersons    = fieldUsers.filter((u: any) => !allocatedSalesPersonIds.has(u.id));
+  const deliveryPersons = fieldUsers;
+  const warehousePersons = fieldUsers;
   const allAllocatedVehicleIds = new Set([...allocatedAsSalesVehicleIds, ...allocatedAsDeliveryVehicleIds]);
   const salesVehicles = vehicles.filter((v: any) => !allAllocatedVehicleIds.has(v.id));
   const deliveryVehicles = vehicles.filter((v: any) => !allAllocatedVehicleIds.has(v.id));

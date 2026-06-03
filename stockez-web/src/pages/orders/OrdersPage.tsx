@@ -23,6 +23,7 @@ import TableToolbar from '../../components/TableToolbar';
 import InvoicePrint from '../../components/InvoicePrint';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
 import ReturnFromOrderModal from '../../components/ReturnFromOrderModal';
+import { hasPermission, isAdmin as isAdminFn } from '../../utils/permissions';
 
 const { Option } = Select;
 
@@ -53,13 +54,11 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
 const OrdersPage: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const role = user.role;
-  const isSales     = role === 'SALES';
-  const isInvoice   = role === 'INVOICE';
-  const isAdmin     = role === 'ADMIN';
-  const isWarehouse = role === 'WAREHOUSE';
-  const isDelivery  = role === 'DELIVERY';
+  const isAdmin     = isAdminFn();
+  const isSales     = !isAdmin && hasPermission('ORDERS_CREATE');
+  const isDelivery  = !isAdmin && !isSales && hasPermission('DELIVERY_UPDATE');
+  const isInvoice   = hasPermission('INVOICE_APPROVE');
+  const isWarehouse = hasPermission('PICKLIST_UPDATE');
 
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [dateRange, setDateRange]       = useState<[Dayjs, Dayjs] | null>(null);

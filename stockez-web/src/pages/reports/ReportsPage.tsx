@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Row, Col, Card, DatePicker, Button, Table, Tabs, Space } from 'antd';
-import { DollarOutlined, ShoppingOutlined, ReloadOutlined, DownloadOutlined, RiseOutlined, TagsOutlined } from '@ant-design/icons';
+import { DollarOutlined, ShoppingOutlined, ReloadOutlined, FileExcelOutlined, RiseOutlined, TagsOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetSalesReportQuery, useGetCollectionReportQuery, useGetProfitReportQuery, useGetBrandProfitReportQuery } from '../../store/api/dashboardApi';
 import PageHeader from '../../components/PageHeader';
 import SalesTrendChart from '../../components/charts/SalesTrendChart';
 import CollectionBarChart from '../../components/charts/CollectionBarChart';
-import { exportToCSV } from '../../components/TableToolbar';
+import { exportToXLSX } from '../../components/TableToolbar';
 
 const { RangePicker } = DatePicker;
 
@@ -49,8 +49,8 @@ const SalesTab: React.FC = () => {
           <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
-        <Button icon={<DownloadOutlined />} onClick={() => exportToCSV(breakdown, exportCols, `sales-report-${range[0].format('YYYY-MM-DD')}`)}
-          style={{ borderRadius: 8 }} disabled={!breakdown.length}>Export CSV</Button>
+        <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(breakdown, exportCols, `sales-report-${range[0].format('YYYY-MM-DD')}`)}
+          style={{ borderRadius: 8 }} disabled={!breakdown.length}>Export Excel</Button>
       </div>
 
       {/* KPI tiles */}
@@ -128,8 +128,8 @@ const CollectionsTab: React.FC = () => {
           <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
-        <Button icon={<DownloadOutlined />} onClick={() => exportToCSV(breakdown, exportCols, `collection-report-${range[0].format('YYYY-MM-DD')}`)}
-          style={{ borderRadius: 8 }} disabled={!breakdown.length}>Export CSV</Button>
+        <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(breakdown, exportCols, `collection-report-${range[0].format('YYYY-MM-DD')}`)}
+          style={{ borderRadius: 8 }} disabled={!breakdown.length}>Export Excel</Button>
       </div>
 
       {collections && (
@@ -207,8 +207,8 @@ const ProfitTab: React.FC = () => {
           <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
-        <Button icon={<DownloadOutlined />} onClick={() => exportToCSV(rows, exportCols, `profit-report-${range[0].format('YYYY-MM-DD')}`)}
-          style={{ borderRadius: 8 }} disabled={!rows.length}>Export CSV</Button>
+        <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(rows, exportCols, `profit-report-${range[0].format('YYYY-MM-DD')}`)}
+          style={{ borderRadius: 8 }} disabled={!rows.length}>Export Excel</Button>
       </div>
 
       {report && (
@@ -302,8 +302,8 @@ const BrandProfitTab: React.FC = () => {
           <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
-        <Button icon={<DownloadOutlined />} onClick={() => exportToCSV(rows, exportCols, `brand-profit-${range[0].format('YYYY-MM-DD')}`)}
-          style={{ borderRadius: 8 }} disabled={!rows.length}>Export CSV</Button>
+        <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(rows, exportCols, `brand-profit-${range[0].format('YYYY-MM-DD')}`)}
+          style={{ borderRadius: 8 }} disabled={!rows.length}>Export Excel</Button>
       </div>
 
       {report && (

@@ -284,19 +284,19 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
 
         List<Order> orders;
-        if (user.getRole() == User.UserRole.SALES || user.getRole() == User.UserRole.DELIVERY) {
-            List<RouteAllocation> allocations;
-            if (user.getRole() == User.UserRole.SALES) {
-                allocations = routeAllocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
-            } else {
-                allocations = routeAllocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
-            }
+        boolean isAdminUser = user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN;
+        if (!isAdminUser) {
+            List<RouteAllocation> salesAllocations = routeAllocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
+            List<RouteAllocation> deliveryAllocations = routeAllocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
+            List<RouteAllocation> allocations = new ArrayList<>();
+            allocations.addAll(salesAllocations);
+            allocations.addAll(deliveryAllocations);
 
             if (allocations.isEmpty()) {
                 return Collections.emptyList();
             }
 
-            List<UUID> routeIds = allocations.stream().map(a -> a.getRoute().getId()).collect(Collectors.toList());
+            List<UUID> routeIds = allocations.stream().map(a -> a.getRoute().getId()).distinct().collect(Collectors.toList());
             orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(tenantId, Order.OrderStatus.CANCELLED, java.math.BigDecimal.ZERO)
                     .stream()
                     .filter(o -> o.getCustomer() != null && o.getCustomer().getRoute() != null && routeIds.contains(o.getCustomer().getRoute().getId()))
@@ -316,6 +316,7 @@ public class PaymentService {
                 ));
 
         Map<UUID, List<Order>> byCustomer = orders.stream()
+                .filter(o -> o.getCustomer() != null)
                 .collect(Collectors.groupingBy(o -> o.getCustomer().getId()));
 
         return byCustomer.entrySet().stream().map(e -> {

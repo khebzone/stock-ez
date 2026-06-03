@@ -101,6 +101,7 @@ public class GoodsReturnService {
                     .quantity(itemReq.getQuantity())
                     .unitRate(itemReq.getUnitRate())
                     .amount(amount)
+                    .reason(itemReq.getReason())
                     .build();
 
             goodsReturn.getItems().add(item);
@@ -117,23 +118,24 @@ public class GoodsReturnService {
             switch (returnType) {
 
                 case SALES_RETURN -> {
-                    List<StockBatch> batches;
+                    StockBatch targetBatch;
                     if (item.getBatchNumber() != null && !item.getBatchNumber().isBlank()) {
-                        batches = stockBatchRepository.findByTenantAndProduct(tenantId, productId)
-                                .stream()
-                                .filter(b -> item.getBatchNumber().equalsIgnoreCase(b.getBatchNumber()))
-                                .collect(Collectors.toList());
+                        targetBatch = stockBatchRepository
+                                .findByTenantAndBatchNumber(tenantId, item.getBatchNumber())
+                                .orElseGet(() -> stockBatchRepository
+                                        .findByTenantAndProduct(tenantId, productId)
+                                        .stream().findFirst()
+                                        .orElseThrow(() -> new BusinessException(
+                                                "No stock batch found for product: " + product.getName(),
+                                                "BATCH_NOT_FOUND")));
                     } else {
-                        batches = stockBatchRepository.findByTenantAndProduct(tenantId, productId);
+                        targetBatch = stockBatchRepository
+                                .findByTenantAndProduct(tenantId, productId)
+                                .stream().findFirst()
+                                .orElseThrow(() -> new BusinessException(
+                                        "No stock batch found for product: " + product.getName(),
+                                        "BATCH_NOT_FOUND"));
                     }
-
-                    if (batches.isEmpty()) {
-                        throw new BusinessException(
-                                "No stock batch found for product: " + product.getName(),
-                                "BATCH_NOT_FOUND");
-                    }
-
-                    StockBatch targetBatch = batches.get(0);
                     targetBatch.setQuantityAvailable(targetBatch.getQuantityAvailable() + item.getQuantity());
                     targetBatch.setActive(true);
                     stockBatchRepository.save(targetBatch);

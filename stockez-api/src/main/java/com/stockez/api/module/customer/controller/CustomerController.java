@@ -29,8 +29,8 @@ public class CustomerController {
     private final CustomerService customerService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
-    @Operation(summary = "Create customer [ADMIN, SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('CUSTOMERS_CREATE')")
+    @Operation(summary = "Create customer")
     public ResponseEntity<ApiResponse<CustomerDtos.CustomerResponse>> create(
             @Valid @RequestBody CustomerDtos.CreateCustomerRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -39,7 +39,7 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','DELIVERY_VIEW','ORDERS_VIEW')")
     @Operation(summary = "Get customer by ID")
     public ResponseEntity<ApiResponse<CustomerDtos.CustomerResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -47,7 +47,7 @@ public class CustomerController {
     }
 
     @GetMapping("/by-route/{routeId}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','DELIVERY_VIEW','ORDERS_VIEW','ROUTES_VIEW')")
     @Operation(summary = "Get customers by route")
     public ResponseEntity<ApiResponse<PagedResponse<CustomerDtos.CustomerResponse>>> byRoute(
             @PathVariable UUID routeId,
@@ -60,7 +60,7 @@ public class CustomerController {
     }
 
     @GetMapping("/by-place/{placeId}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','DELIVERY_VIEW','ORDERS_VIEW','ROUTES_VIEW')")
     @Operation(summary = "Get customers by place")
     public ResponseEntity<ApiResponse<PagedResponse<CustomerDtos.CustomerResponse>>> byPlace(
             @PathVariable UUID placeId,
@@ -73,7 +73,7 @@ public class CustomerController {
     }
 
     @GetMapping("/allocated")
-    @PreAuthorize("hasRole('SALES')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_VIEW')")
     @Operation(summary = "Get customers allocated to the current sales person's route today")
     public ResponseEntity<ApiResponse<java.util.List<CustomerDtos.CustomerResponse>>> getAllocated(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -82,7 +82,7 @@ public class CustomerController {
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','ORDERS_VIEW','ORDERS_CREATE','INVOICE_APPROVE')")
     @Operation(summary = "Search customers by name/phone")
     public ResponseEntity<ApiResponse<PagedResponse<CustomerDtos.CustomerResponse>>> search(
             @RequestParam String q,
@@ -95,8 +95,8 @@ public class CustomerController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Update customer [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('CUSTOMERS_EDIT')")
+    @Operation(summary = "Update customer")
     public ResponseEntity<ApiResponse<CustomerDtos.CustomerResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody CustomerDtos.UpdateCustomerRequest request,
@@ -115,7 +115,7 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}/outstanding")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','ORDERS_VIEW','PAYMENTS_VIEW')")
     @Operation(summary = "Get customer outstanding balance with aging buckets")
     public ResponseEntity<ApiResponse<CustomerDtos.CustomerOutstandingResponse>> getOutstanding(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -123,8 +123,8 @@ public class CustomerController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Soft delete customer [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('CUSTOMERS_DELETE')")
+    @Operation(summary = "Soft delete customer")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         customerService.deactivate(id, tenantId);

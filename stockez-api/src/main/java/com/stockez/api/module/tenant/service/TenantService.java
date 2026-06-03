@@ -2,7 +2,9 @@ package com.stockez.api.module.tenant.service;
 
 import com.stockez.api.module.tenant.dto.TenantDtos;
 import com.stockez.api.module.tenant.entity.Tenant;
+import com.stockez.api.module.tenant.entity.TenantSettings;
 import com.stockez.api.module.tenant.repository.TenantRepository;
+import com.stockez.api.module.tenant.repository.TenantSettingsRepository;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.common.exception.BusinessException;
@@ -22,6 +24,7 @@ import java.util.UUID;
 public class TenantService {
 
     private final TenantRepository tenantRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -149,6 +152,41 @@ public class TenantService {
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", id.toString()));
         tenant.setLogoUrl(logoUrl);
         tenantRepository.save(tenant);
+    }
+
+    public TenantDtos.WorkflowSettingsResponse getSettings(UUID tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId)
+                .orElseGet(() -> TenantSettings.builder().tenant(tenant).build());
+        return toSettingsResponse(settings);
+    }
+
+    public TenantDtos.WorkflowSettingsResponse updateSettings(UUID tenantId, TenantDtos.WorkflowSettingsRequest req) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId)
+                .orElseGet(() -> TenantSettings.builder().tenant(tenant).build());
+        settings.setInvoiceApprovalRequired(req.isInvoiceApprovalRequired());
+        settings.setPicklistEnabled(req.isPicklistEnabled());
+        settings.setGoodsReturnApprovalRequired(req.isGoodsReturnApprovalRequired());
+        if (req.getCreditLimitEnforcement() != null) settings.setCreditLimitEnforcement(req.getCreditLimitEnforcement());
+        settings.setMaxDiscountPercent(req.getMaxDiscountPercent());
+        settings.setLockBillingAfterCheckout(req.isLockBillingAfterCheckout());
+        settings.setSeparateDeliveryAllocation(req.isSeparateDeliveryAllocation());
+        return toSettingsResponse(tenantSettingsRepository.save(settings));
+    }
+
+    private TenantDtos.WorkflowSettingsResponse toSettingsResponse(TenantSettings s) {
+        TenantDtos.WorkflowSettingsResponse res = new TenantDtos.WorkflowSettingsResponse();
+        res.setInvoiceApprovalRequired(s.isInvoiceApprovalRequired());
+        res.setPicklistEnabled(s.isPicklistEnabled());
+        res.setGoodsReturnApprovalRequired(s.isGoodsReturnApprovalRequired());
+        res.setCreditLimitEnforcement(s.getCreditLimitEnforcement());
+        res.setMaxDiscountPercent(s.getMaxDiscountPercent());
+        res.setLockBillingAfterCheckout(s.isLockBillingAfterCheckout());
+        res.setSeparateDeliveryAllocation(s.isSeparateDeliveryAllocation());
+        return res;
     }
 
     private TenantDtos.TenantResponse toResponse(Tenant t) {

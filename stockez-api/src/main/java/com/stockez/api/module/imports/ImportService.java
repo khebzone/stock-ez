@@ -100,7 +100,8 @@ public class ImportService {
         String[] headers = {
             "Supplier Name *", "Phone *", "Contact Person *", "Alt Phone",
             "Email", "Address", "City", "State",
-            "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code"
+            "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code",
+            "Opening Balance (₹)"
         };
         return buildTemplate("Suppliers", headers, new int[]{1, 3, 8, 11, 12}); // Phone, Alt Phone, GSTIN, Account Number, IFSC
     }
@@ -542,6 +543,14 @@ public class ImportService {
                     rowErrors.add("IFSC Code '" + bankIfsc + "' is not valid — expected format: 4 letters + 0 + 6 alphanumeric (e.g. SBIN0001234)");
                 }
 
+                String openingBalanceRaw = str(row, 13);
+                BigDecimal openingBalance = decimal(row, 13);
+                if (openingBalanceRaw != null && openingBalance == null) {
+                    rowErrors.add("Opening Balance must be a valid number (entered: '" + openingBalanceRaw + "')");
+                } else if (openingBalance != null && openingBalance.compareTo(BigDecimal.ZERO) < 0) {
+                    rowErrors.add("Opening Balance cannot be negative");
+                }
+
                 if (!rowErrors.isEmpty()) {
                     result.setFailed(result.getFailed() + 1);
                     for (String err : rowErrors)
@@ -560,6 +569,7 @@ public class ImportService {
                         .contactPerson(contactPerson).email(email).address(address)
                         .city(city).state(state).gstin(gstin).fssaiNumber(fssaiNumber)
                         .bankName(bankName).bankAccount(bankAccount).bankIfsc(bankIfsc)
+                        .openingBalance(openingBalance != null ? openingBalance : BigDecimal.ZERO)
                         .build();
                 Supplier saved = supplierRepository.save(supplier);
                 auditService.record(tenantId, "SUPPLIER", saved.getId(), "CREATED",
@@ -709,7 +719,8 @@ public class ImportService {
     private static final String[] SUPPLIER_HEADERS = {
         "Supplier Name *", "Phone *", "Contact Person *", "Alt Phone",
         "Email", "Address", "City", "State",
-        "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code"
+        "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code",
+        "Opening Balance (₹)"
     };
 
     private void validateHeaders(Sheet sheet, String[] expectedHeaders, String templateType) {

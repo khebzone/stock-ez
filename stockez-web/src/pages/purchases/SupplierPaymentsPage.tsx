@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Skeleton, Popconfirm, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, FileExcelOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   useGetSupplierPaymentSummariesQuery,
@@ -8,7 +8,7 @@ import {
   useCreateSupplierPaymentMutation,
   useDeleteSupplierPaymentMutation,
 } from '../../store/api/purchaseApi';
-import { exportToCSV } from '../../components/TableToolbar';
+import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
 
 const PAYMENT_METHODS = ['CASH', 'UPI', 'NEFT', 'RTGS', 'CHEQUE', 'BANK_TRANSFER'];
@@ -68,9 +68,9 @@ const SupplierPaymentsPage: React.FC = () => {
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Track amounts owed to and paid to each supplier</div>
         </div>
         <Button
-          icon={<DownloadOutlined />}
+          icon={<FileExcelOutlined />}
           disabled={summaries.length === 0}
-          onClick={() => exportToCSV(
+          onClick={() => exportToXLSX(
             summaries.map((s: any) => ({
               supplier: s.supplierName,
               purchased: s.totalPurchased,
@@ -91,7 +91,7 @@ const SupplierPaymentsPage: React.FC = () => {
           )}
           style={{ borderRadius: 8 }}
         >
-          Export CSV
+          Export Excel
         </Button>
       </div>
 

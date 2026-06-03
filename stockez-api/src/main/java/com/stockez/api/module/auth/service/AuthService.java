@@ -1,6 +1,7 @@
 package com.stockez.api.module.auth.service;
 
 import com.stockez.api.module.auth.dto.AuthDtos;
+import com.stockez.api.module.role.entity.Permission;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.repository.TenantRepository;
 import com.stockez.api.module.user.entity.User;
@@ -11,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -63,19 +66,12 @@ public class AuthService {
         String accessToken  = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        AuthDtos.UserSummary summary = new AuthDtos.UserSummary();
-        summary.setId(user.getId().toString());
-        summary.setFullName(user.getFullName());
-        summary.setPhone(user.getPhone());
-        summary.setRole(user.getRole().name());
-        summary.setTenantId(tenant.getId().toString());
-        summary.setTenantName(tenant.getName());
-        summary.setProfileImageUrl(user.getProfileImageUrl());
+        AuthDtos.UserSummary summary = buildSummary(user, tenant);
 
         AuthDtos.AuthResponse response = new AuthDtos.AuthResponse();
         response.setAccessToken(accessToken);
         response.setRefreshToken(refreshToken);
-        response.setExpiresIn(900);  // 15 min in seconds
+        response.setExpiresIn(900);
         response.setUser(summary);
 
         return response;
@@ -96,13 +92,7 @@ public class AuthService {
         String newAccessToken  = jwtService.generateAccessToken(user);
         String newRefreshToken = jwtService.generateRefreshToken(user);
 
-        AuthDtos.UserSummary summary = new AuthDtos.UserSummary();
-        summary.setId(user.getId().toString());
-        summary.setFullName(user.getFullName());
-        summary.setPhone(user.getPhone());
-        summary.setRole(user.getRole().name());
-        summary.setTenantId(user.getTenant().getId().toString());
-        summary.setTenantName(user.getTenant().getName());
+        AuthDtos.UserSummary summary = buildSummary(user, user.getTenant());
 
         AuthDtos.AuthResponse response = new AuthDtos.AuthResponse();
         response.setAccessToken(newAccessToken);
@@ -111,5 +101,32 @@ public class AuthService {
         response.setUser(summary);
 
         return response;
+    }
+
+    private AuthDtos.UserSummary buildSummary(User user, Tenant tenant) {
+        AuthDtos.UserSummary summary = new AuthDtos.UserSummary();
+        summary.setId(user.getId().toString());
+        summary.setFullName(user.getFullName());
+        summary.setPhone(user.getPhone());
+        summary.setRole(user.getRole().name());
+        summary.setTenantId(tenant.getId().toString());
+        summary.setTenantName(tenant.getName());
+        summary.setProfileImageUrl(user.getProfileImageUrl());
+
+        if (user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN) {
+            summary.setRoleName(user.getRole().name());
+            summary.setPermissions(List.of("ALL"));
+        } else if (user.getCustomRole() != null) {
+            summary.setRoleName(user.getCustomRole().getName());
+            summary.setPermissions(user.getCustomRole().getPermissions().stream()
+                    .map(Permission::name)
+                    .sorted()
+                    .toList());
+        } else {
+            summary.setRoleName("No Role");
+            summary.setPermissions(List.of());
+        }
+
+        return summary;
     }
 }

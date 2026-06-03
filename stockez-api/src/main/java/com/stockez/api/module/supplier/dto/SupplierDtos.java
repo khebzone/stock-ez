@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -61,6 +62,7 @@ public class SupplierDtos {
         public String bankName;
         public String bankAccount;
         public String bankIfsc;
+        public BigDecimal openingBalance;
         public boolean active;
         public Instant createdAt;
     }

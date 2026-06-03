@@ -12,8 +12,12 @@ import com.stockez.api.module.product.entity.Product;
 import com.stockez.api.module.product.repository.ProductRepository;
 import com.stockez.api.module.purchase.entity.StockBatch;
 import com.stockez.api.module.purchase.repository.StockBatchRepository;
+import com.stockez.api.module.payment.entity.PaymentMethod;
+import com.stockez.api.module.payment.repository.PaymentMethodRepository;
 import com.stockez.api.module.route.entity.RouteAllocation;
 import com.stockez.api.module.route.repository.RouteAllocationRepository;
+import com.stockez.api.module.tenant.entity.TenantSettings;
+import com.stockez.api.module.tenant.repository.TenantSettingsRepository;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.api.module.audit.service.AuditService;
@@ -47,14 +51,19 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final PaymentMethodRepository paymentMethodRepository;
     private final RouteAllocationRepository routeAllocationRepository;
     private final StockBatchRepository stockBatchRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
     private final AuditService auditService;
 
     public OrderDtos.OrderResponse createOrder(OrderDtos.CreateOrderRequest req, UUID salesPersonId, UUID tenantId) {
         if (req.getCustomerId() == null && (req.getWalkInName() == null || req.getWalkInName().isBlank())) {
             throw new BusinessException("Either customer or walk-in name is required", "CUSTOMER_REQUIRED");
         }
+
+        TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId)
+                .orElseGet(TenantSettings::new);
 
         Customer customer = null;
         if (req.getCustomerId() != null) {
@@ -65,8 +74,9 @@ public class OrderService {
         User salesPerson = userRepository.findByIdAndTenantId(salesPersonId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", salesPersonId.toString()));
 
-        // Credit limit check — walk-in customers are always cash, no credit
-        if (customer != null && customer.isCreditAllowed() && customer.getCreditLimit() != null
+        // Credit limit check — skipped if enforcement is DISABLED
+        if (settings.getCreditLimitEnforcement() != TenantSettings.CreditLimitEnforcement.DISABLED
+                && customer != null && customer.isCreditAllowed() && customer.getCreditLimit() != null
                 && customer.getCreditLimit().compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal outstanding = orderRepository.findTotalOutstandingByCustomer(tenantId, customer.getId(), Order.OrderStatus.CANCELLED);
             if (outstanding.compareTo(customer.getCreditLimit()) >= 0) {
@@ -177,7 +187,8 @@ public class OrderService {
                 .walkInPhone(customer == null ? req.getWalkInPhone() : null)
                 .salesPerson(salesPerson)
                 .orderDate(LocalDate.now())
-                .status(customer == null ? Order.OrderStatus.DELIVERED : Order.OrderStatus.SUBMITTED)
+                .status(customer == null ? Order.OrderStatus.DELIVERED
+                        : settings.isInvoiceApprovalRequired() ? Order.OrderStatus.SUBMITTED : Order.OrderStatus.APPROVED)
                 .subTotal(subTotal)
                 .totalGst(totalGst)
                 .totalAmount(totalAmount)
@@ -430,7 +441,12 @@ public class OrderService {
 
     public OrderDtos.OrderResponse markDispatched(UUID id, UUID tenantId) {
         Order order = getOrderEntity(id, tenantId);
-        validateStatus(order, Order.OrderStatus.PREPARED);
+        TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId).orElseGet(TenantSettings::new);
+        if (settings.isPicklistEnabled()) {
+            validateStatus(order, Order.OrderStatus.PREPARED);
+        } else if (order.getStatus() != Order.OrderStatus.PREPARED && order.getStatus() != Order.OrderStatus.APPROVED) {
+            throw new BusinessException("Order must be in APPROVED or PREPARED status to dispatch", "INVALID_STATUS");
+        }
         order.setStatus(Order.OrderStatus.DISPATCHED);
         order.setDispatchedAt(Instant.now());
         Order saved = orderRepository.save(order);
@@ -448,6 +464,164 @@ public class OrderService {
         auditService.record(tenantId, "ORDER", saved.getId(), "DELIVERED",
                 "Order " + saved.getOrderNumber() + " delivered to " + order.getCustomer().getBusinessName());
         return toResponse(saved);
+    }
+
+    public OrderDtos.CounterSaleResponse counterSale(OrderDtos.CounterSaleRequest req, UUID userId, UUID tenantId) {
+        Customer customer = customerRepository.findByIdAndTenantId(req.getCustomerId(), tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer", req.getCustomerId().toString()));
+
+        User staff = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        int seq = orderRepository.findMaxOrderSequence(tenantId) + 1;
+        String orderNumber = String.format("ORD-%d-%05d", Year.now().getValue(), seq);
+
+        Map<UUID, Product> productMap = new LinkedHashMap<>();
+        Map<UUID, List<StockBatch>> fifoBatchMap = new LinkedHashMap<>();
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            if (!productMap.containsKey(itemReq.getProductId())) {
+                productMap.put(itemReq.getProductId(),
+                    productRepository.findByIdAndTenantId(itemReq.getProductId(), tenantId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Product", itemReq.getProductId().toString())));
+                fifoBatchMap.put(itemReq.getProductId(),
+                    stockBatchRepository.findFifoByProduct(tenantId, itemReq.getProductId()));
+            }
+        }
+
+        List<OrderItem> items = new ArrayList<>();
+        BigDecimal subTotal = BigDecimal.ZERO;
+        BigDecimal totalGst = BigDecimal.ZERO;
+
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            Product product = productMap.get(itemReq.getProductId());
+            List<StockBatch> fifo = fifoBatchMap.get(itemReq.getProductId());
+
+            if (!product.isActive()) throw new BusinessException("Product '" + product.getName() + "' is not active", "INACTIVE_PRODUCT");
+            int available = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+            if (available < itemReq.getQuantity()) throw new BusinessException(
+                "Insufficient stock for '" + product.getName() + "'. Available: " + available, "INSUFFICIENT_STOCK");
+
+            BigDecimal unitPrice = itemReq.getUnitPrice() != null ? itemReq.getUnitPrice() : product.getMaxSaleRate();
+            BigDecimal effectiveMin = !fifo.isEmpty() && fifo.get(0).getMinSaleRate() != null ? fifo.get(0).getMinSaleRate() : product.getMinSaleRate();
+            BigDecimal effectiveMax = !fifo.isEmpty() && fifo.get(0).getMaxSaleRate() != null ? fifo.get(0).getMaxSaleRate() : product.getMaxSaleRate();
+            if (effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0)
+                throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' is below minimum ₹" + effectiveMin, "PRICE_BELOW_MINIMUM");
+            if (effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0)
+                throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' exceeds maximum ₹" + effectiveMax, "PRICE_ABOVE_MAXIMUM");
+
+            BigDecimal gstPercent = product.getSalesGstPercent();
+            BigDecimal discPct   = itemReq.getDiscountPercent() != null ? itemReq.getDiscountPercent() : BigDecimal.ZERO;
+            BigDecimal lineGross = unitPrice.multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+            BigDecimal discAmt   = lineGross.multiply(discPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            BigDecimal lineTotal = lineGross.subtract(discAmt);
+            BigDecimal divisor   = BigDecimal.valueOf(100).add(gstPercent);
+            BigDecimal lineBase  = lineTotal.multiply(BigDecimal.valueOf(100)).divide(divisor, 2, RoundingMode.HALF_UP);
+            BigDecimal gstAmt    = lineTotal.subtract(lineBase);
+
+            items.add(OrderItem.builder()
+                .product(product).quantity(itemReq.getQuantity())
+                .unitPrice(unitPrice).discountPercent(discPct).discountAmount(discAmt)
+                .gstPercent(gstPercent).gstAmount(gstAmt).lineTotal(lineTotal)
+                .batchNumber(fifo.isEmpty() ? null : fifo.get(0).getBatchNumber())
+                .batchExpiryDate(fifo.isEmpty() ? null : fifo.get(0).getExpiryDate())
+                .build());
+            subTotal = subTotal.add(lineBase);
+            totalGst = totalGst.add(gstAmt);
+        }
+
+        BigDecimal totalAmount = subTotal.add(totalGst);
+        Instant now = Instant.now();
+
+        Order order = Order.builder()
+                .tenant(customer.getTenant())
+                .orderNumber(orderNumber)
+                .customer(customer)
+                .salesPerson(staff)
+                .orderDate(LocalDate.now())
+                .status(Order.OrderStatus.DELIVERED)
+                .subTotal(subTotal).totalGst(totalGst).totalAmount(totalAmount)
+                .balanceAmount(totalAmount)
+                .notes(req.getNotes())
+                .approvedAt(now).preparedAt(now).dispatchedAt(now).deliveredAt(now)
+                .build();
+
+        items.forEach(item -> item.setOrder(order));
+        order.getItems().addAll(items);
+        Order saved = orderRepository.save(order);
+
+        List<StockBatch> batchesToSave = new ArrayList<>();
+        for (OrderDtos.OrderItemRequest itemReq : req.getItems()) {
+            Product product = productMap.get(itemReq.getProductId());
+            List<StockBatch> fifo = fifoBatchMap.get(itemReq.getProductId());
+            int remaining = itemReq.getQuantity();
+            if (fifo.isEmpty()) {
+                product.setStockQuantity(Math.max(0, (product.getStockQuantity() != null ? product.getStockQuantity() : 0) - itemReq.getQuantity()));
+            } else {
+                for (StockBatch batch : fifo) {
+                    if (remaining <= 0) break;
+                    int deduct = Math.min(batch.getQuantityAvailable(), remaining);
+                    batch.setQuantityAvailable(batch.getQuantityAvailable() - deduct);
+                    if (batch.getQuantityAvailable() == 0) batch.setActive(false);
+                    batchesToSave.add(batch);
+                    remaining -= deduct;
+                }
+                Integer newStock = stockBatchRepository.sumAvailableByProduct(tenantId, product.getId());
+                product.setStockQuantity(newStock != null ? newStock : 0);
+            }
+        }
+        stockBatchRepository.saveAll(batchesToSave);
+        productRepository.saveAll(productMap.values());
+
+        auditService.record(tenantId, "ORDER", saved.getId(), "COUNTER_SALE",
+                "Counter sale " + saved.getOrderNumber() + " for " + customer.getBusinessName() +
+                " — " + items.size() + " item(s), total ₹" + totalAmount.toPlainString());
+
+        OrderDtos.CounterSaleResponse result = new OrderDtos.CounterSaleResponse();
+        result.setOrder(toResponse(saved));
+
+        if (req.getPaymentAmount() != null && req.getPaymentAmount().compareTo(BigDecimal.ZERO) > 0) {
+            Payment.PaymentMode resolvedMode = req.getPaymentMode();
+            String resolvedMethodName = null;
+            if (req.getPaymentMethodId() != null) {
+                PaymentMethod method = paymentMethodRepository.findByIdAndTenantId(req.getPaymentMethodId(), tenantId)
+                        .orElseThrow(() -> new ResourceNotFoundException("PaymentMethod", req.getPaymentMethodId().toString()));
+                resolvedMode = Payment.PaymentMode.valueOf(method.getMode());
+                resolvedMethodName = method.getName();
+            }
+            if (resolvedMode == null) resolvedMode = Payment.PaymentMode.CASH;
+
+            BigDecimal payAmt = req.getPaymentAmount().min(totalAmount);
+            Payment payment = Payment.builder()
+                    .tenant(customer.getTenant())
+                    .order(saved)
+                    .collectedBy(staff)
+                    .amount(payAmt)
+                    .paymentMode(resolvedMode)
+                    .paymentMethodName(resolvedMethodName)
+                    .referenceNumber(req.getPaymentReference())
+                    .collectionDate(LocalDate.now())
+                    .build();
+            paymentRepository.save(payment);
+            saved.setPaidAmount(payAmt);
+            saved.setBalanceAmount(totalAmount.subtract(payAmt));
+            orderRepository.save(saved);
+
+            auditService.record(tenantId, "ORDER", saved.getId(), "PAYMENT_COLLECTED",
+                    "Counter sale payment ₹" + payAmt.toPlainString() + " collected via " +
+                    (resolvedMethodName != null ? resolvedMethodName : resolvedMode.name()));
+
+            OrderDtos.PaymentResponse pr = new OrderDtos.PaymentResponse();
+            pr.setId(payment.getId());
+            pr.setAmount(payAmt);
+            pr.setPaymentMode(resolvedMode);
+            pr.setPaymentMethodName(resolvedMethodName);
+            pr.setReferenceNumber(req.getPaymentReference());
+            pr.setCollectionDate(LocalDate.now());
+            pr.setCollectedBy(toPerson(staff));
+            result.setPayment(pr);
+        }
+
+        return result;
     }
 
     public OrderDtos.OrderResponse cancelOrder(UUID id, String reason, UUID tenantId) {

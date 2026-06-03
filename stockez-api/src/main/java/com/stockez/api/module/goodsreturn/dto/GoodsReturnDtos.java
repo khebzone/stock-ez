@@ -48,6 +48,8 @@ public class GoodsReturnDtos {
 
         @NotNull(message = "Unit rate is required")
         private BigDecimal unitRate;
+
+        private String reason;
     }
 
     @Data

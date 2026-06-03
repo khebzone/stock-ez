@@ -24,11 +24,9 @@ public class ReportController {
 
     private final ReportService reportService;
 
-    // ─── 0. Sales Trend ──────────────────────────────────────────────────────
-
     @GetMapping("/sales-trend")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Daily revenue trend for a date range [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Daily revenue trend for a date range")
     public ResponseEntity<ApiResponse<ReportDtos.SalesTrendResponse>> salesTrend(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -36,21 +34,17 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getSalesTrend(tenantId, from, to)));
     }
 
-    // ─── 1. Aging Report ─────────────────────────────────────────────────────
-
     @GetMapping("/aging")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Outstanding aging report bucketed by 30/60/90+ days [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Outstanding aging report bucketed by 30/60/90+ days")
     public ResponseEntity<ApiResponse<ReportDtos.AgingReportResponse>> agingReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(reportService.getAgingReport(tenantId)));
     }
 
-    // ─── 2. Sales Analysis ────────────────────────────────────────────────────
-
     @GetMapping("/sales-analysis")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Sales analysis grouped by SALESMAN | PRODUCT | CATEGORY [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Sales analysis grouped by SALESMAN | PRODUCT | CATEGORY")
     public ResponseEntity<ApiResponse<ReportDtos.SalesAnalysisResponse>> salesAnalysis(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -59,11 +53,9 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getSalesAnalysis(tenantId, from, to, groupBy)));
     }
 
-    // ─── 3a. Customer Ledger ─────────────────────────────────────────────────
-
     @GetMapping("/ledger/customer/{customerId}")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Customer ledger with debit/credit entries and running balance [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Customer ledger with debit/credit entries and running balance")
     public ResponseEntity<ApiResponse<ReportDtos.CustomerLedgerResponse>> customerLedger(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @PathVariable UUID customerId,
@@ -72,11 +64,9 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getCustomerLedger(tenantId, customerId, from, to)));
     }
 
-    // ─── 3b. Vendor Ledger ────────────────────────────────────────────────────
-
     @GetMapping("/ledger/vendors")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Vendor purchase summary grouped by supplier [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Vendor purchase summary grouped by supplier")
     public ResponseEntity<ApiResponse<ReportDtos.VendorLedgerResponse>> vendorLedger(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -84,11 +74,9 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getVendorLedger(tenantId, from, to)));
     }
 
-    // ─── 4. Profit Report (by Route) ─────────────────────────────────────────
-
     @GetMapping("/profit")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Gross profit by route for a date range (DELIVERED orders only) [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Gross profit by route for a date range (DELIVERED orders only)")
     public ResponseEntity<ApiResponse<ReportDtos.ProfitReportResponse>> profitReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -96,11 +84,9 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponse.success(reportService.getProfitReport(tenantId, from, to)));
     }
 
-    // ─── 5. Brand Profit Report ───────────────────────────────────────────────
-
     @GetMapping("/profit/brand")
-    @PreAuthorize("hasAnyRole('ADMIN','ACCOUNTANT')")
-    @Operation(summary = "Gross profit by brand for a date range (DELIVERED orders only) [ADMIN/ACCOUNTANT]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('REPORTS_VIEW')")
+    @Operation(summary = "Gross profit by brand for a date range (DELIVERED orders only)")
     public ResponseEntity<ApiResponse<ReportDtos.BrandProfitResponse>> brandProfitReport(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

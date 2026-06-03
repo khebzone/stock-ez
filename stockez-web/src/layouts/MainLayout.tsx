@@ -7,11 +7,12 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined, TagsOutlined,
   InboxOutlined, AlertOutlined, LineChartOutlined, BookOutlined, TrophyOutlined,
   CalculatorOutlined, RollbackOutlined, CarOutlined, AuditOutlined, EyeOutlined,
-  ShopOutlined, HddOutlined, LockOutlined, UploadOutlined, ClockCircleOutlined,
+  ShopOutlined, HddOutlined, LockOutlined, UploadOutlined, ClockCircleOutlined, ShoppingCartOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useChangePasswordMutation } from '../store/api/userApi';
 import { colors } from '../styles/tokens';
+import { hasPermission, isAdmin } from '../utils/permissions';
 
 const { Header, Sider, Content } = Layout;
 
@@ -22,89 +23,89 @@ const HEADER_H = 56;
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   SUPER_ADMIN: { label: 'Super Admin', color: '#ef4444' },
   ADMIN: { label: 'Admin', color: '#4361ee' },
-  SALES: { label: 'Sales', color: '#0ea5e9' },
-  INVOICE: { label: 'Invoice', color: '#f59e0b' },
-  WAREHOUSE: { label: 'Warehouse', color: '#06b6d4' },
-  DELIVERY: { label: 'Delivery', color: '#10b981' },
-  ACCOUNTANT: { label: 'Accountant', color: '#8b5cf6' },
 };
 
+// permission: undefined = admin-only; permission: string = shown when user has that permission
 const NAV_SECTIONS = [
   {
     section: 'MAIN',
     items: [
-      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', roles: ['ADMIN', 'SUPER_ADMIN', 'WAREHOUSE', 'ACCOUNTANT'] },
+      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', permission: undefined as string | undefined },
     ],
   },
   {
     section: 'ORDERS',
     items: [
-      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders', roles: ['ADMIN', 'SALES', 'INVOICE', 'WAREHOUSE', 'DELIVERY'] },
-      { key: '/invoice/approver', icon: <AuditOutlined />, label: 'Approve Orders', roles: ['INVOICE', 'ADMIN'] },
-      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', roles: ['ADMIN', 'WAREHOUSE'] },
+      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders', permission: 'ORDERS_VIEW' },
+      { key: '/counter-sale', icon: <ShoppingCartOutlined />, label: 'Counter Sale', permission: 'ORDERS_CREATE' },
+      { key: '/invoice/approver', icon: <AuditOutlined />, label: 'Approve Orders', permission: 'INVOICE_VIEW' },
+      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', permission: 'PICKLIST_VIEW' },
     ],
   },
   {
     section: 'INVENTORY',
     items: [
-      { key: '/purchases', icon: <InboxOutlined />, label: 'Purchases', roles: ['ADMIN', 'WAREHOUSE'] },
-      { key: '/stock-batches', icon: <HddOutlined />, label: 'Stock Batches', roles: ['ADMIN', 'WAREHOUSE'] },
-      { key: '/goods-return', icon: <RollbackOutlined />, label: 'Goods Return', roles: ['ADMIN', 'WAREHOUSE'] },
+      { key: '/purchases', icon: <InboxOutlined />, label: 'Purchases', permission: 'PURCHASES_VIEW' },
+      { key: '/stock-batches', icon: <HddOutlined />, label: 'Stock Batches', permission: 'STOCK_VIEW' },
+      { key: '/goods-return', icon: <RollbackOutlined />, label: 'Goods Return', permission: 'RETURNS_VIEW' },
+      { key: '/gate-pass', icon: <EyeOutlined />, label: 'Gate Pass', permission: 'GATE_PASS_VIEW' },
     ],
   },
   {
     section: 'CRM',
     items: [
-      { key: '/customers', icon: <TeamOutlined />, label: 'Customers', roles: ['ADMIN', 'SALES'] },
-      { key: '/products', icon: <ShoppingOutlined />, label: 'Products', roles: ['ADMIN', 'SALES', 'INVOICE'] },
+      { key: '/customers', icon: <TeamOutlined />, label: 'Customers', permission: 'CUSTOMERS_VIEW' },
+      { key: '/suppliers', icon: <ShopOutlined />, label: 'Suppliers', permission: 'SUPPLIERS_VIEW' },
+      { key: '/products', icon: <ShoppingOutlined />, label: 'Products', permission: 'PRODUCTS_VIEW' },
     ],
   },
   {
     section: 'FINANCE',
     items: [
-      { key: '/payments', icon: <WalletOutlined />, label: 'Collections', roles: ['ADMIN', 'SALES', 'DELIVERY', 'ACCOUNTANT'] },
-      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/supplier-payments', icon: <WalletOutlined />, label: 'Supplier Payments', roles: ['ADMIN', 'ACCOUNTANT', 'WAREHOUSE'] },
-      { key: '/expenses', icon: <FileTextOutlined />, label: 'Expenses', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/day-closure', icon: <CalculatorOutlined />, label: 'Day Counter', roles: ['ADMIN', 'ACCOUNTANT'] },
+      { key: '/payments', icon: <WalletOutlined />, label: 'Collections', permission: 'PAYMENTS_VIEW' },
+      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', permission: 'PAYMENTS_VIEW' },
+      { key: '/supplier-payments', icon: <WalletOutlined />, label: 'Supplier Payments', permission: 'SUPPLIER_PAYMENTS_VIEW' },
+      { key: '/expenses', icon: <FileTextOutlined />, label: 'Expenses', permission: 'EXPENSES_VIEW' },
+      { key: '/day-closure', icon: <CalculatorOutlined />, label: 'Day Counter', permission: 'DAY_CLOSURE_VIEW' },
     ],
   },
   {
     section: 'REPORTS',
     items: [
-      { key: '/reports', icon: <BarChartOutlined />, label: 'Reports Hub', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', roles: ['ADMIN', 'ACCOUNTANT'] },
-      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', roles: ['ADMIN'] },
+      { key: '/reports', icon: <BarChartOutlined />, label: 'Reports Hub', permission: 'REPORTS_VIEW' },
+      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', permission: 'REPORTS_VIEW' },
+      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', permission: 'REPORTS_VIEW' },
+      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', permission: 'REPORTS_VIEW' },
+      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', permission: 'REPORTS_VIEW' },
+      { key: '/reports/audit', icon: <AuditOutlined />, label: 'Audit Report', permission: undefined },
     ],
   },
   {
     section: 'INCENTIVES',
     items: [
-      { key: '/incentives/targets', icon: <TrophyOutlined />, label: 'Brand Targets', roles: ['ADMIN'] },
-      { key: '/incentives/slabs', icon: <LineChartOutlined />, label: 'Incentive Slabs', roles: ['ADMIN'] },
-      { key: '/incentives/credits', icon: <WalletOutlined />, label: 'Incentive Credits', roles: ['ADMIN'] },
+      { key: '/incentives/targets', icon: <TrophyOutlined />, label: 'Brand Targets', permission: 'INCENTIVES_VIEW' },
+      { key: '/incentives/collection/targets', icon: <WalletOutlined />, label: 'Collection Targets', permission: 'INCENTIVES_VIEW' },
+      { key: '/incentives/slabs', icon: <LineChartOutlined />, label: 'Incentive Slabs', permission: 'INCENTIVES_VIEW' },
+      { key: '/incentives/credits', icon: <WalletOutlined />, label: 'Incentive Credits', permission: 'INCENTIVES_VIEW' },
     ],
   },
   {
     section: 'FIELD OPS',
     items: [
-      { key: '/attendance', icon: <ClockCircleOutlined />, label: 'Attendance', roles: ['ADMIN'] },
-      { key: '/gate-pass', icon: <EyeOutlined />, label: 'Gate Pass', roles: ['ADMIN'] },
-      { key: '/field-monitor', icon: <GlobalOutlined />, label: 'Field Monitor', roles: ['ADMIN'] },
+      { key: '/attendance', icon: <ClockCircleOutlined />, label: 'Attendance', permission: 'ATTENDANCE_VIEW' },
+      { key: '/field-monitor', icon: <GlobalOutlined />, label: 'Field Monitor', permission: 'FIELD_MONITOR_VIEW' },
     ],
   },
   {
     section: 'SETUP',
     items: [
-      { key: '/suppliers', icon: <ShopOutlined />, label: 'Suppliers', roles: ['ADMIN'] },
-      { key: '/vehicles', icon: <CarOutlined />, label: 'Vehicles', roles: ['ADMIN'] },
-      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', roles: ['ADMIN'] },
-      { key: '/users', icon: <UserOutlined />, label: 'Team', roles: ['ADMIN'] },
-      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', roles: ['ADMIN'] },
-      { key: '/import', icon: <UploadOutlined />, label: 'Data Import', roles: ['ADMIN'] },
-      { key: '/settings/company', icon: <SettingOutlined />, label: 'Company Settings', roles: ['ADMIN'] },
+      { key: '/vehicles', icon: <CarOutlined />, label: 'Vehicles', permission: 'VEHICLES_VIEW' },
+      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', permission: undefined },
+      { key: '/users', icon: <UserOutlined />, label: 'Team', permission: undefined },
+      { key: '/roles', icon: <SettingOutlined />, label: 'Roles', permission: undefined },
+      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', permission: undefined },
+      { key: '/import', icon: <UploadOutlined />, label: 'Data Import', permission: 'IMPORT_VIEW' },
+      { key: '/settings/company', icon: <SettingOutlined />, label: 'Company Settings', permission: undefined },
     ],
   },
 ];
@@ -113,6 +114,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/dashboard': ['Dashboard'],
   '/products': ['Catalog', 'Products'],
   '/orders': ['Operations', 'Orders'],
+  '/counter-sale': ['Operations', 'Counter Sale'],
   '/customers': ['CRM', 'Customers'],
   '/routes': ['Setup', 'Routes'],
   '/users': ['Setup', 'Team'],
@@ -136,7 +138,9 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/reports/sales': ['Finance', 'Reports', 'Sales Analysis'],
   '/reports/ledger': ['Finance', 'Reports', 'Ledger'],
   '/reports/targets': ['Finance', 'Reports', 'Targets'],
+  '/reports/audit': ['Reports', 'Audit Report'],
   '/incentives/targets': ['Incentives', 'Brand Targets'],
+  '/incentives/collection/targets': ['Incentives', 'Collection Targets'],
   '/incentives/slabs': ['Incentives', 'Incentive Slabs'],
   '/incentives/credits': ['Incentives', 'Incentive Credits'],
   '/suppliers': ['Setup', 'Suppliers'],
@@ -158,12 +162,16 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const role = user.role || 'GUEST';
-  const roleCfg = ROLE_CONFIG[role] || { label: role, color: '#6b7280' };
+  const roleName = user.roleName || role;
+  const roleCfg = ROLE_CONFIG[role] || { label: roleName, color: '#4361ee' };
   const sideW = collapsed ? SIDEBAR_COLLAPSED_W : SIDEBAR_W;
+
+  const isItemVisible = (item: { permission?: string }) =>
+    item.permission === undefined ? isAdmin() : hasPermission(item.permission);
 
   const menuItems = NAV_SECTIONS.flatMap(section =>
     section.items
-      .filter(item => !item.roles || item.roles.includes(role))
+      .filter(item => isItemVisible(item))
       .map(item => ({
         key: item.key,
         icon: item.icon,
@@ -173,7 +181,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const renderNavExpanded = (onLinkClick?: () => void) =>
     NAV_SECTIONS.map(section => {
-      const filtered = section.items.filter(item => !item.roles || item.roles.includes(role));
+      const filtered = section.items.filter(item => isItemVisible(item));
       if (filtered.length === 0) return null;
       return (
         <div key={section.section} style={{ marginBottom: 4 }}>

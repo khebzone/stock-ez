@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DatePicker, Select, Skeleton, Tabs, Button } from 'antd';
-import { UserOutlined, ShopOutlined, DownloadOutlined } from '@ant-design/icons';
-import { exportToCSV } from '../../components/TableToolbar';
+import { UserOutlined, ShopOutlined, FileExcelOutlined } from '@ant-design/icons';
+import { exportToXLSX } from '../../components/TableToolbar';
 import dayjs from 'dayjs';
 import { useGetCustomersQuery } from '../../store/api/customerApi';
 import { useGetCustomerLedgerQuery, useGetVendorLedgerQuery } from '../../store/api/reportApi';
@@ -46,8 +46,8 @@ const CustomerLedger: React.FC = () => {
         />
         {entries.length > 0 && (
           <Button
-            icon={<DownloadOutlined />}
-            onClick={() => exportToCSV(
+            icon={<FileExcelOutlined />}
+            onClick={() => exportToXLSX(
               entries.map((e: any) => ({
                 date: dayjs(e.date).format('DD MMM YYYY'),
                 description: e.description,
@@ -68,7 +68,7 @@ const CustomerLedger: React.FC = () => {
             )}
             style={{ borderRadius: 8 }}
           >
-            Export CSV
+            Export Excel
           </Button>
         )}
       </div>
@@ -182,8 +182,8 @@ const VendorLedger: React.FC = () => {
         <RangePicker value={range} onChange={v => v && setRange(v as [dayjs.Dayjs, dayjs.Dayjs])} allowClear={false} style={{ borderRadius: 10 }} />
         {vendors.length > 0 && (
           <Button
-            icon={<DownloadOutlined />}
-            onClick={() => exportToCSV(
+            icon={<FileExcelOutlined />}
+            onClick={() => exportToXLSX(
               vendors.map((v: any) => ({
                 supplier: v.supplierName,
                 entries: v.entryCount,
@@ -200,7 +200,7 @@ const VendorLedger: React.FC = () => {
             )}
             style={{ borderRadius: 8 }}
           >
-            Export CSV
+            Export Excel
           </Button>
         )}
       </div>

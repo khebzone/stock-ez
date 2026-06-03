@@ -35,7 +35,7 @@ const SetTargetModal: React.FC<SetTargetModalProps> = ({ open, onClose, month, y
   const [createTarget, { isLoading }] = useCreateTargetMutation();
   const { data: usersData } = useGetUsersQuery();
   const allUsers: any[] = usersData?.data?.content || usersData?.data || [];
-  const salesUsers = allUsers.filter((u: any) => u.role === 'SALES' && u.active !== false);
+  const salesUsers = allUsers.filter((u: any) => u.active !== false && u.roleName !== 'ADMIN' && u.roleName !== 'SUPER_ADMIN');
 
   React.useEffect(() => {
     if (open && existing) {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Form, Input, InputNumber, Select, Modal, Skeleton, message, Grid } from 'antd';
-import { DownloadOutlined, WalletOutlined, ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
+import { FileExcelOutlined, WalletOutlined, ArrowLeftOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   useGetOutstandingSummaryQuery,
@@ -9,7 +9,7 @@ import {
   useCollectPaymentMutation,
 } from '../../store/api/paymentApi';
 import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
-import { exportToCSV } from '../../components/TableToolbar';
+import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
 
 const { useBreakpoint } = Grid;
@@ -157,9 +157,9 @@ const CustomerOutstandingPage: React.FC = () => {
           {!isMobile && (
             <Button
               type="primary"
-              icon={<DownloadOutlined />}
+              icon={<FileExcelOutlined />}
               disabled={summaries.length === 0}
-              onClick={() => exportToCSV(
+              onClick={() => exportToXLSX(
                 summaries.map((s: any) => ({
                   customer: s.businessName,
                   owner: s.ownerName,

@@ -25,7 +25,7 @@ public class VehicleController {
     private final VehicleService vehicleService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_CREATE')")
     public ResponseEntity<ApiResponse<VehicleDtos.VehicleResponse>> create(
             @Valid @RequestBody VehicleDtos.CreateVehicleRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -34,21 +34,21 @@ public class VehicleController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_VIEW')")
     public ResponseEntity<ApiResponse<List<VehicleDtos.VehicleResponse>>> getAll(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(vehicleService.getAll(tenantId)));
     }
 
     @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_VIEW')")
     public ResponseEntity<ApiResponse<List<VehicleDtos.VehicleResponse>>> getActive(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(vehicleService.getActive(tenantId)));
     }
 
     @GetMapping("/expiry-alerts")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_VIEW')")
     public ResponseEntity<ApiResponse<List<VehicleDtos.ExpiryAlert>>> expiryAlerts(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "30") int days) {
@@ -56,7 +56,7 @@ public class VehicleController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_EDIT')")
     public ResponseEntity<ApiResponse<VehicleDtos.VehicleResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody VehicleDtos.UpdateVehicleRequest request,

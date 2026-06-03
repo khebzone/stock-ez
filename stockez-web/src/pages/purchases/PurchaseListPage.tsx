@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Skeleton, Input, Button, DatePicker, Form, Select, message, Table, Tabs, InputNumber, Grid } from 'antd';
 import {
   PlusOutlined, InboxOutlined, WarningOutlined,
-  SearchOutlined, DownloadOutlined, PrinterOutlined, EditOutlined, HistoryOutlined,
+  SearchOutlined, FileExcelOutlined, PrinterOutlined, EditOutlined, HistoryOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { useGetPurchasesQuery, useGetNearExpiryAlertsQuery, useUpdatePurchaseMutation, useGetPurchaseAuditQuery } from '../../store/api/purchaseApi';
 import { useGetSuppliersQuery } from '../../store/api/supplierApi';
-import { exportToCSV } from '../../components/TableToolbar';
+import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
 import PurchaseEntryPage from './PurchaseEntryPage';
 import PurchasePrint from '../../components/PurchasePrint';
@@ -115,7 +115,7 @@ const PurchaseListPage: React.FC = () => {
       products: p.items?.length || 0,
       createdByName: p.createdBy?.fullName || '',
     }));
-    exportToCSV(data, cols, `purchases-${new Date().toISOString().split('T')[0]}`);
+    exportToXLSX(data, cols, `purchases-${new Date().toISOString().split('T')[0]}`);
   };
 
   const handleOpenEdit = () => {
@@ -225,12 +225,12 @@ const PurchaseListPage: React.FC = () => {
           </Button>
         )}
         <Button
-          icon={<DownloadOutlined />}
+          icon={<FileExcelOutlined />}
           onClick={handleExport}
           disabled={purchases.length === 0}
           style={{ borderRadius: 8, marginLeft: 'auto' }}
         >
-          Export CSV
+          Export Excel
         </Button>
       </div>
 

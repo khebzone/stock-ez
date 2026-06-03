@@ -98,6 +98,15 @@ public class RouteAllocationDtos {
     }
 
     @Data
+    public static class MyTodayAllocationResponse {
+        private boolean allocated;
+        private boolean isSales;
+        private boolean isDelivery;
+        private boolean isWarehouse;
+        private RouteAllocationResponse allocation;
+    }
+
+    @Data
     public static class DailyAllocationSummary {
         private LocalDate date;
         private List<RouteAllocationResponse> allocations;

@@ -1,5 +1,7 @@
 package com.stockez.api.module.user.service;
 
+import com.stockez.api.module.role.entity.CustomRole;
+import com.stockez.api.module.role.repository.CustomRoleRepository;
 import com.stockez.api.module.user.dto.UserDtos;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
@@ -24,13 +26,11 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
+    private final CustomRoleRepository customRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
-    public UserDtos.UserResponse createUser(UserDtos.CreateUserRequest request, UUID tenantId, User.UserRole creatorRole) {
-        if (request.getRole() == User.UserRole.SUPER_ADMIN) {
-            throw new BusinessException("Cannot create SUPER_ADMIN via this endpoint", "FORBIDDEN_ROLE");
-        }
+    public UserDtos.UserResponse createUser(UserDtos.CreateUserRequest request, UUID tenantId) {
         if (userRepository.existsByPhoneAndTenantId(request.getPhone(), tenantId)) {
             throw new BusinessException("Phone number already registered in this organization", "PHONE_EXISTS");
         }
@@ -38,13 +38,20 @@ public class UserService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
 
+        CustomRole customRole = null;
+        if (request.getCustomRoleId() != null) {
+            customRole = customRoleRepository.findByIdAndTenantId(request.getCustomRoleId(), tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Role", request.getCustomRoleId().toString()));
+        }
+
         User user = User.builder()
                 .tenant(tenant)
                 .fullName(request.getFullName())
                 .phone(request.getPhone())
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
+                .role(User.UserRole.STAFF)
+                .customRole(customRole)
                 .salary(request.getSalary())
                 .employmentType(request.getEmploymentType())
                 .mustChangePassword(false)
@@ -52,7 +59,7 @@ public class UserService {
 
         User saved = userRepository.save(user);
         auditService.record(tenantId, "USER", saved.getId(), "CREATED",
-                "User " + saved.getFullName() + " (" + saved.getRole().name() + ") created");
+                "User " + saved.getFullName() + " (" + (customRole != null ? customRole.getName() : "No role") + ") created");
         return toResponse(saved);
     }
 
@@ -65,7 +72,6 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public Page<UserDtos.UserResponse> getAllUsers(UUID tenantId, boolean includeInactive, Pageable pageable) {
-        // Never expose SUPER_ADMIN on the tenant's user management page — it's a platform-level account
         if (includeInactive) {
             return userRepository.findByTenantIdAndRoleNot(tenantId, User.UserRole.SUPER_ADMIN, pageable).map(this::toResponse);
         }
@@ -75,11 +81,18 @@ public class UserService {
     public UserDtos.UserResponse updateUser(UUID id, UserDtos.UpdateUserRequest request, UUID tenantId) {
         User user = userRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", id.toString()));
+
         user.setFullName(request.getFullName());
         user.setEmail(request.getEmail());
-        if (request.getRole() != null && request.getRole() != User.UserRole.SUPER_ADMIN) {
-            user.setRole(request.getRole());
+
+        if (request.getCustomRoleId() != null) {
+            CustomRole customRole = customRoleRepository.findByIdAndTenantId(request.getCustomRoleId(), tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Role", request.getCustomRoleId().toString()));
+            user.setCustomRole(customRole);
+        } else if (user.getRole() != User.UserRole.ADMIN && user.getRole() != User.UserRole.SUPER_ADMIN) {
+            user.setCustomRole(null);
         }
+
         if (request.getActive() != null) {
             user.setActive(request.getActive());
         }
@@ -138,7 +151,12 @@ public class UserService {
         res.setFullName(user.getFullName());
         res.setPhone(user.getPhone());
         res.setEmail(user.getEmail());
-        res.setRole(user.getRole());
+        if (user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN) {
+            res.setRoleName(user.getRole().name());
+        } else if (user.getCustomRole() != null) {
+            res.setRoleName(user.getCustomRole().getName());
+            res.setCustomRoleId(user.getCustomRole().getId());
+        }
         res.setProfileImageUrl(user.getProfileImageUrl());
         res.setActive(user.isActive());
         res.setSalary(user.getSalary());

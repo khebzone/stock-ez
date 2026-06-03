@@ -3,6 +3,7 @@ import { Form, Input, Button, Modal } from 'antd';
 import { UserOutlined, LockOutlined, CloseOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useLoginMutation } from '../../store/api/authApi';
+import { getDefaultRoute } from '../../utils/permissions';
 
 const LoginPage: React.FC = () => {
   const [login, { isLoading }] = useLoginMutation();
@@ -41,18 +42,7 @@ const LoginPage: React.FC = () => {
         localStorage.setItem('tenantId', response.data.user.tenantId);
         localStorage.setItem('userId', response.data.user.id);
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        const role = response.data.user.role;
-        if (role === 'SALES') {
-          navigate('/sales/dashboard');
-        } else if (role === 'INVOICE') {
-          navigate('/invoice/approver');
-        } else if (role === 'DELIVERY') {
-          navigate('/delivery/dashboard');
-        } else if (role === 'WAREHOUSE') {
-          navigate('/orders');
-        } else {
-          navigate('/dashboard');
-        }
+        navigate(getDefaultRoute());
       } else {
         setLoginError(response.message || 'Login failed');
       }

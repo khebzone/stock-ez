@@ -37,8 +37,8 @@ public class SupplierController {
     private final SupplierExcelService supplierExcelService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "List suppliers [ADMIN, WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_VIEW')")
+    @Operation(summary = "List suppliers")
     public ResponseEntity<ApiResponse<PagedResponse<SupplierDtos.SupplierResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) String search,
@@ -50,8 +50,8 @@ public class SupplierController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create supplier [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_CREATE')")
+    @Operation(summary = "Create supplier")
     public ResponseEntity<ApiResponse<SupplierDtos.SupplierResponse>> create(
             @Valid @RequestBody SupplierDtos.CreateSupplierRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -60,7 +60,7 @@ public class SupplierController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_VIEW')")
     @Operation(summary = "Get supplier by ID")
     public ResponseEntity<ApiResponse<SupplierDtos.SupplierResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -68,8 +68,8 @@ public class SupplierController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Update supplier [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_EDIT')")
+    @Operation(summary = "Update supplier")
     public ResponseEntity<ApiResponse<SupplierDtos.SupplierResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody SupplierDtos.UpdateSupplierRequest request,
@@ -78,8 +78,8 @@ public class SupplierController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Deactivate supplier [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_DELETE')")
+    @Operation(summary = "Deactivate supplier")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         supplierService.deactivate(id, tenantId);
@@ -87,8 +87,8 @@ public class SupplierController {
     }
 
     @GetMapping("/export")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Export suppliers to Excel [ADMIN, WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_VIEW')")
+    @Operation(summary = "Export suppliers to Excel")
     public ResponseEntity<byte[]> export(@RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
         byte[] data = supplierExcelService.exportSuppliers(tenantId);
         String filename = "suppliers-" + LocalDate.now() + ".xlsx";
@@ -100,8 +100,8 @@ public class SupplierController {
     }
 
     @GetMapping("/import/template")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Download import template [ADMIN, WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Download import template [ADMIN]")
     public ResponseEntity<byte[]> template(@RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
         byte[] data = supplierExcelService.downloadTemplate();
         return ResponseEntity.ok()
@@ -112,8 +112,8 @@ public class SupplierController {
     }
 
     @PostMapping("/import")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Import suppliers from Excel [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('IMPORT_EXECUTE')")
+    @Operation(summary = "Import suppliers from Excel")
     public ResponseEntity<ApiResponse<SupplierDtos.ImportResult>> importExcel(
             @RequestParam("file") MultipartFile file,
             @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {

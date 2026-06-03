@@ -30,8 +30,8 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create a new product [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PRODUCTS_CREATE')")
+    @Operation(summary = "Create a new product")
     public ResponseEntity<ApiResponse<ProductDtos.ProductResponse>> create(
             @Valid @RequestBody ProductDtos.CreateProductRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -40,7 +40,7 @@ public class ProductController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE','WAREHOUSE','DELIVERY')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "List products with optional search and category filter")
     public ResponseEntity<ApiResponse<PagedResponse<ProductDtos.ProductResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -65,7 +65,7 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE','WAREHOUSE','DELIVERY')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get product by ID")
     public ResponseEntity<ApiResponse<ProductDtos.ProductResponse>> getById(
             @PathVariable UUID id,
@@ -74,8 +74,8 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Update product [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PRODUCTS_EDIT')")
+    @Operation(summary = "Update product")
     public ResponseEntity<ApiResponse<ProductDtos.ProductResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody ProductDtos.UpdateProductRequest request,
@@ -84,8 +84,8 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Soft delete product [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PRODUCTS_DELETE')")
+    @Operation(summary = "Soft delete product")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -94,14 +94,14 @@ public class ProductController {
     }
 
     @GetMapping("/categories")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get all product categories")
     public ResponseEntity<ApiResponse<List<String>>> categories(@RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(productService.getCategories(tenantId)));
     }
 
     @GetMapping("/brands")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get all product brands")
     public ResponseEntity<ApiResponse<List<String>>> brands(@RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(productService.getBrands(tenantId)));

@@ -27,8 +27,8 @@ public class RouteAllocationController {
     private final RouteAllocationService allocationService;
 
     @PostMapping("/sales")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update Sales Gate Pass [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Create or update Sales Gate Pass")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> allocateSales(
             @Valid @RequestBody RouteAllocationDtos.AllocateSalesRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -37,8 +37,8 @@ public class RouteAllocationController {
     }
 
     @PostMapping("/delivery")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update Delivery Gate Pass [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Create or update Delivery Gate Pass")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> allocateDelivery(
             @Valid @RequestBody RouteAllocationDtos.AllocateDeliveryRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -47,8 +47,8 @@ public class RouteAllocationController {
     }
 
     @PostMapping("/warehouse")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update Warehouse Gate Pass [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Create or update Warehouse Gate Pass")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> allocateWarehouse(
             @Valid @RequestBody RouteAllocationDtos.AllocateWarehouseRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -57,8 +57,8 @@ public class RouteAllocationController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update full route allocation [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Create or update full route allocation")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> allocate(
             @Valid @RequestBody RouteAllocationDtos.AllocateRouteRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -67,7 +67,7 @@ public class RouteAllocationController {
     }
 
     @GetMapping("/date/{date}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_VIEW')")
     @Operation(summary = "Get all gate passes for a specific date")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.DailyAllocationSummary>> getForDate(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -76,7 +76,7 @@ public class RouteAllocationController {
     }
 
     @GetMapping("/route/{routeId}/date/{date}")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','DELIVERY')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_VIEW')")
     @Operation(summary = "Get allocation for a specific route and date")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> getForRouteAndDate(
             @PathVariable UUID routeId,
@@ -86,13 +86,12 @@ public class RouteAllocationController {
     }
 
     @GetMapping("/my-today")
-    @PreAuthorize("hasAnyRole('SALES','DELIVERY')")
-    @Operation(summary = "Get today's gate pass for the current user")
-    public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> getMyToday(
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
+    @Operation(summary = "Get today's gate pass and role for the current user")
+    public ResponseEntity<ApiResponse<RouteAllocationDtos.MyTodayAllocationResponse>> getMyToday(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
-        RouteAllocationDtos.RouteAllocationResponse result = allocationService.getMyTodayAllocation(tenantId, userId);
-        return ResponseEntity.ok(ApiResponse.success(result));
+        return ResponseEntity.ok(ApiResponse.success(allocationService.getMyTodayAllocation(tenantId, userId)));
     }
 
     @GetMapping("/delivery-summary")
@@ -116,8 +115,8 @@ public class RouteAllocationController {
     }
 
     @GetMapping("/monitor")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get field activity summary for admin monitoring [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('FIELD_MONITOR_VIEW')")
+    @Operation(summary = "Get field activity summary for admin monitoring")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.FieldActivityResponse>> getFieldActivity(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

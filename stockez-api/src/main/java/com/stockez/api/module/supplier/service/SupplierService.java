@@ -141,6 +141,7 @@ public class SupplierService {
         r.address = s.getAddress(); r.city = s.getCity(); r.state = s.getState();
         r.gstin = s.getGstin(); r.fssaiNumber = s.getFssaiNumber();
         r.bankName = s.getBankName(); r.bankAccount = s.getBankAccount(); r.bankIfsc = s.getBankIfsc();
+        r.openingBalance = s.getOpeningBalance();
         r.active = s.isActive(); r.createdAt = s.getCreatedAt();
         return r;
     }

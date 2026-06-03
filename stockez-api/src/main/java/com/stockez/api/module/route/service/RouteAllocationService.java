@@ -188,21 +188,29 @@ public class RouteAllocationService {
     }
 
     @Transactional(readOnly = true)
-    public RouteAllocationDtos.RouteAllocationResponse getMyTodayAllocation(UUID tenantId, UUID userId) {
+    public RouteAllocationDtos.MyTodayAllocationResponse getMyTodayAllocation(UUID tenantId, UUID userId) {
         LocalDate today = LocalDate.now();
-        List<RouteAllocation> salesAllocations = allocationRepository
-                .findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, today);
-        if (!salesAllocations.isEmpty()) return toResponse(salesAllocations.get(0));
 
-        List<RouteAllocation> deliveryAllocations = allocationRepository
-                .findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, today);
-        if (!deliveryAllocations.isEmpty()) return toResponse(deliveryAllocations.get(0));
+        List<RouteAllocation> salesAllocations     = allocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, today);
+        List<RouteAllocation> deliveryAllocations  = allocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, today);
+        List<RouteAllocation> warehouseAllocations = allocationRepository.findByTenantIdAndWarehousePersonIdAndAllocationDate(tenantId, userId, today);
 
-        List<RouteAllocation> warehouseAllocations = allocationRepository
-                .findByTenantIdAndWarehousePersonIdAndAllocationDate(tenantId, userId, today);
-        if (!warehouseAllocations.isEmpty()) return toResponse(warehouseAllocations.get(0));
+        boolean isSales     = !salesAllocations.isEmpty();
+        boolean isDelivery  = !deliveryAllocations.isEmpty();
+        boolean isWarehouse = !warehouseAllocations.isEmpty();
 
-        return null;
+        RouteAllocationDtos.RouteAllocationResponse detail = null;
+        if (isSales)          detail = toResponse(salesAllocations.get(0));
+        else if (isDelivery)  detail = toResponse(deliveryAllocations.get(0));
+        else if (isWarehouse) detail = toResponse(warehouseAllocations.get(0));
+
+        RouteAllocationDtos.MyTodayAllocationResponse res = new RouteAllocationDtos.MyTodayAllocationResponse();
+        res.setAllocated(isSales || isDelivery || isWarehouse);
+        res.setSales(isSales);
+        res.setDelivery(isDelivery);
+        res.setWarehouse(isWarehouse);
+        res.setAllocation(detail);
+        return res;
     }
 
     @Transactional(readOnly = true)

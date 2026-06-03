@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -17,11 +18,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
-/**
- * JWT Authentication Filter — runs once per every request.
- * Validates Authorization header Bearer token and sets SecurityContext.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -55,15 +53,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userDetailsService.loadUserByUsername(phone);
 
+            List<SimpleGrantedAuthority> authorities = buildAuthorities(token);
+
             UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
+                    new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
             SecurityContextHolder.getContext().setAuthentication(authToken);
-            log.debug("Authenticated user: {} with role: {}", phone, jwtService.extractRole(token));
+            log.debug("Authenticated user: {} role: {}", phone, jwtService.extractRole(token));
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private List<SimpleGrantedAuthority> buildAuthorities(String token) {
+        String role = jwtService.extractRole(token);
+
+        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)) {
+            return List.of(new SimpleGrantedAuthority("ROLE_" + role));
+        }
+
+        List<String> permissions = jwtService.extractPermissions(token);
+        if (permissions.contains("ALL")) {
+            return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        }
+
+        return permissions.stream()
+                .map(SimpleGrantedAuthority::new)
+                .map(a -> (SimpleGrantedAuthority) a)
+                .toList();
     }
 }

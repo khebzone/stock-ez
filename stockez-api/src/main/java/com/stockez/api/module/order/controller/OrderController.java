@@ -33,8 +33,8 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SALES','INVOICE','ADMIN')")
-    @Operation(summary = "Create a new order [SALES/INVOICE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_CREATE','INVOICE_APPROVE')")
+    @Operation(summary = "Create a new order")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> create(
             @Valid @RequestBody OrderDtos.CreateOrderRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -44,8 +44,8 @@ public class OrderController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','INVOICE','WAREHOUSE','DELIVERY')")
-    @Operation(summary = "List orders with optional filters [ADMIN/INVOICE/WAREHOUSE/DELIVERY]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_VIEW','INVOICE_VIEW','DELIVERY_VIEW','PICKLIST_VIEW')")
+    @Operation(summary = "List orders with optional filters")
     public ResponseEntity<ApiResponse<?>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) Order.OrderStatus status,
@@ -59,7 +59,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INVOICE','WAREHOUSE','DELIVERY','SALES')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_VIEW','INVOICE_VIEW','DELIVERY_VIEW','PICKLIST_VIEW')")
     @Operation(summary = "Get order by ID")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> getById(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -67,8 +67,8 @@ public class OrderController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('INVOICE','ADMIN')")
-    @Operation(summary = "Edit order items (only while SUBMITTED) [INVOICE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_EDIT','INVOICE_APPROVE')")
+    @Operation(summary = "Edit order items (only while SUBMITTED)")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody OrderDtos.UpdateOrderRequest request,
@@ -77,8 +77,8 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('INVOICE','ADMIN')")
-    @Operation(summary = "Approve order and generate bill [INVOICE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INVOICE_APPROVE')")
+    @Operation(summary = "Approve order and generate bill")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> approve(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -87,16 +87,16 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/start-preparing")
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
-    @Operation(summary = "Start picking items [WAREHOUSE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_UPDATE')")
+    @Operation(summary = "Start picking items")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> startPreparing(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(orderService.startPreparing(id, tenantId), "Order preparation started"));
     }
 
     @PostMapping("/{id}/verify-items")
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
-    @Operation(summary = "Verify item quantities [WAREHOUSE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_UPDATE')")
+    @Operation(summary = "Verify item quantities")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> verifyItems(
             @PathVariable UUID id,
             @Valid @RequestBody OrderDtos.VerifyItemsRequest request,
@@ -105,8 +105,8 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/mark-prepared")
-    @PreAuthorize("hasAnyRole('WAREHOUSE','ADMIN')")
-    @Operation(summary = "Mark order as prepared [WAREHOUSE/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_UPDATE')")
+    @Operation(summary = "Mark order as prepared")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> markPrepared(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(orderService.markPrepared(id, tenantId), "Order prepared"));
@@ -123,24 +123,24 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/dispatch")
-    @PreAuthorize("hasAnyRole('DELIVERY','ADMIN')")
-    @Operation(summary = "Mark order dispatched [DELIVERY/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELIVERY_UPDATE')")
+    @Operation(summary = "Mark order dispatched")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> dispatch(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(orderService.markDispatched(id, tenantId), "Order dispatched"));
     }
 
     @PostMapping("/{id}/deliver")
-    @PreAuthorize("hasAnyRole('DELIVERY','ADMIN')")
-    @Operation(summary = "Mark order delivered [DELIVERY/ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELIVERY_UPDATE')")
+    @Operation(summary = "Mark order delivered")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> deliver(
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(orderService.markDelivered(id, tenantId), "Order delivered"));
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN','SALES','INVOICE')")
-    @Operation(summary = "Cancel/reject order [ADMIN/SALES/INVOICE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_CANCEL','INVOICE_APPROVE')")
+    @Operation(summary = "Cancel/reject order")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> cancel(
             @PathVariable UUID id,
             @Valid @RequestBody OrderDtos.UpdateStatusRequest request,
@@ -148,9 +148,20 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(orderService.cancelOrder(id, request.getNotes(), tenantId), "Order cancelled"));
     }
 
+    @PostMapping("/counter-sale")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_CREATE','INVOICE_APPROVE')")
+    @Operation(summary = "Create a counter sale — order immediately delivered with optional inline payment")
+    public ResponseEntity<ApiResponse<OrderDtos.CounterSaleResponse>> counterSale(
+            @Valid @RequestBody OrderDtos.CounterSaleRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(orderService.counterSale(request, userId, tenantId), "Counter sale completed"));
+    }
+
     @GetMapping("/my-orders")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Today's orders for sales person [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ORDERS_VIEW')")
+    @Operation(summary = "Today's orders for sales person")
     public ResponseEntity<ApiResponse<List<OrderDtos.OrderResponse>>> myOrders(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
@@ -158,8 +169,8 @@ public class OrderController {
     }
 
     @GetMapping("/route-picklist")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Get consolidated pick list grouped by route for a given date [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('STOCK_VIEW','PICKLIST_VIEW')")
+    @Operation(summary = "Get consolidated pick list grouped by route for a given date")
     public ResponseEntity<ApiResponse<List<OrderDtos.RoutePicklistResponse>>> routePicklist(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId,
@@ -171,8 +182,8 @@ public class OrderController {
     }
 
     @PostMapping("/route-start-preparing")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Batch-start preparing all APPROVED orders for a route on a date [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_UPDATE')")
+    @Operation(summary = "Batch-start preparing all APPROVED orders for a route on a date")
     public ResponseEntity<ApiResponse<String>> routeStartPreparing(
             @Valid @RequestBody OrderDtos.BatchRouteRequest req,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -181,8 +192,8 @@ public class OrderController {
     }
 
     @PostMapping("/route-mark-prepared")
-    @PreAuthorize("hasAnyRole('ADMIN','WAREHOUSE')")
-    @Operation(summary = "Batch-mark all PREPARING orders for a route as PREPARED [ADMIN/WAREHOUSE]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_UPDATE')")
+    @Operation(summary = "Batch-mark all PREPARING orders for a route as PREPARED")
     public ResponseEntity<ApiResponse<String>> routeMarkPrepared(
             @Valid @RequestBody OrderDtos.BatchRouteRequest req,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -191,8 +202,8 @@ public class OrderController {
     }
 
     @GetMapping("/my-deliveries")
-    @PreAuthorize("hasRole('DELIVERY')")
-    @Operation(summary = "Today's deliveries for delivery person [DELIVERY]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELIVERY_VIEW')")
+    @Operation(summary = "Today's deliveries for delivery person")
     public ResponseEntity<ApiResponse<List<OrderDtos.OrderResponse>>> myDeliveries(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {

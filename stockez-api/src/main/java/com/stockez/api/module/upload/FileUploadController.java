@@ -35,7 +35,7 @@ public class FileUploadController {
     private final OrphanedUploadCleanupService cleanupService;
 
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN','SALES')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('SALES_ORDERS','MANAGE_CUSTOMERS')")
     @Operation(summary = "Upload an image (JPG/PNG, max 5MB)")
     public ResponseEntity<ApiResponse<Map<String, String>>> upload(
             @RequestParam("file") MultipartFile file) throws IOException {

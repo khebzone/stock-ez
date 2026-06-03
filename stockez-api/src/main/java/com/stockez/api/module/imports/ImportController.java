@@ -18,7 +18,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/import")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasRole('ADMIN') or hasAuthority('IMPORT_EXECUTE')")
 @SecurityRequirement(name = "Bearer Authentication")
 @Tag(name = "Import", description = "Bulk data import via Excel")
 public class ImportController {

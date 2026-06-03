@@ -1,6 +1,5 @@
--- DistroIQ V2 — Minimal Seed Data
--- Only the platform SUPER_ADMIN and one tenant with its Admin user.
--- All other data (team, routes, customers, products) must be created through the app.
+-- StockEz V2 — Seed Data
+-- Tenant + Admin user only. Custom roles are created by each tenant admin.
 
 -- Default development tenant
 INSERT INTO tenants (id, name, schema_name, subdomain, owner_name, phone, email, address, city, state, status)
@@ -189,3 +188,4 @@ VALUES (
     TRUE,
     FALSE
 ) ON CONFLICT DO NOTHING;
+

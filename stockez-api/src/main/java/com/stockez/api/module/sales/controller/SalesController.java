@@ -26,8 +26,8 @@ public class SalesController {
     private final SalesService salesService;
 
     @GetMapping("/my-allocation")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Get today's route allocation for the calling sales person [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ORDERS_VIEW')")
+    @Operation(summary = "Get today's route allocation for the calling sales person")
     public ResponseEntity<ApiResponse<SalesDtos.MyAllocationResponse>> getMyAllocation(
             @RequestHeader("X-User-Id") UUID salesPersonId,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -35,8 +35,8 @@ public class SalesController {
     }
 
     @GetMapping("/my-customers")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Get today's customers for the calling sales person [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_VIEW','ORDERS_CREATE')")
+    @Operation(summary = "Get today's customers for the calling sales person")
     public ResponseEntity<ApiResponse<List<SalesDtos.CustomerSummary>>> getMyCustomers(
             @RequestHeader("X-User-Id") UUID salesPersonId,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -44,8 +44,8 @@ public class SalesController {
     }
 
     @GetMapping("/my-history")
-    @PreAuthorize("hasRole('SALES')")
-    @Operation(summary = "Get daily activity history for the calling sales person [SALES]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ORDERS_VIEW')")
+    @Operation(summary = "Get daily activity history for the calling sales person")
     public ResponseEntity<ApiResponse<SalesDtos.MyHistoryResponse>> getMyHistory(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestHeader("X-User-Id") UUID salesPersonId,

@@ -1,8 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
-import SalesLayout from './layouts/SalesLayout';
-import DeliveryLayout from './layouts/DeliveryLayout';
+import FieldLayout from './layouts/FieldLayout';
 import SuperAdminLayout from './layouts/SuperAdminLayout';
 import TenantsPage from './pages/superadmin/TenantsPage';
 import LoginPage from './pages/auth/LoginPage';
@@ -11,6 +10,7 @@ import ProductsPage from './pages/products/ProductsPage';
 import CustomersPage from './pages/customers/CustomersPage';
 import RoutesPage from './pages/routes/RoutesPage';
 import UsersPage from './pages/users/UsersPage';
+import RolesPage from './pages/roles/RolesPage';
 import OrdersPage from './pages/orders/OrdersPage';
 import PaymentsPage from './pages/payments/PaymentsPage';
 import ReportsPage from './pages/reports/ReportsPage';
@@ -48,9 +48,12 @@ import AttendanceCheckInPage from './pages/attendance/AttendanceCheckInPage';
 import BrandTargetPage from './pages/incentives/BrandTargetPage';
 import IncentiveSlabPage from './pages/incentives/IncentiveSlabPage';
 import IncentiveCreditsPage from './pages/incentives/IncentiveCreditsPage';
+import CollectionTargetPage from './pages/incentives/CollectionTargetPage';
 import SalesIncentivePage from './pages/sales/SalesIncentivePage';
+import CounterSalePage from './pages/countersale/CounterSalePage';
+import AuditReportPage from './pages/reports/AuditReportPage';
+import { isAdmin, isFieldUser, getDefaultRoute } from './utils/permissions';
 
-// ── Token validity check (expiry decoded from JWT payload) ──
 const isTokenValid = (token: string | null): boolean => {
   if (!token) return false;
   try {
@@ -69,32 +72,24 @@ const clearAuth = () => {
   localStorage.removeItem('user');
 };
 
-// ── Protected Route for admin/regular users ──
+// Office users (admin + staff with office permissions) — desktop sidebar layout
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
   if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
   const role = JSON.parse(localStorage.getItem('user') || '{}').role;
-  if (role === 'SALES') return <Navigate to="/sales/dashboard" replace />;
-  if (role === 'DELIVERY') return <Navigate to="/delivery/dashboard" replace />;
   if (role === 'SUPER_ADMIN') return <Navigate to="/superadmin/tenants" replace />;
+  if (isFieldUser()) return <Navigate to={getDefaultRoute()} replace />;
   return <MainLayout>{children}</MainLayout>;
 };
 
-// ── Protected Route for SALES role ──
-const SalesProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Field users (sales + delivery) — mobile-first bottom nav layout
+const FieldProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
   if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
-  return <SalesLayout>{children}</SalesLayout>;
+  return <FieldLayout>{children}</FieldLayout>;
 };
 
-// ── Protected Route for DELIVERY role ──
-const DeliveryProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const token = localStorage.getItem('token');
-  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
-  return <DeliveryLayout>{children}</DeliveryLayout>;
-};
-
-// ── Protected Route for SUPER_ADMIN role ──
+// Super Admin only
 const SuperAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
   if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
@@ -103,19 +98,10 @@ const SuperAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ chi
   return <SuperAdminLayout>{children}</SuperAdminLayout>;
 };
 
-// ── Root redirect: check role after login ──
 const RootRedirect: React.FC = () => {
   const token = localStorage.getItem('token');
   if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
-
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const role = user.role;
-
-  if (role === 'SALES') return <Navigate to="/sales/dashboard" replace />;
-  if (role === 'INVOICE') return <Navigate to="/invoice/approver" replace />;
-  if (role === 'DELIVERY') return <Navigate to="/delivery/dashboard" replace />;
-  if (role === 'SUPER_ADMIN') return <Navigate to="/superadmin/tenants" replace />;
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={getDefaultRoute()} replace />;
 };
 
 const App: React.FC = () => {
@@ -124,12 +110,13 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        {/* ── Admin / General routes ── */}
+        {/* ── Office / Admin routes ── */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
         <Route path="/routes" element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+        <Route path="/roles" element={<ProtectedRoute><RolesPage /></ProtectedRoute>} />
         <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
         <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
@@ -138,70 +125,46 @@ const App: React.FC = () => {
         <Route path="/reports/ledger" element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
         <Route path="/reports/targets" element={<ProtectedRoute><TargetsPage /></ProtectedRoute>} />
         <Route path="/masters" element={<ProtectedRoute><MastersPage /></ProtectedRoute>} />
-
-        {/* ── Invoice Approver ── */}
         <Route path="/invoice/approver" element={<ProtectedRoute><InvoiceApproverPage /></ProtectedRoute>} />
-
-        {/* ── Purchases ── */}
         <Route path="/purchases" element={<ProtectedRoute><PurchaseListPage /></ProtectedRoute>} />
         <Route path="/purchases/new" element={<ProtectedRoute><PurchaseEntryPage /></ProtectedRoute>} />
         <Route path="/supplier-payments" element={<ProtectedRoute><SupplierPaymentsPage /></ProtectedRoute>} />
         <Route path="/customer-outstanding" element={<ProtectedRoute><CustomerOutstandingPage /></ProtectedRoute>} />
-
-        {/* ── Day Closure ── */}
         <Route path="/day-closure" element={<ProtectedRoute><DayClosurePage /></ProtectedRoute>} />
-
-        {/* ── Goods Return & Damage ── */}
         <Route path="/goods-return" element={<ProtectedRoute><GoodsReturnPage /></ProtectedRoute>} />
         <Route path="/stock-batches" element={<ProtectedRoute><StockBatchesPage /></ProtectedRoute>} />
-
-        {/* ── Gate Pass & Vehicles ── */}
         <Route path="/gate-pass" element={<ProtectedRoute><GatePassPage /></ProtectedRoute>} />
         <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
         <Route path="/field-monitor" element={<ProtectedRoute><FieldMonitorPage /></ProtectedRoute>} />
-
-        {/* ── Suppliers ── */}
         <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
-
-        {/* ── Expenses ── */}
         <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
-
-        {/* ── Warehouse ── */}
         <Route path="/warehouse/picklist" element={<ProtectedRoute><WarehousePicklistPage /></ProtectedRoute>} />
-
-        {/* ── Import ── */}
         <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
-
-        {/* ── Attendance ── */}
         <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
-
-        {/* ── Incentives ── */}
         <Route path="/incentives/targets" element={<ProtectedRoute><BrandTargetPage /></ProtectedRoute>} />
         <Route path="/incentives/slabs" element={<ProtectedRoute><IncentiveSlabPage /></ProtectedRoute>} />
         <Route path="/incentives/credits" element={<ProtectedRoute><IncentiveCreditsPage /></ProtectedRoute>} />
-
-        {/* ── Settings ── */}
+        <Route path="/incentives/collection/targets" element={<ProtectedRoute><CollectionTargetPage /></ProtectedRoute>} />
+        <Route path="/counter-sale" element={<ProtectedRoute><CounterSalePage /></ProtectedRoute>} />
+        <Route path="/reports/audit" element={<ProtectedRoute><AuditReportPage /></ProtectedRoute>} />
         <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
 
-        {/* ── Sales Person routes ── */}
-        <Route path="/sales/dashboard" element={<SalesProtectedRoute><SalesDashboardPage /></SalesProtectedRoute>} />
-        <Route path="/sales/route" element={<SalesProtectedRoute><SalesRoutePage /></SalesProtectedRoute>} />
-        <Route path="/sales/order" element={<SalesProtectedRoute><SalesOrderPage /></SalesProtectedRoute>} />
-        <Route path="/sales/payments" element={<SalesProtectedRoute><SalesPaymentPage /></SalesProtectedRoute>} />
-        <Route path="/sales/history" element={<SalesProtectedRoute><SalesHistoryPage /></SalesProtectedRoute>} />
-        <Route path="/sales/attendance" element={<SalesProtectedRoute><AttendanceCheckInPage /></SalesProtectedRoute>} />
-        <Route path="/sales/incentives" element={<SalesProtectedRoute><SalesIncentivePage /></SalesProtectedRoute>} />
+        {/* ── Field routes (sales + delivery combined) ── */}
+        <Route path="/sales/dashboard" element={<FieldProtectedRoute><SalesDashboardPage /></FieldProtectedRoute>} />
+        <Route path="/sales/route" element={<FieldProtectedRoute><SalesRoutePage /></FieldProtectedRoute>} />
+        <Route path="/sales/order" element={<FieldProtectedRoute><SalesOrderPage /></FieldProtectedRoute>} />
+        <Route path="/sales/payments" element={<FieldProtectedRoute><SalesPaymentPage /></FieldProtectedRoute>} />
+        <Route path="/sales/history" element={<FieldProtectedRoute><SalesHistoryPage /></FieldProtectedRoute>} />
+        <Route path="/sales/attendance" element={<FieldProtectedRoute><AttendanceCheckInPage /></FieldProtectedRoute>} />
+        <Route path="/sales/incentives" element={<FieldProtectedRoute><SalesIncentivePage /></FieldProtectedRoute>} />
+        <Route path="/delivery/dashboard" element={<FieldProtectedRoute><DeliveryDashboardPage /></FieldProtectedRoute>} />
+        <Route path="/delivery/orders" element={<FieldProtectedRoute><DeliveryOrdersPage /></FieldProtectedRoute>} />
+        <Route path="/delivery/payments" element={<FieldProtectedRoute><DeliveryPaymentsPage /></FieldProtectedRoute>} />
+        <Route path="/delivery/attendance" element={<FieldProtectedRoute><AttendanceCheckInPage /></FieldProtectedRoute>} />
 
-        {/* ── Delivery Person routes ── */}
-        <Route path="/delivery/dashboard" element={<DeliveryProtectedRoute><DeliveryDashboardPage /></DeliveryProtectedRoute>} />
-        <Route path="/delivery/orders" element={<DeliveryProtectedRoute><DeliveryOrdersPage /></DeliveryProtectedRoute>} />
-        <Route path="/delivery/payments" element={<DeliveryProtectedRoute><DeliveryPaymentsPage /></DeliveryProtectedRoute>} />
-        <Route path="/delivery/attendance" element={<DeliveryProtectedRoute><AttendanceCheckInPage /></DeliveryProtectedRoute>} />
-
-        {/* ── Super Admin routes ── */}
+        {/* ── Super Admin ── */}
         <Route path="/superadmin/tenants" element={<SuperAdminProtectedRoute><TenantsPage /></SuperAdminProtectedRoute>} />
 
-        {/* ── Root redirect ── */}
         <Route path="/" element={<RootRedirect />} />
         <Route path="*" element={<RootRedirect />} />
       </Routes>
