@@ -57,7 +57,7 @@ function drawStar(ctx: CanvasRenderingContext2D, r: number) {
 
 const ConfettiShower: React.FC<{ trigger: number; count?: number }> = ({ trigger, count = 130 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef   = useRef<number>();
+  const animRef   = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (trigger === 0) return;
