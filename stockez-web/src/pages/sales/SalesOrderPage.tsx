@@ -12,6 +12,7 @@ import { useGetProductsQuery } from '../../store/api/productApi';
 import { useCreateOrderMutation } from '../../store/api/orderApi';
 import { useGetCustomerOutstandingQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
 import { useGetRoutePlanQuery } from '../../store/api/routeApi';
+import { getProductRates, isPriceOutOfRange, defaultUnitPrice } from '../../utils/priceUtils';
 
 const { useBreakpoint } = Grid;
 
@@ -178,7 +179,7 @@ const SalesOrderPage: React.FC = () => {
         if (exists) return prev.map(i => i.productId === product.id ? { ...i, quantity: qty } : i);
         return [...prev, {
           productId: product.id, product, quantity: qty,
-          unitPrice:       product.fifoMaxSaleRate ?? product.maxSaleRate ?? product.fifoMinSaleRate ?? product.minSaleRate ?? 0,
+          unitPrice:       (() => { const r = getProductRates(product); return defaultUnitPrice(r.min, r.max); })(),
           discountPercent: 0,
           gstPercent:      product.salesGstPercent || 0,
         }];
@@ -200,9 +201,8 @@ const SalesOrderPage: React.FC = () => {
   const cartGst      = () => cart.reduce((s, i) => s + lineTotal(i) - lineBase(i), 0);
 
   const priceErrors = cart.filter(item => {
-    const min = item.product?.fifoMinSaleRate ?? item.product?.minSaleRate;
-    const max = item.product?.fifoMaxSaleRate ?? item.product?.maxSaleRate;
-    return (min != null && item.unitPrice < min) || (max != null && item.unitPrice > max);
+    const { min, max } = getProductRates(item.product);
+    return isPriceOutOfRange(item.unitPrice, min, max);
   });
 
   const openNewCustomer = () => {
@@ -247,6 +247,7 @@ const SalesOrderPage: React.FC = () => {
     }
   };
 
+  const [brandSearch, setBrandSearch] = useState('');
   const [notes, setNotes] = useState('');
 
   const handleSubmit = async () => {
@@ -487,45 +488,25 @@ const SalesOrderPage: React.FC = () => {
             </div>
           )}
 
-          {/* Brand chips */}
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, msOverflowStyle: 'none', scrollbarWidth: 'none' as any }}>
-            {brandList.map(brand => {
-              const active = selectedBrand === brand;
-              const inStockCount = brand === 'ALL'
-                ? products.filter((p: any) => p.stockQuantity > 0).length
-                : products.filter((p: any) => p.brand === brand && p.stockQuantity > 0).length;
-              return (
-                <button
-                  key={brand}
-                  onClick={() => setSelectedBrand(brand)}
-                  style={{
-                    flexShrink: 0,
-                    padding: '6px 14px',
-                    borderRadius: 20,
-                    border: `1.5px solid ${active ? P : '#e2e8f0'}`,
-                    background: active ? P : '#fff',
-                    color: active ? '#fff' : '#475569',
-                    fontWeight: active ? 700 : 500,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {brand === 'ALL' ? 'All' : brand}
-                  <span style={{
-                    fontSize: 10, fontWeight: 700,
-                    background: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
-                    color: active ? '#fff' : '#64748b',
-                    borderRadius: 10, padding: '0 5px', lineHeight: '16px',
-                  }}>
-                    {inStockCount}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Brand filter */}
+          <Select
+            showSearch
+            allowClear
+            placeholder="Type to filter by brand..."
+            style={{ width: '100%' }}
+            value={selectedBrand === 'ALL' ? undefined : selectedBrand}
+            onChange={v => { setSelectedBrand(v ?? 'ALL'); setBrandSearch(''); }}
+            onClear={() => { setSelectedBrand('ALL'); setBrandSearch(''); }}
+            onSearch={v => setBrandSearch(v)}
+            filterOption={false}
+            notFoundContent={brandSearch ? 'No brands found' : null}
+            options={brandSearch
+              ? brandList
+                  .filter(b => b !== 'ALL' && b.toLowerCase().includes(brandSearch.toLowerCase()))
+                  .map(b => ({ value: b, label: b }))
+              : []
+            }
+          />
 
           <Input
             prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
@@ -677,8 +658,7 @@ const SalesOrderPage: React.FC = () => {
 
             {/* Line items */}
             {cart.map((item, idx) => {
-              const min      = item.product?.fifoMinSaleRate ?? item.product?.minSaleRate;
-              const max      = item.product?.fifoMaxSaleRate ?? item.product?.maxSaleRate;
+              const { min, max } = getProductRates(item.product);
               const belowMin = min != null && item.unitPrice < min;
               const aboveMax = max != null && item.unitPrice > max;
               const hasError = belowMin || aboveMax;
@@ -823,7 +803,7 @@ const SalesOrderPage: React.FC = () => {
           </div>
 
           {/* Notes */}
-          <div>
+          <div style={{ marginBottom: 8 }}>
             <div style={{ ...colLabel, marginBottom: 6 }}>Notes (optional)</div>
             <Input.TextArea
               rows={2}

@@ -50,14 +50,14 @@ const ACTION_COLOR: Record<string, string> = {
 };
 
 const AuditReportPage: React.FC = () => {
-  const [range, setRange]               = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs(), dayjs()]);
+  const [range, setRange]               = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(30, 'day'), dayjs()]);
   const [entityType, setEntityType]     = useState('');
   const [performedBy, setPerformedBy]   = useState('');
   const [action, setAction]             = useState('');
   const [currentPage, setCurrentPage]   = useState(0);
 
   const [activeFilters, setActiveFilters] = useState({
-    from: dayjs().format('YYYY-MM-DD'),
+    from: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
     to:   dayjs().format('YYYY-MM-DD'),
     entityType: '', performedBy: '', action: '', page: 0,
   });
@@ -160,11 +160,11 @@ const AuditReportPage: React.FC = () => {
             Search
           </Button>
           <Button icon={<ReloadOutlined />} onClick={() => {
-            setRange([dayjs(), dayjs()]);
+            setRange([dayjs().subtract(30, 'day'), dayjs()]);
             setEntityType('');
             setPerformedBy('');
             setAction('');
-            const reset = { from: dayjs().format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD'), entityType: '', performedBy: '', action: '', page: 0 };
+            const reset = { from: dayjs().subtract(30, 'day').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD'), entityType: '', performedBy: '', action: '', page: 0 };
             setCurrentPage(0);
             setActiveFilters(reset);
           }}>

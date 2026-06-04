@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import {
   Table, Button, DatePicker, Select, Tag, Space, Form, InputNumber,
-  TimePicker, message, Spin, Alert, Card, Statistic, Row, Col, Tooltip, Grid,
+  TimePicker, message, Spin, Alert, Card, Statistic, Row, Col, Grid,
 } from 'antd';
 import {
-  SettingOutlined, ReloadOutlined, EnvironmentOutlined, ClockCircleOutlined,
-  CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined,
+  SettingOutlined, ReloadOutlined, EnvironmentOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownloadOutlined,
 } from '@ant-design/icons';
+import * as XLSX from 'xlsx';
 import dayjs from 'dayjs';
 import {
   useGetAttendanceSettingsQuery,
   useSaveAttendanceSettingsMutation,
   useGetAttendanceByDateQuery,
   useGetAttendanceByUserQuery,
+  useLazyGetAttendanceByRangeQuery,
+  useLazyGetAttendanceByUserQuery,
 } from '../../store/api/attendanceApi';
 import { useGetUsersQuery } from '../../store/api/userApi';
 
@@ -40,9 +43,7 @@ const AttendancePage: React.FC = () => {
   const settings = settingsData?.data;
 
   const { data: usersData } = useGetUsersQuery();
-  const users = (usersData?.data?.content || usersData?.data || []).filter((u: any) =>
-    ['SALES', 'DELIVERY', 'ADMIN'].includes(u.role) && u.active
-  );
+  const users = (usersData?.data?.content || usersData?.data || []).filter((u: any) => u.active && u.roleName !== 'SUPER_ADMIN' && u.roleName !== 'ADMIN');
 
   const { data: attendanceData, isLoading: attendanceLoading, refetch } = useGetAttendanceByDateQuery(
     fmtDate(selectedDate),
@@ -55,6 +56,9 @@ const AttendancePage: React.FC = () => {
   );
 
   const [saveSettings, { isLoading: saving }] = useSaveAttendanceSettingsMutation();
+  const [fetchRange] = useLazyGetAttendanceByRangeQuery();
+  const [fetchUserRange] = useLazyGetAttendanceByUserQuery();
+  const [exporting, setExporting] = useState(false);
 
   const records: any[] = filterUserId
     ? (userAttData?.data || [])
@@ -97,63 +101,120 @@ const AttendancePage: React.FC = () => {
     );
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const from = selectedDate.startOf('month').format('YYYY-MM-DD');
+      const to = selectedDate.endOf('month').format('YYYY-MM-DD');
+      const monthLabel = selectedDate.format('MMM YYYY');
+
+      let allRecords: any[] = [];
+
+      if (filterUserId) {
+        const res = await fetchUserRange({ userId: filterUserId, from, to }).unwrap();
+        const user = users.find((u: any) => u.id === filterUserId);
+        allRecords = (res?.data || []).map((r: any) => ({
+          ...r,
+          userName: user?.fullName || r.userName || '',
+          userRole: user?.roleName || r.userRole || '',
+        }));
+      } else {
+        const res = await fetchRange({ from, to }).unwrap();
+        allRecords = res?.data || [];
+      }
+
+      if (allRecords.length === 0) {
+        message.warning('No attendance records to export for this period');
+        return;
+      }
+
+      // Group by staff member
+      const userMap = new Map<string, { name: string; role: string; records: any[] }>();
+      allRecords.forEach((r: any) => {
+        const key = r.userName;
+        if (!userMap.has(key)) userMap.set(key, { name: r.userName, role: r.userRole, records: [] });
+        userMap.get(key)!.records.push(r);
+      });
+
+      // Summary sheet
+      const summaryRows = Array.from(userMap.values()).map(({ name, role, records: recs }) => {
+        const present = recs.filter(r => r.status === 'PRESENT').length;
+        const late    = recs.filter(r => r.status === 'LATE').length;
+        const absent  = recs.filter(r => r.status === 'ABSENT').length;
+        const absentDates = recs
+          .filter(r => r.status === 'ABSENT')
+          .sort((a, b) => a.attendanceDate.localeCompare(b.attendanceDate))
+          .map(r => dayjs(r.attendanceDate).format('DD MMM YYYY'))
+          .join(', ');
+        return {
+          'Name': name,
+          'Role': role,
+          'Present': present,
+          'Late (counted as present)': late,
+          'Absent': absent,
+          'Total Tracked Days': present + late + absent,
+          'Absent Dates': absentDates || '—',
+        };
+      });
+
+      // Day-wise detail sheet
+      const detailRows = [...allRecords]
+        .sort((a, b) => a.attendanceDate.localeCompare(b.attendanceDate))
+        .map((r: any) => ({
+          'Date': dayjs(r.attendanceDate).format('DD MMM YYYY'),
+          'Name': r.userName,
+          'Role': r.userRole,
+          'Status': r.status,
+          'Check In': r.checkInTime ? dayjs(r.checkInTime).format('hh:mm A') : '—',
+          'Check Out': r.checkOutTime ? dayjs(r.checkOutTime).format('hh:mm A') : '—',
+        }));
+
+      const wb = XLSX.utils.book_new();
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 24 }, { wch: 10 }, { wch: 20 }, { wch: 50 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+      const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+      wsDetail['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'Day-wise Records');
+
+      XLSX.writeFile(wb, `Attendance_${monthLabel}.xlsx`);
+      message.success(`Attendance_${monthLabel}.xlsx downloaded`);
+    } catch {
+      message.error('Failed to export. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const statusCol = {
+    title: 'Status',
+    dataIndex: 'status',
+    render: (s: string) => {
+      const cfg = STATUS_CONFIG[s] || STATUS_CONFIG.ABSENT;
+      return <Tag color={cfg.color}>{cfg.icon} {cfg.label}</Tag>;
+    },
+  };
+  const checkInCol  = { title: 'Check In',  dataIndex: 'checkInTime',  render: fmt, align: 'right' as const };
+  const checkOutCol = { title: 'Check Out', dataIndex: 'checkOutTime', render: fmt, align: 'right' as const };
+
   const columns = filterUserId ? [
-    {
-      title: 'Date',
-      dataIndex: 'attendanceDate',
-      render: (d: string) => dayjs(d).format('DD MMM YYYY'),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      render: (s: string) => {
-        const cfg = STATUS_CONFIG[s] || STATUS_CONFIG.ABSENT;
-        return <Tag color={cfg.color}>{cfg.icon} {cfg.label}</Tag>;
-      },
-    },
-    {
-      title: 'Check In',
-      dataIndex: 'checkInTime',
-      render: fmt,
-      align: 'right' as const,
-    },
-    {
-      title: 'Check Out',
-      dataIndex: 'checkOutTime',
-      render: fmt,
-      align: 'right' as const,
-    },
+    { title: 'Date', dataIndex: 'attendanceDate', render: (d: string) => dayjs(d).format('DD MMM YYYY') },
+    statusCol,
+    checkInCol,
+    checkOutCol,
   ] : [
     {
       title: 'Name',
       dataIndex: 'userName',
+      ...(isMobile ? { fixed: 'left' as const, width: 150 } : {}),
       sorter: (a: any, b: any) => a.userName.localeCompare(b.userName),
     },
-    {
-      title: 'Role',
-      dataIndex: 'userRole',
-      render: (r: string) => <span style={{ fontSize: 12, color: '#64748b' }}>{r}</span>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      render: (s: string) => {
-        const cfg = STATUS_CONFIG[s] || STATUS_CONFIG.ABSENT;
-        return <Tag color={cfg.color}>{cfg.icon} {cfg.label}</Tag>;
-      },
-    },
-    {
-      title: 'Check In',
-      dataIndex: 'checkInTime',
-      render: fmt,
-      align: 'right' as const,
-    },
-    {
-      title: 'Check Out',
-      dataIndex: 'checkOutTime',
-      render: fmt,
-      align: 'right' as const,
-    },
+    ...(!isMobile ? [{ title: 'Role', dataIndex: 'userRole', render: (r: string) => r }] : []),
+    statusCol,
+    checkInCol,
+    checkOutCol,
   ];
 
   return (
@@ -166,6 +227,9 @@ const AttendancePage: React.FC = () => {
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} />
+          <Button icon={<DownloadOutlined />} loading={exporting} onClick={handleExport}>
+            {!isMobile && 'Export Excel'}
+          </Button>
           <Button icon={<SettingOutlined />} onClick={() => {
             if (settings) {
               settingsForm.setFieldsValue({
@@ -259,33 +323,50 @@ const AttendancePage: React.FC = () => {
           }
         >
           {users.map((u: any) => (
-            <Option key={u.id} value={u.id}>{u.fullName} ({u.role})</Option>
+            <Option key={u.id} value={u.id}>{u.fullName} ({u.roleName})</Option>
           ))}
         </Select>
       </div>
 
       {/* Summary stats (daily view) */}
       {!filterUserId && records.length > 0 && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col xs={8}>
-            <Card size="small">
-              <Statistic title="Present" value={present} valueStyle={{ color: '#16a34a', fontWeight: 700 }}
-                prefix={<CheckCircleOutlined />} />
-            </Card>
-          </Col>
-          <Col xs={8}>
-            <Card size="small">
-              <Statistic title="Late" value={late} valueStyle={{ color: '#d97706', fontWeight: 700 }}
-                prefix={<ExclamationCircleOutlined />} />
-            </Card>
-          </Col>
-          <Col xs={8}>
-            <Card size="small">
-              <Statistic title="Absent" value={absent} valueStyle={{ color: '#dc2626', fontWeight: 700 }}
-                prefix={<CloseCircleOutlined />} />
-            </Card>
-          </Col>
-        </Row>
+        isMobile ? (
+          <div style={{ display: 'flex', marginBottom: 16, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRight: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>{present}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Present</div>
+            </div>
+            <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRight: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#d97706' }}>{late}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Late</div>
+            </div>
+            <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>{absent}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Absent</div>
+            </div>
+          </div>
+        ) : (
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="Present" value={present} valueStyle={{ color: '#16a34a', fontWeight: 700 }}
+                  prefix={<CheckCircleOutlined />} />
+              </Card>
+            </Col>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="Late" value={late} valueStyle={{ color: '#d97706', fontWeight: 700 }}
+                  prefix={<ExclamationCircleOutlined />} />
+              </Card>
+            </Col>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="Absent" value={absent} valueStyle={{ color: '#dc2626', fontWeight: 700 }}
+                  prefix={<CloseCircleOutlined />} />
+              </Card>
+            </Col>
+          </Row>
+        )
       )}
 
       {/* Table */}
@@ -294,7 +375,6 @@ const AttendancePage: React.FC = () => {
           dataSource={records}
           columns={columns}
           rowKey="id"
-          size="small"
           scroll={{ x: 480 }}
           pagination={{ pageSize: 50, hideOnSinglePage: true }}
           locale={{

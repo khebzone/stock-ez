@@ -37,7 +37,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/settings")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get attendance settings")
     public ResponseEntity<ApiResponse<AttendanceDtos.SettingsResponse>> getSettings(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -45,7 +45,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/check-in")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_CHECKIN')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Check in with GPS location")
     public ResponseEntity<ApiResponse<AttendanceDtos.AttendanceResponse>> checkIn(
             @Valid @RequestBody AttendanceDtos.CheckInRequest request,
@@ -56,7 +56,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/check-out")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_CHECKIN')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Check out")
     public ResponseEntity<ApiResponse<AttendanceDtos.AttendanceResponse>> checkOut(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
@@ -66,7 +66,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/today-status")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get today's check-in status for the current user")
     public ResponseEntity<ApiResponse<AttendanceDtos.TodayStatusResponse>> todayStatus(
             @RequestHeader("X-Tenant-Id") UUID tenantId,

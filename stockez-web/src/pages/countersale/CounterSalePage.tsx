@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import {
   Select, Button, InputNumber, Table, message, Card, Divider,
-  Row, Col, Input, Grid,
+  Row, Col, Input, Grid, Modal, Form, Switch, Tooltip,
 } from 'antd';
-import { PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined, SearchOutlined, UserAddOutlined } from '@ant-design/icons';
 
 const { useBreakpoint } = Grid;
-import { useGetCustomersQuery } from '../../store/api/customerApi';
+import { useGetCustomersQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
 import { useGetProductsQuery } from '../../store/api/productApi';
 import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
 import { useCounterSaleMutation } from '../../store/api/orderApi';
+import { useGetRoutesQuery } from '../../store/api/routeApi';
 import PageHeader from '../../components/PageHeader';
+import { getProductRates, isPriceOutOfRange, defaultUnitPrice } from '../../utils/priceUtils';
 
 const fmt = (v: any) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -19,8 +21,8 @@ interface LineItem {
   productId: string;
   productName: string;
   unit: string;
-  maxSaleRate: number;
-  minSaleRate: number;
+  minSaleRate: number | null;
+  maxSaleRate: number | null;
   gstPercent: number;
   quantity: number;
   unitPrice: number;
@@ -40,15 +42,26 @@ const CounterSalePage: React.FC = () => {
   const [paymentAmount, setPaymentAmount]     = useState<number | null>(null);
   const [notes, setNotes]                     = useState('');
   const [lastOrder, setLastOrder]             = useState<any>(null);
+  const [addCustOpen, setAddCustOpen]         = useState(false);
+  const [addCustForm]                         = Form.useForm();
+  const [addCustRouteId, setAddCustRouteId]   = useState<string | undefined>();
 
-  const { data: customersData }       = useGetCustomersQuery({});
+  const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({});
   const { data: productsData }        = useGetProductsQuery({});
   const { data: paymentMethodsData }  = useGetPaymentMethodsQuery();
   const [counterSale, { isLoading: submitting }] = useCounterSaleMutation();
+  const [createCustomer, { isLoading: creatingCust }] = useCreateCustomerMutation();
+  const { data: routesData } = useGetRoutesQuery();
 
   const customers: any[]      = customersData?.data?.content || customersData?.data || [];
   const allProducts: any[]    = productsData?.data?.content || productsData?.data || [];
   const paymentMethods: any[] = paymentMethodsData?.data || [];
+  const routes: any[]         = routesData?.data || [];
+
+  const getPlacesForRoute = (routeId: string) => {
+    const route = routes.find((r: any) => r.id === routeId);
+    return [...(route?.places || [])].sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+  };
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.toLowerCase();
@@ -65,16 +78,17 @@ const CounterSalePage: React.FC = () => {
     if (items.find(i => i.productId === productId)) return;
     const p = allProducts.find((x: any) => x.id === productId);
     if (!p) return;
+    const { min, max } = getProductRates(p);
     setItems(prev => [...prev, {
       key: productId,
       productId: p.id,
       productName: p.name,
       unit: p.unit || '',
-      maxSaleRate: p.maxSaleRate || 0,
-      minSaleRate: p.minSaleRate || 0,
+      minSaleRate: min,
+      maxSaleRate: max,
       gstPercent: p.salesGstPercent || 0,
       quantity: 1,
-      unitPrice: p.maxSaleRate || 0,
+      unitPrice: defaultUnitPrice(min, max),
     }]);
   };
 
@@ -102,18 +116,50 @@ const CounterSalePage: React.FC = () => {
     return { subTotal, totalGst, total: subTotal + totalGst };
   }, [items]);
 
+  const priceErrors = items.filter(i => isPriceOutOfRange(i.unitPrice, i.minSaleRate, i.maxSaleRate));
   const balance = totals.total - (paymentAmount || 0);
+
+  const handleAddCustomer = async () => {
+    try {
+      const values = await addCustForm.validateFields();
+      const payload: any = {
+        businessName:  values.businessName.trim(),
+        ownerName:     values.ownerName.trim(),
+        phone:         values.phone.trim(),
+        altPhone:      values.altPhone?.trim()  || undefined,
+        email:         values.email?.trim()     || undefined,
+        address:       values.address?.trim()   || undefined,
+        gstin:         values.gstin?.trim()     || undefined,
+        routeId:       values.routeId,
+        routePlaceId:  values.routePlaceId,
+        creditAllowed: values.creditAllowed || false,
+        creditDays:    values.creditDays    || undefined,
+        creditLimit:   values.creditLimit   || undefined,
+      };
+      await createCustomer(payload).unwrap();
+      message.success('Customer added');
+      setAddCustOpen(false);
+      setAddCustRouteId(undefined);
+      addCustForm.resetFields();
+      const refetched = await refetchCustomers();
+      const list: any[] = refetched.data?.data?.content || refetched.data?.data || [];
+      const newCust = list.find((c: any) => c.phone === values.phone.trim());
+      if (newCust) setCustomerId(newCust.id);
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.data?.message || 'Failed to add customer');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!customerId) { message.error('Select a customer'); return; }
     if (items.length === 0) { message.error('Add at least one product'); return; }
     for (const item of items) {
-      if (item.unitPrice < item.minSaleRate) {
-        message.error(`Price for ${item.productName} is below minimum ₹${item.minSaleRate}`);
-        return;
-      }
-      if (item.unitPrice > item.maxSaleRate) {
-        message.error(`Price for ${item.productName} exceeds maximum ₹${item.maxSaleRate}`);
+      if (isPriceOutOfRange(item.unitPrice, item.minSaleRate, item.maxSaleRate)) {
+        const hint = item.minSaleRate != null && item.unitPrice < item.minSaleRate
+          ? `below minimum ₹${item.minSaleRate.toFixed(2)}`
+          : `exceeds maximum ₹${item.maxSaleRate!.toFixed(2)}`;
+        message.error(`Price for ${item.productName} is ${hint}`);
         return;
       }
     }
@@ -146,12 +192,21 @@ const CounterSalePage: React.FC = () => {
     {
       title: 'Product',
       key: 'product',
-      render: (_: any, r: LineItem) => (
-        <div>
-          <div style={{ fontWeight: 600 }}>{r.productName}</div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>{r.unit}</div>
-        </div>
-      ),
+      render: (_: any, r: LineItem) => {
+        const hasError = isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate);
+        const belowMin = r.minSaleRate != null && r.unitPrice < r.minSaleRate;
+        return (
+          <div>
+            <div style={{ fontWeight: 600 }}>{r.productName}</div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>{r.unit}</div>
+            {hasError && (
+              <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600, marginTop: 2 }}>
+                {belowMin ? `Below min ₹${r.minSaleRate!.toFixed(2)}` : `Above max ₹${r.maxSaleRate!.toFixed(2)}`}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: 'Qty',
@@ -167,25 +222,37 @@ const CounterSalePage: React.FC = () => {
     {
       title: 'Price (₹)',
       key: 'price',
-      width: 120,
-      render: (_: any, r: LineItem) => (
-        <InputNumber
-          min={0} precision={2} value={r.unitPrice} size="small" style={{ width: 100 }}
-          onChange={v => updateItem(r.key, 'unitPrice', v || 0)}
-          status={r.unitPrice < r.minSaleRate || r.unitPrice > r.maxSaleRate ? 'error' : undefined}
-        />
-      ),
+      width: 130,
+      render: (_: any, r: LineItem) => {
+        const hasError = isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate);
+        const rangeTitle = (r.minSaleRate != null || r.maxSaleRate != null)
+          ? `${r.minSaleRate != null ? `min ₹${r.minSaleRate.toFixed(2)}` : ''}${r.minSaleRate != null && r.maxSaleRate != null ? ' – ' : ''}${r.maxSaleRate != null ? `max ₹${r.maxSaleRate.toFixed(2)}` : ''}`
+          : undefined;
+        return (
+          <Tooltip title={rangeTitle} placement="top">
+            <InputNumber
+              min={0.01} precision={2} value={r.unitPrice} size="small" style={{ width: 106 }}
+              onChange={v => updateItem(r.key, 'unitPrice', v || 0)}
+              status={hasError ? 'error' : undefined}
+              prefix="₹"
+            />
+          </Tooltip>
+        );
+      },
     },
     {
       title: 'Total',
       key: 'total',
       width: 100,
       align: 'right' as const,
-      render: (_: any, r: LineItem) => (
-        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
-          {fmt(r.unitPrice * r.quantity)}
-        </span>
-      ),
+      render: (_: any, r: LineItem) => {
+        const hasError = isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate);
+        return (
+          <span style={{ fontFamily: 'monospace', fontWeight: 600, color: hasError ? '#dc2626' : undefined }}>
+            {fmt(r.unitPrice * r.quantity)}
+          </span>
+        );
+      },
     },
     {
       title: '',
@@ -206,10 +273,10 @@ const CounterSalePage: React.FC = () => {
           <Button
             type="primary" size="large" icon={<ShoppingCartOutlined />}
             loading={submitting} onClick={handleSubmit}
-            disabled={!customerId || items.length === 0}
-            style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}
+            disabled={!customerId || items.length === 0 || priceErrors.length > 0}
+            style={{ background: priceErrors.length > 0 ? '#94a3b8' : '#059669', borderColor: priceErrors.length > 0 ? '#94a3b8' : '#059669', fontWeight: 700 }}
           >
-            Bill &amp; Collect
+            {priceErrors.length > 0 ? 'Fix Price Errors First' : 'Bill & Collect'}
           </Button>
         }
       />
@@ -218,8 +285,17 @@ const CounterSalePage: React.FC = () => {
         {/* ── Left: Customer + Items ── */}
         <Col xs={24} lg={15}>
           <Card style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: 20 } }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-              Customer
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                Customer
+              </div>
+              <Button
+                size="small" icon={<UserAddOutlined />}
+                onClick={() => { addCustForm.resetFields(); setAddCustRouteId(undefined); setAddCustOpen(true); }}
+                style={{ fontSize: 12, fontWeight: 600 }}
+              >
+                Add Customer
+              </Button>
             </div>
             <Select
               showSearch placeholder="Search customer by name or phone..."
@@ -232,6 +308,77 @@ const CounterSalePage: React.FC = () => {
               }))}
             />
           </Card>
+
+          {/* Add Customer Modal */}
+          <Modal
+            open={addCustOpen}
+            onCancel={() => { setAddCustOpen(false); setAddCustRouteId(undefined); }}
+            title={<span style={{ fontWeight: 700 }}>New Customer</span>}
+            onOk={handleAddCustomer}
+            confirmLoading={creatingCust}
+            okText="Save Customer"
+            okButtonProps={{ style: { background: P, borderColor: P } }}
+            width={isSmall ? '94vw' : 480}
+            centered
+          >
+            <Form form={addCustForm} layout="vertical" requiredMark={false} style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Basic Info</div>
+              <Form.Item name="businessName" label="Business / Shop Name *" rules={[{ required: true, message: 'Required' }]}>
+                <Input placeholder="e.g. Ravi General Stores" />
+              </Form.Item>
+              <Form.Item name="ownerName" label="Owner Name *" rules={[{ required: true, message: 'Required' }]}>
+                <Input placeholder="e.g. Ravi Kumar" />
+              </Form.Item>
+              <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
+                <Input placeholder="10-digit mobile number" maxLength={10} />
+              </Form.Item>
+              <Form.Item name="altPhone" label="Alt Mobile">
+                <Input placeholder="Optional" maxLength={10} />
+              </Form.Item>
+              <Form.Item name="address" label="Address">
+                <Input.TextArea rows={2} placeholder="Shop address (optional)" />
+              </Form.Item>
+              <Form.Item name="gstin" label="GSTIN">
+                <Input placeholder="Optional" />
+              </Form.Item>
+              <Form.Item name="email" label="Email">
+                <Input type="email" placeholder="Optional" />
+              </Form.Item>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Route</div>
+              <Form.Item name="routeId" label="Route *" rules={[{ required: true, message: 'Select a route' }]}>
+                <Select
+                  placeholder="Select route"
+                  showSearch
+                  optionFilterProp="children"
+                  onChange={(v) => { setAddCustRouteId(v); addCustForm.setFieldValue('routePlaceId', undefined); }}
+                >
+                  {routes.map((r: any) => (
+                    <Select.Option key={r.id} value={r.id}>{r.name}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Form.Item name="routePlaceId" label="Stop / Place *" rules={[{ required: true, message: 'Select a stop' }]}>
+                <Select
+                  placeholder={addCustRouteId ? 'Select stop' : 'Select a route first'}
+                  disabled={!addCustRouteId}
+                >
+                  {getPlacesForRoute(addCustRouteId || '').map((p: any) => (
+                    <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Credit</div>
+              <Form.Item name="creditAllowed" label="Allow Credit" valuePropName="checked">
+                <Switch checkedChildren="Credit On" unCheckedChildren="Cash Only" />
+              </Form.Item>
+              <Form.Item name="creditDays" label="Credit Days">
+                <InputNumber style={{ width: '100%' }} min={0} max={365} placeholder="e.g. 30" addonAfter="days" />
+              </Form.Item>
+              <Form.Item name="creditLimit" label="Credit Limit" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} placeholder="e.g. 50000" addonBefore="₹" />
+              </Form.Item>
+            </Form>
+          </Modal>
 
           <Card style={{ borderRadius: 12 }} styles={{ body: { padding: 20 } }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
@@ -326,6 +473,7 @@ const CounterSalePage: React.FC = () => {
                 size="small"
                 pagination={false}
                 style={{ marginTop: 4 }}
+                rowClassName={(r: LineItem) => isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate) ? 'row-price-error' : ''}
               />
             )}
 

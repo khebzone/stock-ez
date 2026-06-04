@@ -89,6 +89,15 @@ const FieldProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children
   return <FieldLayout>{children}</FieldLayout>;
 };
 
+// Admin-only pages — STAFF users redirected to dashboard
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!isTokenValid(token)) { clearAuth(); return <Navigate to="/login" replace />; }
+  if (isFieldUser()) return <Navigate to={getDefaultRoute()} replace />;
+  if (!isAdmin()) return <Navigate to="/dashboard" replace />;
+  return <MainLayout>{children}</MainLayout>;
+};
+
 // Super Admin only
 const SuperAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -115,8 +124,8 @@ const App: React.FC = () => {
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
         <Route path="/routes" element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-        <Route path="/roles" element={<ProtectedRoute><RolesPage /></ProtectedRoute>} />
+        <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+        <Route path="/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
         <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
         <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
@@ -124,7 +133,7 @@ const App: React.FC = () => {
         <Route path="/reports/sales" element={<ProtectedRoute><SalesAnalysisPage /></ProtectedRoute>} />
         <Route path="/reports/ledger" element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
         <Route path="/reports/targets" element={<ProtectedRoute><TargetsPage /></ProtectedRoute>} />
-        <Route path="/masters" element={<ProtectedRoute><MastersPage /></ProtectedRoute>} />
+        <Route path="/masters" element={<AdminRoute><MastersPage /></AdminRoute>} />
         <Route path="/invoice/approver" element={<ProtectedRoute><InvoiceApproverPage /></ProtectedRoute>} />
         <Route path="/purchases" element={<ProtectedRoute><PurchaseListPage /></ProtectedRoute>} />
         <Route path="/purchases/new" element={<ProtectedRoute><PurchaseEntryPage /></ProtectedRoute>} />
@@ -140,14 +149,14 @@ const App: React.FC = () => {
         <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
         <Route path="/warehouse/picklist" element={<ProtectedRoute><WarehousePicklistPage /></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
-        <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
-        <Route path="/incentives/targets" element={<ProtectedRoute><BrandTargetPage /></ProtectedRoute>} />
-        <Route path="/incentives/slabs" element={<ProtectedRoute><IncentiveSlabPage /></ProtectedRoute>} />
-        <Route path="/incentives/credits" element={<ProtectedRoute><IncentiveCreditsPage /></ProtectedRoute>} />
-        <Route path="/incentives/collection/targets" element={<ProtectedRoute><CollectionTargetPage /></ProtectedRoute>} />
+        <Route path="/attendance" element={<AdminRoute><AttendancePage /></AdminRoute>} />
+        <Route path="/incentives/targets" element={<AdminRoute><BrandTargetPage /></AdminRoute>} />
+        <Route path="/incentives/slabs" element={<AdminRoute><IncentiveSlabPage /></AdminRoute>} />
+        <Route path="/incentives/credits" element={<AdminRoute><IncentiveCreditsPage /></AdminRoute>} />
+        <Route path="/incentives/collection/targets" element={<AdminRoute><CollectionTargetPage /></AdminRoute>} />
         <Route path="/counter-sale" element={<ProtectedRoute><CounterSalePage /></ProtectedRoute>} />
-        <Route path="/reports/audit" element={<ProtectedRoute><AuditReportPage /></ProtectedRoute>} />
-        <Route path="/settings/company" element={<ProtectedRoute><CompanySettingsPage /></ProtectedRoute>} />
+        <Route path="/reports/audit" element={<AdminRoute><AuditReportPage /></AdminRoute>} />
+        <Route path="/settings/company" element={<AdminRoute><CompanySettingsPage /></AdminRoute>} />
 
         {/* ── Field routes (sales + delivery combined) ── */}
         <Route path="/sales/dashboard" element={<FieldProtectedRoute><SalesDashboardPage /></FieldProtectedRoute>} />

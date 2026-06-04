@@ -185,53 +185,67 @@ const PurchaseListPage: React.FC = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: -0.5 }}>Purchase Entries</div>
-          <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Manage incoming stock and batch tracking</div>
+          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: '#0f172a', letterSpacing: -0.5 }}>Purchase Entries</div>
+          {!isMobile && <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Manage incoming stock and batch tracking</div>}
         </div>
         <button
           onClick={() => setShowEntry(true)}
           style={{
-            background: P, border: 'none', borderRadius: 12, color: '#fff',
-            fontWeight: 700, fontSize: 14, padding: '11px 20px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8,
-            boxShadow: '0 3px 12px rgba(5,150,105,0.3)',
+            background: P, border: 'none', borderRadius: 10, color: '#fff',
+            fontWeight: 700, fontSize: 13, padding: isMobile ? '9px 14px' : '11px 20px',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            boxShadow: '0 3px 12px rgba(5,150,105,0.3)', whiteSpace: 'nowrap', flexShrink: 0,
           }}
         >
-          <PlusOutlined /> New Purchase Entry
+          <PlusOutlined /> {isMobile ? 'New Entry' : 'New Purchase Entry'}
         </button>
       </div>
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <RangePicker
-          value={dateRange}
-          onChange={(vals) => { setDateRange(vals as [Dayjs, Dayjs] | null); setPage(0); }}
-          format="DD MMM YYYY"
-          allowClear
-          style={{ borderRadius: 8 }}
-          placeholder={['From date', 'To date']}
-        />
-        <Input
-          prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-          placeholder="Search supplier..."
-          value={supplierSearch}
-          onChange={e => { setSupplierSearch(e.target.value); setPage(0); }}
-          allowClear
-          style={{ width: 200, borderRadius: 8 }}
-        />
-        {hasFilter && (
-          <Button size="small" onClick={handleClearFilters} style={{ borderRadius: 8, color: '#64748b' }}>
-            Clear
-          </Button>
-        )}
-        <Button
-          icon={<FileExcelOutlined />}
-          onClick={handleExport}
-          disabled={purchases.length === 0}
-          style={{ borderRadius: 8, marginLeft: 'auto' }}
-        >
-          Export Excel
-        </Button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <RangePicker
+            value={dateRange}
+            onChange={(vals) => { setDateRange(vals as [Dayjs, Dayjs] | null); setPage(0); }}
+            format="DD MMM YYYY"
+            allowClear
+            style={{ borderRadius: 8, flex: 1 }}
+            placeholder={['From date', 'To date']}
+          />
+          {!isMobile && (
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={handleExport}
+              disabled={purchases.length === 0}
+              style={{ borderRadius: 8 }}
+            >
+              Export Excel
+            </Button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Input
+            prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+            placeholder="Search supplier..."
+            value={supplierSearch}
+            onChange={e => { setSupplierSearch(e.target.value); setPage(0); }}
+            allowClear
+            style={{ flex: 1, borderRadius: 8 }}
+          />
+          {hasFilter && (
+            <Button onClick={handleClearFilters} style={{ borderRadius: 8, color: '#64748b' }}>
+              Clear
+            </Button>
+          )}
+          {isMobile && (
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={handleExport}
+              disabled={purchases.length === 0}
+              style={{ borderRadius: 8 }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Near-expiry alerts */}
@@ -333,7 +347,7 @@ const PurchaseListPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15 }}>{p.entryNumber}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{p.supplierName} · {p.purchaseDate}</div>
+                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{p.supplierName} · {dayjs(p.purchaseDate).format('DD MMM YYYY')}</div>
                   <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{p.items?.length || 0} product{(p.items?.length || 0) !== 1 ? 's' : ''}</div>
                 </div>
               </div>
@@ -361,6 +375,7 @@ const PurchaseListPage: React.FC = () => {
 
       {/* New Purchase Entry modal */}
       <Modal
+        title="New Purchase Entry"
         open={showEntry} onCancel={() => setShowEntry(false)}
         footer={null} width="96vw" style={{ top: 16 }}
         styles={{ body: { padding: 20 } }} destroyOnClose
@@ -429,7 +444,7 @@ const PurchaseListPage: React.FC = () => {
                       rowKey="id"
                       size="small"
                       pagination={false}
-                      scroll={{ x: 'max-content' }}
+                      scroll={{ x: 1200 }}
                       columns={[
                         {
                           title: '#',
@@ -439,7 +454,7 @@ const PurchaseListPage: React.FC = () => {
                         {
                           title: 'Product',
                           dataIndex: 'product',
-                          width: 160,
+                          width: 280,
                           render: (p: any) => (
                             <div>
                               <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{p?.name}</div>

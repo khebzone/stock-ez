@@ -109,7 +109,7 @@ public class PurchaseController {
     }
 
     @GetMapping("/alerts/near-expiry")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_VIEW')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_VIEW') or hasAuthority('ORDERS_CREATE')")
     @Operation(summary = "Get near-expiry stock alerts (default 30 days)")
     public ResponseEntity<ApiResponse<List<PurchaseDtos.NearExpiryAlert>>> getNearExpiry(
             @RequestHeader("X-Tenant-Id") UUID tenantId,

@@ -3,12 +3,14 @@ import { Skeleton, Grid, Drawer } from 'antd';
 import {
   UserOutlined, FileTextOutlined, WalletOutlined,
   RightOutlined, EnvironmentOutlined, PlusOutlined,
-  ClockCircleOutlined, CloseOutlined,
+  ClockCircleOutlined, CloseOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetMyOrdersQuery } from '../../store/api/orderApi';
 import { useGetMyDayCollectionsQuery } from '../../store/api/paymentApi';
+import { useGetNearExpiryAlertsQuery } from '../../store/api/purchaseApi';
+import dayjs from 'dayjs';
 
 const { useBreakpoint } = Grid;
 
@@ -67,10 +69,12 @@ const SalesDashboardPage: React.FC = () => {
   const { data: allocData,  isLoading: allocLoading  } = useGetMyAllocationQuery();
   const { data: ordersData, isLoading: ordersLoading } = useGetMyOrdersQuery();
   const { data: dayData } = useGetMyDayCollectionsQuery();
+  const { data: nearExpiryData } = useGetNearExpiryAlertsQuery({ days: 30 });
 
-  const allocation    = allocData?.data;
-  const orders: any[] = ordersData?.data || [];
-  const daySummary    = dayData?.data;
+  const allocation     = allocData?.data;
+  const orders: any[]  = ordersData?.data || [];
+  const daySummary     = dayData?.data;
+  const nearExpiry: any[] = nearExpiryData?.data || [];
 
   const hour      = new Date().getHours();
   const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -140,6 +144,50 @@ const SalesDashboardPage: React.FC = () => {
           <StatCard icon={<UserOutlined />}     label="Customers" value={totalCustomers} color={P}       bg={PL}      small={isSmall} />
           <StatCard icon={<FileTextOutlined />} label="Orders"    value={totalOrders}    color="#8b5cf6" bg="#f5f3ff" small={isSmall} />
           <StatCard icon={<WalletOutlined />}   label="Collected" value={collectedLabel} color="#d97706" bg="#fffbeb" small={isSmall} />
+        </div>
+      )}
+
+      {/* Near-expiry stock alert */}
+      {nearExpiry.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 14, padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <WarningOutlined style={{ color: '#d97706', fontSize: 17 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: '#92400e', fontSize: 13 }}>
+                {nearExpiry.length} product{nearExpiry.length > 1 ? 's' : ''} expiring within 30 days
+              </div>
+              <div style={{ fontSize: 11, color: '#78350f', marginTop: 1 }}>Push these items in your orders</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {nearExpiry.slice(0, 5).map((alert: any) => (
+              <div key={alert.batchId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.7)', borderRadius: 8, padding: '7px 10px' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {alert.product?.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                    {alert.product?.brand} · Qty: {alert.quantityAvailable} {alert.product?.unit}
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, marginLeft: 8, textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: alert.daysToExpiry <= 7 ? '#dc2626' : '#d97706' }}>
+                    {alert.daysToExpiry === 0 ? 'Expires today' : `${alert.daysToExpiry}d left`}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+                    {dayjs(alert.expiryDate).format('DD MMM YYYY')}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {nearExpiry.length > 5 && (
+              <div style={{ fontSize: 11, color: '#78350f', fontWeight: 600, textAlign: 'center', paddingTop: 2 }}>
+                +{nearExpiry.length - 5} more
+              </div>
+            )}
+          </div>
         </div>
       )}
 

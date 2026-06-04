@@ -45,5 +45,7 @@ export const {
   useCheckOutMutation,
   useGetAttendanceByDateQuery,
   useGetAttendanceByRangeQuery,
+  useLazyGetAttendanceByRangeQuery,
   useGetAttendanceByUserQuery,
+  useLazyGetAttendanceByUserQuery,
 } = attendanceApi;

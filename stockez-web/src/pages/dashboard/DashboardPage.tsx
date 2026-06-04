@@ -5,7 +5,7 @@ import {
   RiseOutlined, ClockCircleOutlined, CheckCircleOutlined, TruckOutlined,
   ArrowUpOutlined, ArrowDownOutlined, WarningOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import { useGetAdminDashboardQuery } from '../../store/api/dashboardApi';
+import { useGetAdminDashboardQuery, useGetWarehouseDashboardQuery } from '../../store/api/dashboardApi';
 import { useGetSalesReportQuery } from '../../store/api/dashboardApi';
 import { useGetOrdersQuery } from '../../store/api/orderApi';
 import { useGetNearExpiryAlertsQuery } from '../../store/api/purchaseApi';
@@ -101,13 +101,18 @@ const fmt = (v: number) => `₹${(v || 0).toLocaleString('en-IN', { minimumFract
 
 /* ── Main ── */
 const DashboardPage: React.FC = () => {
-  const { data: statsResponse, isLoading, isError, refetch } = useGetAdminDashboardQuery();
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
+  const isWarehouse = !isAdmin;
+
+  const { data: statsResponse, isLoading, isError, refetch } = useGetAdminDashboardQuery(undefined, { skip: !isAdmin });
+  const { data: warehouseResponse, isLoading: whLoading, isError: whError, refetch: whRefetch } = useGetWarehouseDashboardQuery(undefined, { skip: !isWarehouse });
   const { data: salesReport, isLoading: trendLoading } = useGetSalesReportQuery({
     from: new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0],
-  });
-  const { data: recentOrdersData } = useGetOrdersQuery({ page: 0, size: 5 });
-  const { data: alertsData } = useGetNearExpiryAlertsQuery({ days: 30 });
+  }, { skip: !isAdmin });
+  const { data: recentOrdersData } = useGetOrdersQuery({ page: 0, size: 5 }, { skip: !isAdmin });
+  const { data: alertsData } = useGetNearExpiryAlertsQuery({ days: 30 }, { skip: !isAdmin });
 
   const stats = statsResponse?.data;
   const trendData = (salesReport?.data?.dailyBreakdown || []).map((d: any) => ({
@@ -128,6 +133,40 @@ const DashboardPage: React.FC = () => {
     const t = setTimeout(() => refetch(), 5000);
     return () => clearTimeout(t);
   }, [isError, refetch]);
+
+  useEffect(() => {
+    if (!whError) return;
+    const t = setTimeout(() => whRefetch(), 5000);
+    return () => clearTimeout(t);
+  }, [whError, whRefetch]);
+
+  if (isWarehouse) {
+    const wh = warehouseResponse?.data;
+    return (
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', letterSpacing: -0.3 }}>Dashboard</div>
+          <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>
+            Welcome back, {user.fullName?.split(' ')[0] || 'User'} — warehouse overview for today.
+          </div>
+        </div>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} xl={6}>
+            <KpiCard title="Pending Approval" value={wh?.pendingForApproval || 0} icon={<ClockCircleOutlined />} color="#f59e0b" bg="#fffbeb" subtitle="Orders awaiting approval" loading={whLoading} />
+          </Col>
+          <Col xs={24} sm={12} xl={6}>
+            <KpiCard title="Pending Preparation" value={wh?.pendingForPreparation || 0} icon={<ShoppingOutlined />} color="#3b82f6" bg="#eff6ff" subtitle="Approved, not yet prepared" loading={whLoading} />
+          </Col>
+          <Col xs={24} sm={12} xl={6}>
+            <KpiCard title="Being Prepared" value={wh?.currentlyPreparing || 0} icon={<WarningOutlined />} color="#8b5cf6" bg="#f5f3ff" subtitle="Currently in preparation" loading={whLoading} />
+          </Col>
+          <Col xs={24} sm={12} xl={6}>
+            <KpiCard title="Ready to Dispatch" value={wh?.readyForDispatch || 0} icon={<TruckOutlined />} color="#059669" bg="#ecfdf5" subtitle="Prepared, awaiting dispatch" loading={whLoading} />
+          </Col>
+        </Row>
+      </div>
+    );
+  }
 
   return (
     <div>

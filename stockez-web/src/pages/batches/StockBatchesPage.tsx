@@ -41,15 +41,15 @@ const StockBatchesPage: React.FC = () => {
       dataIndex: ['product', 'name'],
       render: (_: any, r: any) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{r.product?.name}</div>
-          <div style={{ fontSize: 11, color: '#94a3b8' }}>{r.product?.brand} · {r.product?.unit}</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>{r.product?.name}</div>
+          <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.product?.brand} · {r.product?.unit}</div>
         </div>
       ),
     },
     {
       title: 'Batch No.',
       dataIndex: 'batchNumber',
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#374151' }}>{v}</span>,
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#374151' }}>{v}</span>,
     },
     {
       title: 'Supplier',

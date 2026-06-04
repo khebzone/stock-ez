@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { InputNumber, DatePicker, Select, Button, message, Modal, Grid } from 'antd';
-import { WarningOutlined, PlusOutlined, DeleteOutlined, SaveOutlined, InboxOutlined } from '@ant-design/icons';
+import { InputNumber, DatePicker, Select, Button, message, Modal, Drawer, Grid } from 'antd';
+import { WarningOutlined, PlusOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useGetProductsQuery } from '../../store/api/productApi';
@@ -85,15 +85,20 @@ const rightInput = { input: { textAlign: 'right' as const } };
 const NO_CONTROLS = false;
 
 // shared colgroup widths: 18 columns
-// #32 | Product180 | Unit42 | Qty80 | MRP80 | Expiry100 | TotalAmt90 | Discount72 |
+// #32 | Product240 | Unit42 | Qty80 | MRP80 | Expiry100 | TotalAmt90 | Discount72 |
 // PurchRate84 | CGST%50 | CGST₹70 | SGST%50 | SGST₹70 | NetTotal80 | MinSale80 | MaxSale80 | Stock60 | Del30
-const COLS = [32,180,42,80,80,100,90,72,84,50,70,50,70,80,80,80,60,30];
+const COLS = [32,240,42,80,80,100,90,72,84,50,70,50,70,80,80,80,60,30];
 
 const ColGroup = () => (
   <colgroup>
     {COLS.map((w, i) => <col key={i} style={{ width: w }} />)}
   </colgroup>
 );
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280',
+  textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5,
+};
 
 interface Props {
   onClose?: () => void;
@@ -104,12 +109,15 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
   const navigate = useNavigate();
-  const [lines, setLines]         = useState<BatchLine[]>([emptyLine(1)]);
-  const [nextId, setNextId]       = useState(2);
-  const [confirmOpen, setConfirm] = useState(false);
-  const [supplierId, setSupplier] = useState<string | null>(null);
-  const [purchaseDate, setDate]   = useState<any>(dayjs());
-  const [invoiceNo, setInvoiceNo] = useState('');
+  const [lines, setLines]           = useState<BatchLine[]>([emptyLine(1)]);
+  const [nextId, setNextId]         = useState(2);
+  const [confirmOpen, setConfirm]   = useState(false);
+  const [supplierId, setSupplier]   = useState<string | null>(null);
+  const [purchaseDate, setDate]     = useState<any>(dayjs());
+  const [invoiceNo, setInvoiceNo]   = useState('');
+  const [mobileEditId, setMobileEditId] = useState<number | null>(null);
+  const [drawerProdSearch, setDrawerProdSearch] = useState('');
+  const [prodSearchMap, setProdSearchMap] = useState<Record<number, string>>({});
 
   const { data: prodData,  isLoading: prodLoading } = useGetProductsQuery({ size: 500 });
   const { data: suppData }                           = useGetSuppliersQuery({});
@@ -153,6 +161,15 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   };
 
   const addLine = () => { setLines(p => [...p, emptyLine(nextId)]); setNextId(n => n + 1); };
+
+  const handleMobileAddLine = () => {
+    const id = nextId;
+    setLines(p => [...p, emptyLine(id)]);
+    setNextId(n => n + 1);
+    setMobileEditId(id);
+    setDrawerProdSearch('');
+  };
+
   const removeLine = (id: number) => {
     if (lines.length === 1) { message.warning('At least one line required'); return; }
     setLines(p => p.filter(l => l.id !== id));
@@ -168,8 +185,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
           u.mrp         = Number(prod.mrp)                || null;
           u.gstPct      = Number(prod.purchaseGstPercent) || 0;
           u.totalAmount = null;
-          u.maxSaleRate = Number(prod.mrp)                || null;
-          u.minSaleRate = Number(prod.minSaleRate)        || null;
+          u.maxSaleRate = null;
+          u.minSaleRate = null;
         }
       }
       return u;
@@ -208,6 +225,9 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
       if (l.minSaleRate != null && purRate > 0 && l.minSaleRate <= purRate) {
         return `Min sale rate (₹${l.minSaleRate.toFixed(2)}) must be greater than purchase rate (₹${purRate.toFixed(2)}) for ${name}`;
       }
+      if (l.maxSaleRate != null && l.mrp != null && l.maxSaleRate > l.mrp) {
+        return `Max sale rate (₹${l.maxSaleRate.toFixed(2)}) cannot exceed MRP (₹${l.mrp.toFixed(2)}) for ${name}`;
+      }
     }
     return null;
   };
@@ -236,8 +256,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
             mfgDate:        l.mfgDate    ? dayjs(l.mfgDate).format('YYYY-MM-DD')    : null,
             expiryDate:     l.expiryDate ? dayjs(l.expiryDate).format('YYYY-MM-DD') : null,
             quantity:       l.qty,
-            minSaleRate:    l.minSaleRate ?? (purRate > 0 ? purRate : null),
-            maxSaleRate:    l.maxSaleRate ?? l.mrp ?? null,
+            minSaleRate:    l.minSaleRate,
+            maxSaleRate:    l.maxSaleRate,
           };
         }),
       }).unwrap();
@@ -249,6 +269,14 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
       setConfirm(false);
     }
   };
+
+  // Mobile drawer — computed values for the line being edited
+  const editLine = lines.find(l => l.id === mobileEditId) ?? null;
+  const editProd = editLine ? products.find((p: any) => p.id === editLine.productId) : null;
+  const { netAmt: eNet, cgstPct: eCgstPct, cgstAmt: eCgstAmt, sgstAmt: eSgstAmt, purRate: ePurRate } =
+    editLine ? calc(editLine) : { netAmt: 0, cgstPct: 0, cgstAmt: 0, sgstAmt: 0, purRate: 0 };
+  const editMinRateError = editLine?.minSaleRate != null && ePurRate > 0 && editLine.minSaleRate <= ePurRate;
+  const editMaxRateError = editLine?.maxSaleRate != null && editLine?.mrp != null && editLine.maxSaleRate > editLine.mrp;
 
   return (
     <div>
@@ -296,304 +324,436 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ maxHeight: 'calc(100vh - 360px)', overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <ColGroup />
-            <thead style={{ position: 'sticky', top: 0, zIndex: 3 }}>
-              <tr>
-                <TH center>#</TH>
-                <TH>Product</TH>
-                <TH center muted>Unit</TH>
-                <TH right>Qty</TH>
-                <TH right>MRP</TH>
-                <TH center>Expiry</TH>
-                <TH right>Total Amt</TH>
-                <TH right>Discount</TH>
-                <TH right muted>Purch. Rate</TH>
-                <TH right muted>CGST%</TH>
-                <TH right muted>CGST ₹</TH>
-                <TH right muted>SGST%</TH>
-                <TH right muted>SGST ₹</TH>
-                <TH right muted>Net Total</TH>
-                <TH right muted>Min Sale *</TH>
-                <TH right muted>Max Sale *</TH>
-                <TH right muted>Stock</TH>
-                <TH center>{''}</TH>
-              </tr>
-            </thead>
-
-            <tbody>
-              {lines.map((line, idx) => {
-                const prod      = products.find((p: any) => p.id === line.productId);
-                const { netAmt, cgstPct, cgstAmt, sgstAmt, purRate } = calc(line);
-                const isExpired    = line.expiryDate && dayjs(line.expiryDate).isBefore(dayjs());
-                const daysLeft     = line.expiryDate ? dayjs(line.expiryDate).diff(dayjs(), 'day') : null;
-                const isNear       = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
-                const minRateError = line.minSaleRate != null && purRate > 0 && line.minSaleRate <= purRate;
-
-                return (
-                  <React.Fragment key={line.id}>
-                    <tr
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f9fbff'}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}
-                    >
-                      {/* # */}
-                      <td style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0', textAlign: 'center', fontSize: 11, color: '#c0c7d1', fontWeight: 700, verticalAlign: 'middle' }}>
-                        {idx + 1}
-                      </td>
-
-                      {/* Product */}
-                      <td style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                        <Select
-                          ref={setFieldRef(line.id, 'prod')}
-                          variant="borderless" size="small" showSearch optionFilterProp="label"
-                          placeholder={<span style={{ color: '#bfbfbf', fontSize: 12 }}>Search…</span>}
-                          value={line.productId || undefined}
-                          loading={prodLoading}
-                          onChange={v => { updateLine(line.id, 'productId', v); setTimeout(() => focusField(line.id, 'qty'), 30); }}
-                          style={{ width: '100%', fontSize: 12 }}
-                          options={products.map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))}
-                          optionRender={(opt: any) => (
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 12 }}>{opt.data.label}</div>
-                              {opt.data.brand && <div style={{ fontSize: 10, color: '#94a3b8' }}>{opt.data.brand}</div>}
-                            </div>
-                          )}
-                        />
-                      </td>
-
-                      {/* Unit */}
-                      <C muted center>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{prod?.unit || '—'}</span>
-                      </C>
-
-                      {/* Qty */}
-                      <C right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'qty')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={1} precision={0}
-                          value={line.qty || undefined}
-                          onChange={v => updateLine(line.id, 'qty', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'qty', lines)}
-                          placeholder="0"
-                        />
-                      </C>
-
-                      {/* MRP */}
-                      <C right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'mrp')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={0.01} precision={2}
-                          value={line.mrp || undefined}
-                          onChange={v => updateLine(line.id, 'mrp', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'mrp', lines)}
-                          placeholder="0.00"
-                        />
-                      </C>
-
-                      {/* Expiry Date */}
-                      <td style={{ padding: '4px 6px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <DatePicker
-                            variant="borderless" size="small"
-                            style={{ width: '100%', fontSize: 11 }}
-                            value={line.expiryDate}
-                            onChange={v => updateLine(line.id, 'expiryDate', v)}
-                            format="MM/YY"
-                            picker="month"
-                            placeholder="MM/YY"
-                            status={!line.expiryDate ? 'error' : undefined}
-                          />
-                          {!line.expiryDate && (
-                            <WarningOutlined style={{ color: RED, fontSize: 11, flexShrink: 0 }} />
+        {/* Mobile: Line Cards */}
+        {isMobile && (
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {lines.map((line, idx) => {
+              const prod      = products.find((p: any) => p.id === line.productId);
+              const { netAmt } = calc(line);
+              const isExpired = line.expiryDate && dayjs(line.expiryDate).isBefore(dayjs());
+              return (
+                <div
+                  key={line.id}
+                  onClick={() => setMobileEditId(line.id)}
+                  style={{
+                    border: `1px solid ${isExpired ? RED : '#e2e8f0'}`,
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    background: '#fff',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: prod ? '#0f172a' : '#bfbfbf', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {prod?.name || `Item ${idx + 1} — tap to fill`}
+                      </div>
+                      {prod && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+                          <span>{prod.unit}</span>
+                          <span>Qty: <strong style={{ color: '#374151' }}>{line.qty ?? '—'}</strong></span>
+                          {line.mrp != null && <span>MRP: ₹{line.mrp}</span>}
+                          {line.expiryDate && (
+                            <span style={{ color: isExpired ? RED : '#94a3b8' }}>
+                              Exp: {dayjs(line.expiryDate).format('MM/YY')}
+                            </span>
                           )}
                         </div>
-                      </td>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {netAmt > 0 && (
+                        <span style={{ fontWeight: 700, fontSize: 14, color: GREEN }}>₹{netAmt.toFixed(2)}</span>
+                      )}
+                      <button
+                        onClick={e => { e.stopPropagation(); setMobileEditId(line.id); }}
+                        style={{ background: '#f0f9ff', border: 'none', borderRadius: 6, color: '#3b82f6', cursor: 'pointer', padding: '5px 7px', fontSize: 13, lineHeight: 1 }}
+                      >
+                        <EditOutlined />
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); removeLine(line.id); }}
+                        style={{ background: '#fff5f5', border: 'none', borderRadius: 6, color: RED, cursor: 'pointer', padding: '5px 7px', fontSize: 13, lineHeight: 1 }}
+                      >
+                        <DeleteOutlined />
+                      </button>
+                    </div>
+                  </div>
+                  {!prod && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: GREEN, fontWeight: 600 }}>
+                      Tap to select product →
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
-                      {/* Total Amount */}
-                      <C right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'totalAmount')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={0.01} precision={2}
-                          value={line.totalAmount || undefined}
-                          onChange={v => updateLine(line.id, 'totalAmount', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'totalAmount', lines)}
-                          placeholder="From bill"
-                        />
-                      </C>
+            <button
+              onClick={handleMobileAddLine}
+              style={{
+                border: '1.5px dashed #d9d9d9', borderRadius: 8, padding: 14,
+                background: 'none', cursor: 'pointer', color: GREEN, fontWeight: 600,
+                fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 6, width: '100%',
+              }}
+            >
+              <PlusOutlined /> Add Item
+            </button>
+          </div>
+        )}
 
-                      {/* Discount */}
-                      <C right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'discount')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={0} precision={2}
-                          value={line.discount || undefined}
-                          onChange={v => updateLine(line.id, 'discount', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'discount', lines)}
-                          placeholder="0.00"
-                        />
-                      </C>
+        {/* Desktop: Table */}
+        {!isMobile && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ minWidth: 1390, width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <ColGroup />
+              <thead>
+                <tr>
+                  <TH center>#</TH>
+                  <TH>Product</TH>
+                  <TH center muted>Unit</TH>
+                  <TH right>Qty</TH>
+                  <TH right>MRP</TH>
+                  <TH center>Expiry</TH>
+                  <TH right>Total Amt</TH>
+                  <TH right>Discount</TH>
+                  <TH right muted>Purch. Rate</TH>
+                  <TH right muted>CGST%</TH>
+                  <TH right muted>CGST ₹</TH>
+                  <TH right muted>SGST%</TH>
+                  <TH right muted>SGST ₹</TH>
+                  <TH right muted>Net Total</TH>
+                  <TH right muted>Min Sale *</TH>
+                  <TH right muted>Max Sale *</TH>
+                  <TH right muted>Stock</TH>
+                  <TH center>{''}</TH>
+                </tr>
+              </thead>
 
-                      {/* Purchase Rate */}
-                      <C muted right>
-                        {purRate > 0
-                          ? <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{purRate.toFixed(4)}</span>
-                          : <span style={{ color: '#d9d9d9', fontSize: 11 }}>—</span>
-                        }
-                      </C>
+              <tbody>
+                {lines.map((line, idx) => {
+                  const prod      = products.find((p: any) => p.id === line.productId);
+                  const { netAmt, cgstPct, cgstAmt, sgstAmt, purRate } = calc(line);
+                  const isExpired    = line.expiryDate && dayjs(line.expiryDate).isBefore(dayjs());
+                  const daysLeft     = line.expiryDate ? dayjs(line.expiryDate).diff(dayjs(), 'day') : null;
+                  const isNear       = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
+                  const minRateError = line.minSaleRate != null && purRate > 0 && line.minSaleRate <= purRate;
+                  const maxRateError = line.maxSaleRate != null && line.mrp != null && line.maxSaleRate > line.mrp;
 
-                      {/* CGST% */}
-                      <C muted right>
-                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                          {line.gstPct != null ? `${cgstPct}%` : '—'}
-                        </span>
-                      </C>
+                  return (
+                    <React.Fragment key={line.id}>
+                      <tr
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f9fbff'}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}
+                      >
+                        {/* # */}
+                        <td style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0', textAlign: 'center', fontSize: 11, color: '#c0c7d1', fontWeight: 700, verticalAlign: 'middle' }}>
+                          {idx + 1}
+                        </td>
 
-                      {/* CGST Amt */}
-                      <C muted right><AutoVal v={cgstAmt > 0 ? cgstAmt : null} /></C>
+                        {/* Product */}
+                        <td style={{ padding: '4px 8px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
+                          <Select
+                            ref={setFieldRef(line.id, 'prod')}
+                            variant="borderless" size="small" showSearch filterOption={false}
+                            onSearch={v => setProdSearchMap(prev => ({ ...prev, [line.id]: v }))}
+                            placeholder={<span style={{ color: '#bfbfbf', fontSize: 12 }}>Type to search…</span>}
+                            value={line.productId || undefined}
+                            loading={prodLoading}
+                            onChange={v => {
+                              updateLine(line.id, 'productId', v);
+                              setProdSearchMap(prev => ({ ...prev, [line.id]: '' }));
+                              setTimeout(() => focusField(line.id, 'qty'), 30);
+                            }}
+                            style={{ width: '100%', fontSize: 12 }}
+                            notFoundContent={prodSearchMap[line.id] ? 'No products found' : 'Type to search...'}
+                            options={
+                              prodSearchMap[line.id]
+                                ? products
+                                    .filter((p: any) =>
+                                      p.name?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase()) ||
+                                      p.brand?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase()) ||
+                                      p.code?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase())
+                                    )
+                                    .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
+                                : line.productId
+                                    ? products
+                                        .filter((p: any) => p.id === line.productId)
+                                        .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
+                                    : []
+                            }
+                            optionRender={(opt: any) => (
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: 12 }}>{opt.data.label}</div>
+                                {opt.data.brand && <div style={{ fontSize: 10, color: '#94a3b8' }}>{opt.data.brand}</div>}
+                              </div>
+                            )}
+                          />
+                        </td>
 
-                      {/* SGST% */}
-                      <C muted right>
-                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                          {line.gstPct != null ? `${cgstPct}%` : '—'}
-                        </span>
-                      </C>
+                        {/* Unit */}
+                        <C muted center>
+                          <span style={{ fontSize: 11, color: '#94a3b8' }}>{prod?.unit || '—'}</span>
+                        </C>
 
-                      {/* SGST Amt */}
-                      <C muted right><AutoVal v={sgstAmt > 0 ? sgstAmt : null} /></C>
+                        {/* Qty */}
+                        <C right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'qty')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={1} precision={0}
+                            value={line.qty || undefined}
+                            onChange={v => updateLine(line.id, 'qty', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'qty', lines)}
+                            placeholder="0"
+                          />
+                        </C>
 
-                      {/* Net Total */}
-                      <C muted right>
-                        {netAmt > 0
-                          ? <span style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>{netAmt.toFixed(2)}</span>
-                          : <span style={{ color: '#d9d9d9', fontSize: 11 }}>—</span>
-                        }
-                      </C>
+                        {/* MRP */}
+                        <C right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'mrp')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={0.01} precision={2}
+                            value={line.mrp || undefined}
+                            onChange={v => updateLine(line.id, 'mrp', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'mrp', lines)}
+                            placeholder="0.00"
+                          />
+                        </C>
 
-                      {/* Min Sale Rate */}
-                      <C muted right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'minSale')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={0} precision={2}
-                          value={line.minSaleRate || undefined}
-                          onChange={v => updateLine(line.id, 'minSaleRate', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'minSale', lines)}
-                          placeholder={purRate > 0 ? purRate.toFixed(2) : '0.00'}
-                          status={minRateError ? 'error' : undefined}
-                        />
-                        {minRateError && (
-                          <div style={{ fontSize: 9, color: RED, lineHeight: 1.2, marginTop: 2 }}>
-                            &gt; ₹{purRate.toFixed(2)}
+                        {/* Expiry Date */}
+                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <DatePicker
+                              variant="borderless" size="small"
+                              style={{ width: '100%', fontSize: 11 }}
+                              value={line.expiryDate}
+                              onChange={v => updateLine(line.id, 'expiryDate', v)}
+                              format="MM/YY"
+                              picker="month"
+                              placeholder="MM/YY"
+                              status={!line.expiryDate ? 'error' : undefined}
+                            />
+                            {!line.expiryDate && (
+                              <WarningOutlined style={{ color: RED, fontSize: 11, flexShrink: 0 }} />
+                            )}
                           </div>
-                        )}
-                      </C>
+                        </td>
 
-                      {/* Max Sale Rate */}
-                      <C muted right>
-                        <InputNumber
-                          ref={setFieldRef(line.id, 'maxSale')}
-                          variant="borderless" size="small" controls={NO_CONTROLS}
-                          style={numStyle} styles={rightInput} min={0} precision={2}
-                          value={line.maxSaleRate || undefined}
-                          onChange={v => updateLine(line.id, 'maxSaleRate', v)}
-                          onKeyDown={e => tabKey(e, line.id, 'maxSale', lines)}
-                          placeholder={line.mrp ? String(line.mrp) : '0.00'}
-                        />
-                      </C>
+                        {/* Total Amount */}
+                        <C right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'totalAmount')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={0.01} precision={2}
+                            value={line.totalAmount || undefined}
+                            onChange={v => updateLine(line.id, 'totalAmount', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'totalAmount', lines)}
+                            placeholder="From bill"
+                          />
+                        </C>
 
-                      {/* Stock */}
-                      <C muted right>
-                        <span style={{ fontSize: 11, color: prod?.stockQuantity > 0 ? '#374151' : RED, fontWeight: 600 }}>
-                          {prod ? prod.stockQuantity ?? 0 : '—'}
-                        </span>
-                      </C>
+                        {/* Discount */}
+                        <C right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'discount')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={0} precision={2}
+                            value={line.discount || undefined}
+                            onChange={v => updateLine(line.id, 'discount', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'discount', lines)}
+                            placeholder="0.00"
+                          />
+                        </C>
 
-                      {/* Delete */}
-                      <td style={{ padding: '4px 2px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', verticalAlign: 'middle' }}>
-                        <button
-                          onClick={() => removeLine(line.id)}
-                          style={{ background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: 5, borderRadius: 4, fontSize: 13, lineHeight: 1, transition: 'color 0.15s' }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = RED; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
-                        >
-                          <DeleteOutlined />
-                        </button>
-                      </td>
-                    </tr>
+                        {/* Purchase Rate */}
+                        <C muted right>
+                          {purRate > 0
+                            ? <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{purRate.toFixed(4)}</span>
+                            : <span style={{ color: '#d9d9d9', fontSize: 11 }}>—</span>
+                          }
+                        </C>
 
-                    {/* Expiry hint */}
-                    {(isExpired || isNear) && (
-                      <tr>
-                        <td colSpan={18} style={{ padding: '2px 8px 6px 48px', borderBottom: '1px solid #f0f0f0', background: isExpired ? '#fff5f5' : '#fffbf0' }}>
-                          <span style={{ fontSize: 10, color: isExpired ? RED : AMBER, fontWeight: 600 }}>
-                            {isExpired ? 'Expiry date is in the past — verify before adding to stock' : `Near expiry — ${daysLeft} days remaining`}
+                        {/* CGST% */}
+                        <C muted right>
+                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                            {line.gstPct != null ? `${cgstPct}%` : '—'}
                           </span>
+                        </C>
+
+                        {/* CGST Amt */}
+                        <C muted right><AutoVal v={cgstAmt > 0 ? cgstAmt : null} /></C>
+
+                        {/* SGST% */}
+                        <C muted right>
+                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                            {line.gstPct != null ? `${cgstPct}%` : '—'}
+                          </span>
+                        </C>
+
+                        {/* SGST Amt */}
+                        <C muted right><AutoVal v={sgstAmt > 0 ? sgstAmt : null} /></C>
+
+                        {/* Net Total */}
+                        <C muted right>
+                          {netAmt > 0
+                            ? <span style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>{netAmt.toFixed(2)}</span>
+                            : <span style={{ color: '#d9d9d9', fontSize: 11 }}>—</span>
+                          }
+                        </C>
+
+                        {/* Min Sale Rate */}
+                        <C muted right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'minSale')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={0} precision={2}
+                            value={line.minSaleRate || undefined}
+                            onChange={v => updateLine(line.id, 'minSaleRate', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'minSale', lines)}
+                            placeholder={purRate > 0 ? purRate.toFixed(2) : '0.00'}
+                            status={minRateError ? 'error' : undefined}
+                          />
+                          {minRateError && (
+                            <div style={{ fontSize: 9, color: RED, lineHeight: 1.2, marginTop: 2 }}>
+                              &gt; ₹{purRate.toFixed(2)}
+                            </div>
+                          )}
+                        </C>
+
+                        {/* Max Sale Rate */}
+                        <C muted right>
+                          <InputNumber
+                            ref={setFieldRef(line.id, 'maxSale')}
+                            variant="borderless" size="small" controls={NO_CONTROLS}
+                            style={numStyle} styles={rightInput} min={0} precision={2}
+                            value={line.maxSaleRate || undefined}
+                            onChange={v => updateLine(line.id, 'maxSaleRate', v)}
+                            onKeyDown={e => tabKey(e, line.id, 'maxSale', lines)}
+                            placeholder={line.mrp ? String(line.mrp) : '0.00'}
+                            status={maxRateError ? 'error' : undefined}
+                          />
+                          {maxRateError && (
+                            <div style={{ fontSize: 9, color: RED, lineHeight: 1.2, marginTop: 2 }}>
+                              ≤ MRP ₹{line.mrp?.toFixed(2)}
+                            </div>
+                          )}
+                        </C>
+
+                        {/* Stock */}
+                        <C muted right>
+                          <span style={{ fontSize: 11, color: prod?.stockQuantity > 0 ? '#374151' : RED, fontWeight: 600 }}>
+                            {prod ? prod.stockQuantity ?? 0 : '—'}
+                          </span>
+                        </C>
+
+                        {/* Delete */}
+                        <td style={{ padding: '4px 2px', borderBottom: '1px solid #f0f0f0', textAlign: 'center', verticalAlign: 'middle' }}>
+                          <button
+                            onClick={() => removeLine(line.id)}
+                            style={{ background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: 5, borderRadius: 4, fontSize: 13, lineHeight: 1, transition: 'color 0.15s' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = RED; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#e2e8f0'; }}
+                          >
+                            <DeleteOutlined />
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
 
-              {/* Add line */}
-              <tr>
-                <td colSpan={18} style={{ padding: '8px 14px' }}>
-                  <button
-                    onClick={addLine}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = '0.7'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = '1'}
-                  >
-                    <PlusOutlined /> Add Line
-                  </button>
-                </td>
-              </tr>
-            </tbody>
+                      {/* Expiry hint */}
+                      {(isExpired || isNear) && (
+                        <tr>
+                          <td colSpan={18} style={{ padding: '2px 8px 6px 48px', borderBottom: '1px solid #f0f0f0', background: isExpired ? '#fff5f5' : '#fffbf0' }}>
+                            <span style={{ fontSize: 10, color: isExpired ? RED : AMBER, fontWeight: 600 }}>
+                              {isExpired ? 'Expiry date is in the past — verify before adding to stock' : `Near expiry — ${daysLeft} days remaining`}
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
 
-            {/* Totals footer — inside same table so columns align */}
-            <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 2 }}>
-              <tr style={{ background: '#f0f4f8', borderTop: '2px solid #e2e8f0' }}>
-                {/* cols 1-6: # Product Unit Qty MRP Expiry */}
-                <td colSpan={6} style={{ padding: '10px 14px', fontSize: 11, color: '#8c8c8c', fontWeight: 600, borderTop: '2px solid #e2e8f0' }}>
-                  Totals — {filledLines.length} line{filledLines.length !== 1 ? 's' : ''}
-                </td>
-                {/* col 7: Total Amt */}
-                <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                  <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Bill Total</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.total.toFixed(2)}</div>
-                </td>
-                {/* cols 8-10: Discount PurchRate CGST% */}
-                <td colSpan={3} style={{ borderTop: '2px solid #e2e8f0' }} />
-                {/* col 11: CGST ₹ */}
-                <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                  <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>CGST</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.cgst.toFixed(2)}</div>
-                </td>
-                {/* col 12: SGST% */}
-                <td style={{ borderTop: '2px solid #e2e8f0' }} />
-                {/* col 13: SGST ₹ */}
-                <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                  <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>SGST</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.sgst.toFixed(2)}</div>
-                </td>
-                {/* col 14: Net Total */}
-                <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                  <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Net Total</div>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>₹{totals.netAmt.toFixed(2)}</div>
-                </td>
-                {/* cols 15-18: MinSale MaxSale Stock Del */}
-                <td colSpan={4} style={{ borderTop: '2px solid #e2e8f0' }} />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+                {/* Add line */}
+                <tr>
+                  <td colSpan={18} style={{ padding: '8px 14px' }}>
+                    <button
+                      onClick={addLine}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = '0.7'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = '1'}
+                    >
+                      <PlusOutlined /> Add Line
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+
+              {/* Totals footer — inside same table so columns align */}
+              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 2 }}>
+                <tr style={{ background: '#f0f4f8', borderTop: '2px solid #e2e8f0' }}>
+                  {/* cols 1-6: # Product Unit Qty MRP Expiry */}
+                  <td colSpan={6} style={{ padding: '10px 14px', fontSize: 11, color: '#8c8c8c', fontWeight: 600, borderTop: '2px solid #e2e8f0' }}>
+                    Totals — {filledLines.length} line{filledLines.length !== 1 ? 's' : ''}
+                  </td>
+                  {/* col 7: Total Amt */}
+                  <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Bill Total</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.total.toFixed(2)}</div>
+                  </td>
+                  {/* cols 8-10: Discount PurchRate CGST% */}
+                  <td colSpan={3} style={{ borderTop: '2px solid #e2e8f0' }} />
+                  {/* col 11: CGST ₹ */}
+                  <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>CGST</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.cgst.toFixed(2)}</div>
+                  </td>
+                  {/* col 12: SGST% */}
+                  <td style={{ borderTop: '2px solid #e2e8f0' }} />
+                  {/* col 13: SGST ₹ */}
+                  <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>SGST</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₹{totals.sgst.toFixed(2)}</div>
+                  </td>
+                  {/* col 14: Net Total */}
+                  <td style={{ padding: '10px 8px', textAlign: 'right', borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 9, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Net Total</div>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>₹{totals.netAmt.toFixed(2)}</div>
+                  </td>
+                  {/* cols 15-18: MinSale MaxSale Stock Del */}
+                  <td colSpan={4} style={{ borderTop: '2px solid #e2e8f0' }} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Mobile: Totals summary */}
+      {isMobile && filledLines.length > 0 && (
+        <div style={{ margin: '10px 0', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Bill Total</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>₹{totals.total.toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>CGST</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>₹{totals.cgst.toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>SGST</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>₹{totals.sgst.toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Net Total</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>₹{totals.netAmt.toFixed(2)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save bar */}
       <div style={{ borderTop: '1px solid #e8e8e8', padding: '10px 20px', background: MUTED, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -647,6 +807,206 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
           </div>
         </div>
       </Modal>
+
+      {/* Mobile: Line Edit Drawer */}
+      <Drawer
+        open={isMobile && mobileEditId !== null}
+        onClose={() => { setMobileEditId(null); setDrawerProdSearch(''); }}
+        placement="bottom"
+        height="92dvh"
+        getContainer={document.body}
+        title={
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>
+            {editProd?.name || 'Add Item'}
+          </div>
+        }
+        styles={{
+          wrapper: { width: '100%' },
+          body: {
+            padding: '12px 16px',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            WebkitOverflowScrolling: 'touch' as any,
+          },
+          footer: { padding: '10px 16px' },
+        }}
+        footer={
+          <Button
+            type="primary" size="large" block
+            style={{ background: GREEN, borderColor: GREEN, fontWeight: 700 }}
+            onClick={() => { setMobileEditId(null); setDrawerProdSearch(''); }}
+          >
+            Done
+          </Button>
+        }
+      >
+        {editLine && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Product */}
+            <div>
+              <label style={labelStyle}>Product <span style={{ color: RED }}>*</span></label>
+              <Select
+                showSearch
+                filterOption={false}
+                onSearch={v => setDrawerProdSearch(v)}
+                placeholder="Type to search product..."
+                value={editLine.productId || undefined}
+                loading={prodLoading}
+                onChange={v => { updateLine(editLine.id, 'productId', v); setDrawerProdSearch(''); }}
+                style={{ width: '100%' }}
+                size="large"
+                getPopupContainer={() => document.body}
+                notFoundContent={drawerProdSearch ? 'No products found' : 'Type to search...'}
+                options={
+                  drawerProdSearch
+                    ? products
+                        .filter((p: any) =>
+                          p.name?.toLowerCase().includes(drawerProdSearch.toLowerCase()) ||
+                          p.brand?.toLowerCase().includes(drawerProdSearch.toLowerCase()) ||
+                          p.code?.toLowerCase().includes(drawerProdSearch.toLowerCase())
+                        )
+                        .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
+                    : editLine.productId
+                        ? products
+                            .filter((p: any) => p.id === editLine.productId)
+                            .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
+                        : []
+                }
+                optionRender={(opt: any) => (
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{opt.data.label}</div>
+                    {opt.data.brand && <div style={{ fontSize: 11, color: '#94a3b8' }}>{opt.data.brand}</div>}
+                  </div>
+                )}
+              />
+            </div>
+
+            {/* Qty + MRP */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Qty <span style={{ color: RED }}>*</span></label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={1} precision={0}
+                  value={editLine.qty || undefined}
+                  onChange={v => updateLine(editLine.id, 'qty', v)}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>MRP <span style={{ color: RED }}>*</span></label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={0.01} precision={2}
+                  value={editLine.mrp || undefined}
+                  onChange={v => updateLine(editLine.id, 'mrp', v)}
+                  placeholder="0.00" prefix="₹"
+                />
+              </div>
+            </div>
+
+            {/* Expiry */}
+            <div>
+              <label style={labelStyle}>Expiry Date <span style={{ color: RED }}>*</span></label>
+              <DatePicker
+                size="large" style={{ width: '100%' }}
+                value={editLine.expiryDate}
+                onChange={v => updateLine(editLine.id, 'expiryDate', v)}
+                format="MM/YY" picker="month" placeholder="MM/YY"
+                status={!editLine.expiryDate ? 'error' : undefined}
+              />
+            </div>
+
+            {/* Total Amount + Discount */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Total Amt (bill) <span style={{ color: RED }}>*</span></label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={0.01} precision={2}
+                  value={editLine.totalAmount || undefined}
+                  onChange={v => updateLine(editLine.id, 'totalAmount', v)}
+                  placeholder="From bill" prefix="₹"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Discount</label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={0} precision={2}
+                  value={editLine.discount || undefined}
+                  onChange={v => updateLine(editLine.id, 'discount', v)}
+                  placeholder="0.00" prefix="₹"
+                />
+              </div>
+            </div>
+
+            {/* Min Sale + Max Sale */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Min Sale Rate <span style={{ color: RED }}>*</span></label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={0} precision={2}
+                  value={editLine.minSaleRate || undefined}
+                  onChange={v => updateLine(editLine.id, 'minSaleRate', v)}
+                  placeholder={ePurRate > 0 ? ePurRate.toFixed(2) : '0.00'}
+                  prefix="₹"
+                  status={editMinRateError ? 'error' : undefined}
+                />
+                {editMinRateError && (
+                  <div style={{ fontSize: 11, color: RED, marginTop: 4 }}>
+                    Must be &gt; ₹{ePurRate.toFixed(2)}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>Max Sale Rate <span style={{ color: RED }}>*</span></label>
+                <InputNumber
+                  size="large" style={{ width: '100%' }} min={0} precision={2}
+                  value={editLine.maxSaleRate || undefined}
+                  onChange={v => updateLine(editLine.id, 'maxSaleRate', v)}
+                  placeholder={editLine.mrp ? String(editLine.mrp) : '0.00'}
+                  prefix="₹"
+                  status={editMaxRateError ? 'error' : undefined}
+                />
+                {editMaxRateError && (
+                  <div style={{ fontSize: 11, color: RED, marginTop: 4 }}>
+                    Cannot exceed MRP ₹{editLine.mrp?.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Computed summary */}
+            {eNet > 0 && (
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Purch. Rate</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginTop: 2 }}>
+                      {ePurRate > 0 ? `₹${ePurRate.toFixed(4)}` : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>CGST {eCgstPct}%</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginTop: 2 }}>
+                      {eCgstAmt > 0 ? `₹${eCgstAmt.toFixed(2)}` : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>SGST {eCgstPct}%</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginTop: 2 }}>
+                      {eSgstAmt > 0 ? `₹${eSgstAmt.toFixed(2)}` : '—'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
+                  <div style={{ fontSize: 10, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 0.4 }}>Net Total</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: GREEN, marginTop: 2 }}>₹{eNet.toFixed(2)}</div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 };
