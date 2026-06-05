@@ -118,6 +118,7 @@ const CollectionsTab: React.FC = () => {
     { title: 'Cash', key: 'cashAmount', dataIndex: 'cashAmount' },
     { title: 'UPI', key: 'upiAmount', dataIndex: 'upiAmount' },
     { title: 'Bank', key: 'bankTransferAmount', dataIndex: 'bankTransferAmount' },
+    { title: 'Credit', key: 'creditAmount', dataIndex: 'creditAmount' },
     { title: 'Total', key: 'totalAmount', dataIndex: 'totalAmount' },
   ];
 
@@ -134,10 +135,11 @@ const CollectionsTab: React.FC = () => {
 
       {collections && (
         <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
-          <Col xs={12} md={6}><MetricTile label="Total Collected" value={fmt(collections.totalCollected)} color="#10b981" bg="#ecfdf5" /></Col>
-          <Col xs={12} md={6}><MetricTile label="Cash" value={fmt(collections.totalCash)} color="#059669" bg="#ecfdf5" /></Col>
-          <Col xs={12} md={6}><MetricTile label="Digital" value={fmt(collections.totalDigital)} color="#8b5cf6" bg="#f5f3ff" /></Col>
-          <Col xs={12} md={6}><MetricTile label="Uncleared" value={fmt(collections.totalUncleared)} color="#f59e0b" bg="#fffbeb" /></Col>
+          <Col xs={12} md={5}><MetricTile label="Total Collected" value={fmt(collections.totalCollected)} color="#10b981" bg="#ecfdf5" /></Col>
+          <Col xs={12} md={5}><MetricTile label="Cash" value={fmt(collections.totalCash)} color="#059669" bg="#ecfdf5" /></Col>
+          <Col xs={12} md={4}><MetricTile label="Digital (UPI/Bank)" value={fmt(collections.totalDigital)} color="#8b5cf6" bg="#f5f3ff" /></Col>
+          <Col xs={12} md={4}><MetricTile label="Credit (On Account)" value={fmt(collections.totalCredit)} color="#d97706" bg="#fffbeb" /></Col>
+          <Col xs={12} md={6}><MetricTile label="Uncleared" value={fmt(collections.totalUncleared)} color="#dc2626" bg="#fef2f2" /></Col>
         </Row>
       )}
 
@@ -159,6 +161,7 @@ const CollectionsTab: React.FC = () => {
           { title: 'Cash', dataIndex: 'cashAmount', key: 'cash', render: (v: number) => fmt(v) },
           { title: 'UPI', dataIndex: 'upiAmount', key: 'upi', render: (v: number) => fmt(v) },
           { title: 'Bank', dataIndex: 'bankTransferAmount', key: 'bank', render: (v: number) => fmt(v) },
+          { title: 'Credit', dataIndex: 'creditAmount', key: 'credit', render: (v: number) => fmt(v) },
           { title: 'Total', dataIndex: 'totalAmount', key: 'total', sorter: (a: any, b: any) => a.totalAmount - b.totalAmount,
             render: (v: number) => <strong style={{ color: '#10b981' }}>{fmt(v)}</strong> },
         ]}
@@ -169,7 +172,8 @@ const CollectionsTab: React.FC = () => {
             <Table.Summary.Cell index={2}>{fmt(breakdown.reduce((s: number, r: any) => s + r.cashAmount, 0))}</Table.Summary.Cell>
             <Table.Summary.Cell index={3}>{fmt(breakdown.reduce((s: number, r: any) => s + r.upiAmount, 0))}</Table.Summary.Cell>
             <Table.Summary.Cell index={4}>{fmt(breakdown.reduce((s: number, r: any) => s + r.bankTransferAmount, 0))}</Table.Summary.Cell>
-            <Table.Summary.Cell index={5}><span style={{ color: '#10b981' }}>{fmt(breakdown.reduce((s: number, r: any) => s + r.totalAmount, 0))}</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={5}>{fmt(breakdown.reduce((s: number, r: any) => s + (r.creditAmount || 0), 0))}</Table.Summary.Cell>
+            <Table.Summary.Cell index={6}><span style={{ color: '#10b981' }}>{fmt(breakdown.reduce((s: number, r: any) => s + r.totalAmount, 0))}</span></Table.Summary.Cell>
           </Table.Summary.Row>
         ) : null}
       />

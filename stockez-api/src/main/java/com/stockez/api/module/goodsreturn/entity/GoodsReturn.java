@@ -29,6 +29,10 @@ public class GoodsReturn {
         SALES_RETURN, PURCHASE_RETURN, DAMAGE
     }
 
+    public enum RefundStatus {
+        NONE, PENDING, PROCESSED
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -60,6 +64,29 @@ public class GoodsReturn {
     @Column(nullable = false, precision = 12, scale = 2)
     @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private RefundStatus refundStatus = RefundStatus.NONE;
+
+    @Column(precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal refundAmount = BigDecimal.ZERO;
+
+    private LocalDate refundDate;
+
+    @Column(length = 20)
+    private String refundMode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "refund_processed_by")
+    private User refundProcessedBy;
+
+    private Instant refundProcessedAt;
+
+    @Column(length = 500)
+    private String refundNotes;
 
     @OneToMany(mappedBy = "goodsReturn", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

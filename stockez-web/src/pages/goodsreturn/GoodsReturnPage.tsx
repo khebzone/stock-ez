@@ -47,7 +47,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: productsData } = useGetProductsQuery({ size: 500 });
-  const { data: ordersData }   = useGetOrdersQuery({ size: 200, status: 'DELIVERED' }, { skip: type !== 'SALES_RETURN' });
+  const { data: ordersData }   = useGetOrdersQuery({ size: 500, status: 'DELIVERED' }, { skip: type !== 'SALES_RETURN' });
   const [createReturn, { isLoading: saving }] = useCreateGoodsReturnMutation();
 
   const products: any[] = productsData?.data?.content || productsData?.data || [];

@@ -402,17 +402,24 @@ CREATE TABLE day_closures (
 
 -- =========== GOODS RETURNS ===========
 CREATE TABLE goods_returns (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     UUID NOT NULL REFERENCES tenants(id),
-    return_number VARCHAR(50) NOT NULL UNIQUE,
-    type          VARCHAR(20) NOT NULL,
-    order_id      UUID REFERENCES orders(id),
-    supplier_name VARCHAR(200),
-    return_date   DATE NOT NULL,
-    reason        VARCHAR(500),
-    total_amount  NUMERIC(12,2) NOT NULL DEFAULT 0,
-    created_by_id UUID REFERENCES users(id),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id            UUID NOT NULL REFERENCES tenants(id),
+    return_number        VARCHAR(50) NOT NULL UNIQUE,
+    type                 VARCHAR(20) NOT NULL,
+    order_id             UUID REFERENCES orders(id),
+    supplier_name        VARCHAR(200),
+    return_date          DATE NOT NULL,
+    reason               VARCHAR(500),
+    total_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,
+    refund_amount        NUMERIC(12,2) NOT NULL DEFAULT 0,
+    refund_status        VARCHAR(20) NOT NULL DEFAULT 'NONE',
+    refund_date          DATE,
+    refund_mode          VARCHAR(20),
+    refund_processed_by  UUID REFERENCES users(id),
+    refund_processed_at  TIMESTAMPTZ,
+    refund_notes         VARCHAR(500),
+    created_by_id        UUID REFERENCES users(id),
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE goods_return_items (

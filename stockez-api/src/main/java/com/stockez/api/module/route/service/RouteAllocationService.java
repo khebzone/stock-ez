@@ -268,7 +268,7 @@ public class RouteAllocationService {
     public RouteAllocationDtos.RouteWarehouseSummary getWarehouseSummary(UUID tenantId, LocalDate date) {
         List<Route> routes = routeRepository.findByTenantIdAndActiveTrue(tenantId);
 
-        List<Order> orders = orderRepository.findByTenantDateAndStatuses(tenantId, date,
+        List<Order> orders = orderRepository.findByTenantIdAndStatusIn(tenantId,
                 List.of(Order.OrderStatus.APPROVED, Order.OrderStatus.PREPARING, Order.OrderStatus.PREPARED));
 
         java.util.Map<UUID, List<Order>> byRoute = orders.stream()

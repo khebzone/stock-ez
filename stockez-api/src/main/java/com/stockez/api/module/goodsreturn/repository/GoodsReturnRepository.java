@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,8 @@ public interface GoodsReturnRepository extends JpaRepository<GoodsReturn, UUID> 
     Page<GoodsReturn> findByTenantIdOrderByReturnDateDescCreatedAtDesc(UUID tenantId, Pageable pageable);
 
     Optional<GoodsReturn> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    List<GoodsReturn> findByTenantIdAndRefundStatusOrderByReturnDateDesc(UUID tenantId, GoodsReturn.RefundStatus refundStatus);
 
     @Query("SELECT COALESCE(MAX(CAST(SUBSTRING(g.returnNumber, 10) AS int)), 0) FROM GoodsReturn g " +
            "WHERE g.tenant.id = :tenantId AND g.returnNumber LIKE CONCAT('RTN-', :year, '-%')")

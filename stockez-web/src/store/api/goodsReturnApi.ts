@@ -14,6 +14,14 @@ export const goodsReturnApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/goods-returns', method: 'POST', body }),
       invalidatesTags: ['Order', 'Product', 'Purchase'],
     }),
+    getPendingRefunds: builder.query<any, void>({
+      query: () => '/goods-returns/pending-refunds',
+      providesTags: ['Order', 'Payment'],
+    }),
+    processRefund: builder.mutation<any, { id: string; paymentMode: string; refundDate: string; notes?: string }>({
+      query: ({ id, ...body }) => ({ url: `/goods-returns/${id}/process-refund`, method: 'POST', body }),
+      invalidatesTags: ['Order', 'Payment', 'Product'],
+    }),
   }),
 });
 
@@ -21,4 +29,6 @@ export const {
   useListGoodsReturnsQuery,
   useGetGoodsReturnQuery,
   useCreateGoodsReturnMutation,
+  useGetPendingRefundsQuery,
+  useProcessRefundMutation,
 } = goodsReturnApi;

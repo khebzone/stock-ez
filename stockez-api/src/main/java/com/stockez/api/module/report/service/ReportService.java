@@ -84,9 +84,10 @@ public class ReportService {
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
             List<Payment> day = byDate.getOrDefault(d, Collections.emptyList());
             if (day.isEmpty()) continue;
-            BigDecimal cash = sumByMode(day, Payment.PaymentMode.CASH);
-            BigDecimal upi  = sumByMode(day, Payment.PaymentMode.UPI);
-            BigDecimal bank = day.stream()
+            BigDecimal cash   = sumByMode(day, Payment.PaymentMode.CASH);
+            BigDecimal upi    = sumByMode(day, Payment.PaymentMode.UPI);
+            BigDecimal credit = sumByMode(day, Payment.PaymentMode.CREDIT);
+            BigDecimal bank   = day.stream()
                     .filter(p -> p.getPaymentMode() != Payment.PaymentMode.CASH
                               && p.getPaymentMode() != Payment.PaymentMode.UPI
                               && p.getPaymentMode() != Payment.PaymentMode.CREDIT)
@@ -99,13 +100,15 @@ public class ReportService {
                     .cashAmount(cash)
                     .upiAmount(upi)
                     .bankTransferAmount(bank)
+                    .creditAmount(credit)
                     .totalAmount(total)
                     .build());
         }
 
         BigDecimal totalCollected = payments.stream().map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal totalCash = sumByMode(payments, Payment.PaymentMode.CASH);
-        BigDecimal totalDigital = totalCollected.subtract(totalCash);
+        BigDecimal totalCash    = sumByMode(payments, Payment.PaymentMode.CASH);
+        BigDecimal totalCredit  = sumByMode(payments, Payment.PaymentMode.CREDIT);
+        BigDecimal totalDigital = totalCollected.subtract(totalCash).subtract(totalCredit);
         BigDecimal totalUncleared = payments.stream()
                 .filter(p -> !p.isCleared())
                 .map(Payment::getAmount)
@@ -116,6 +119,7 @@ public class ReportService {
                 .totalCollected(totalCollected)
                 .totalCash(totalCash)
                 .totalDigital(totalDigital)
+                .totalCredit(totalCredit)
                 .totalUncleared(totalUncleared)
                 .build();
     }

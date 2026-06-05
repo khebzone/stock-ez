@@ -113,11 +113,12 @@ const CounterSalePage: React.FC = () => {
       subTotal += lineBase;
       totalGst += gstAmt;
     }
-    return { subTotal, totalGst, total: subTotal + totalGst };
+    const total = Math.round((subTotal + totalGst) * 100) / 100;
+    return { subTotal: Math.round(subTotal * 100) / 100, totalGst: Math.round(totalGst * 100) / 100, total };
   }, [items]);
 
   const priceErrors = items.filter(i => isPriceOutOfRange(i.unitPrice, i.minSaleRate, i.maxSaleRate));
-  const balance = totals.total - (paymentAmount || 0);
+  const balance = Math.round((totals.total - (paymentAmount || 0)) * 100) / 100;
 
   const handleAddCustomer = async () => {
     try {
@@ -515,7 +516,7 @@ const CounterSalePage: React.FC = () => {
             </div>
 
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Payment Method</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}><span style={{ color: '#ff4d4f', marginRight: 2 }}>*</span>Payment Method</div>
               <Select
                 placeholder="Cash (default)" allowClear style={{ width: '100%' }}
                 value={paymentMethodId} onChange={setPaymentMethodId}
@@ -524,7 +525,7 @@ const CounterSalePage: React.FC = () => {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Amount Collected (₹)</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}><span style={{ color: '#ff4d4f', marginRight: 2 }}>*</span>Amount Collected (₹)</div>
               <InputNumber
                 style={{ width: '100%' }} min={0} max={totals.total} precision={2}
                 placeholder={`Max ${fmt(totals.total)}`}

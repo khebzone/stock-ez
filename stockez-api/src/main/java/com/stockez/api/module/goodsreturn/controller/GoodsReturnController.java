@@ -19,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -63,6 +64,28 @@ public class GoodsReturnController {
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getReturn(id, tenantId)));
+    }
+
+    @GetMapping("/pending-refunds")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('RETURNS_VIEW')")
+    @Operation(summary = "List sales returns with pending cash refunds")
+    public ResponseEntity<ApiResponse<List<GoodsReturnDtos.GoodsReturnResponse>>> pendingRefunds(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getPendingRefunds(tenantId)));
+    }
+
+    @PostMapping("/{id}/process-refund")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('RETURNS_CREATE')")
+    @Operation(summary = "Process a pending refund — records negative payment and marks refund done")
+    public ResponseEntity<ApiResponse<GoodsReturnDtos.GoodsReturnResponse>> processRefund(
+            @PathVariable UUID id,
+            @Valid @RequestBody GoodsReturnDtos.ProcessRefundRequest request,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(
+                goodsReturnService.processRefund(id, request, userId, tenantId),
+                "Refund processed successfully"));
     }
 
     private <T> PagedResponse<T> toPagedResponse(Page<T> page) {

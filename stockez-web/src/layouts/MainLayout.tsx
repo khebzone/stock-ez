@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Badge, Breadcrumb, Input, Tooltip, Modal, Form, message, Grid, Drawer } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, UserOutlined, LogoutOutlined,
@@ -110,6 +110,17 @@ const NAV_SECTIONS = [
   },
 ];
 
+const SECTION_META: Record<string, { label: string; icon: React.ReactNode }> = {
+  ORDERS:      { label: 'Orders',     icon: <FileTextOutlined /> },
+  INVENTORY:   { label: 'Inventory',  icon: <InboxOutlined /> },
+  CRM:         { label: 'CRM',        icon: <TeamOutlined /> },
+  FINANCE:     { label: 'Finance',    icon: <WalletOutlined /> },
+  REPORTS:     { label: 'Reports',    icon: <BarChartOutlined /> },
+  INCENTIVES:  { label: 'Incentives', icon: <TrophyOutlined /> },
+  'FIELD OPS': { label: 'Field Ops',  icon: <GlobalOutlined /> },
+  SETUP:       { label: 'Setup',      icon: <SettingOutlined /> },
+};
+
 const BREADCRUMBS: Record<string, string[]> = {
   '/dashboard': ['Dashboard'],
   '/products': ['Catalog', 'Products'],
@@ -169,44 +180,34 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isItemVisible = (item: { permission?: string }) =>
     item.permission === undefined ? isAdmin() : hasPermission(item.permission);
 
-  const menuItems = NAV_SECTIONS.flatMap(section =>
-    section.items
-      .filter(item => isItemVisible(item))
-      .map(item => ({
+  const [openKeys, setOpenKeys] = useState<string[]>(() => {
+    const active = NAV_SECTIONS.find(s =>
+      s.items.some(i => location.pathname === i.key || location.pathname.startsWith(i.key + '/'))
+    )?.section;
+    return active && active !== 'MAIN' ? [active] : [];
+  });
+
+  useEffect(() => {
+    const active = NAV_SECTIONS.find(s =>
+      s.items.some(i => location.pathname === i.key || location.pathname.startsWith(i.key + '/'))
+    )?.section;
+    if (active && active !== 'MAIN') {
+      setOpenKeys(prev => prev.includes(active) ? prev : [...prev, active]);
+    }
+  }, [location.pathname]);
+
+  const buildMenuItems = (onLinkClick?: () => void) =>
+    NAV_SECTIONS.flatMap(section => {
+      const filtered = section.items.filter(isItemVisible);
+      if (filtered.length === 0) return [];
+      const children = filtered.map(item => ({
         key: item.key,
         icon: item.icon,
-        label: <Link to={item.key}>{item.label}</Link>,
-      }))
-  );
-
-  const renderNavExpanded = (onLinkClick?: () => void) =>
-    NAV_SECTIONS.map(section => {
-      const filtered = section.items.filter(item => isItemVisible(item));
-      if (filtered.length === 0) return null;
-      return (
-        <div key={section.section} style={{ marginBottom: 4 }}>
-          <div style={{
-            padding: '10px 24px 6px',
-            fontSize: 10, fontWeight: 700,
-            color: colors.sidebarMuted,
-            letterSpacing: 1.2,
-            textTransform: 'uppercase',
-          }}>
-            {section.section}
-          </div>
-          <Menu
-            theme="dark"
-            mode="inline"
-            selectedKeys={[location.pathname]}
-            items={filtered.map(item => ({
-              key: item.key,
-              icon: item.icon,
-              label: <Link to={item.key} onClick={onLinkClick}>{item.label}</Link>,
-            }))}
-            style={{ background: 'transparent', border: 'none', padding: '0 10px' }}
-          />
-        </div>
-      );
+        label: <Link to={item.key} onClick={onLinkClick}>{item.label}</Link>,
+      }));
+      if (section.section === 'MAIN') return children;
+      const meta = SECTION_META[section.section];
+      return [{ key: section.section, icon: meta?.icon, label: meta?.label, children }];
     });
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };
@@ -328,19 +329,17 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
 
           {/* Nav */}
-          <div style={{ overflowY: 'auto', height: `calc(100vh - ${HEADER_H}px - 64px)`, padding: '12px 0' }}>
-            {!collapsed
-              ? renderNavExpanded()
-              : (
-                <Menu
-                  theme="dark"
-                  mode="inline"
-                  selectedKeys={[location.pathname]}
-                  items={menuItems}
-                  style={{ background: 'transparent', border: 'none', padding: '0 10px' }}
-                />
-              )
-            }
+          <div style={{ overflowY: 'auto', height: `calc(100vh - ${HEADER_H}px - 64px)` }}>
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[location.pathname]}
+              openKeys={collapsed ? [] : openKeys}
+              onOpenChange={keys => setOpenKeys(keys as string[])}
+              inlineCollapsed={collapsed}
+              items={buildMenuItems()}
+              style={{ background: 'transparent', border: 'none' }}
+            />
           </div>
 
           {sidebarUserStrip(!collapsed)}
@@ -388,8 +387,16 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
 
         {/* Nav sections */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 0' }}>
-          {renderNavExpanded(() => setMobileNavOpen(false))}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            openKeys={openKeys}
+            onOpenChange={keys => setOpenKeys(keys as string[])}
+            items={buildMenuItems(() => setMobileNavOpen(false))}
+            style={{ background: 'transparent', border: 'none' }}
+          />
         </div>
 
         {/* User strip */}

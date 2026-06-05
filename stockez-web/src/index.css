@@ -254,6 +254,17 @@ input[type=number] { -moz-appearance: textfield; }
   background: rgba(16, 185, 129, 0.18) !important;
   font-weight: 600 !important;
 }
+.ant-menu-dark .ant-menu-submenu-title {
+  height: 38px !important;
+  line-height: 38px !important;
+  margin: 2px 0 !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+.ant-menu-dark .ant-menu-sub.ant-menu-inline {
+  background: transparent !important;
+}
 
 /* ── Mobile adjustments ── */
 @media (max-width: 767px) {

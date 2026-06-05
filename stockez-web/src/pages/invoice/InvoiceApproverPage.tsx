@@ -20,7 +20,7 @@ import ReturnFromOrderModal from '../../components/ReturnFromOrderModal';
 
 const { Option } = Select;
 
-const RETURNABLE_STATUSES = new Set(['APPROVED', 'PREPARING', 'PREPARED', 'DISPATCHED', 'DELIVERED']);
+const RETURNABLE_STATUSES = new Set(['DELIVERED']);
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   DRAFT:            { color: '#6b7280', bg: '#f3f4f6',  label: 'Draft' },

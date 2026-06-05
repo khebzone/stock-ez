@@ -2,16 +2,21 @@ import React, { useState } from 'react';
 import {
   Table, Button, Card, message, Tag, Tabs, Row, Col,
   Badge, Drawer, List, Avatar, DatePicker, Checkbox, Alert, Divider, Empty, Grid,
+  Modal, Select, Form, Input,
 } from 'antd';
 import {
   CheckCircleOutlined,
   SafetyOutlined, CalendarOutlined, PhoneOutlined, ExclamationCircleOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   useGetDailySummaryQuery, useClearPaymentsMutation,
   useGetPendingVerificationsQuery,
 } from '../../store/api/paymentApi';
+import {
+  useGetPendingRefundsQuery, useProcessRefundMutation,
+} from '../../store/api/goodsReturnApi';
 import PageHeader from '../../components/PageHeader';
 
 const MODE_COLOR: Record<string, string> = {
@@ -371,6 +376,156 @@ const PendingVerificationTab: React.FC = () => {
   );
 };
 
+// ── Pending Refunds Tab ──────────────────────────────────────────────────────
+const PendingRefundsTab: React.FC = () => {
+  const [refundTarget, setRefundTarget] = useState<any>(null);
+  const [form] = Form.useForm();
+
+  const { data, isLoading, refetch } = useGetPendingRefundsQuery();
+  const [processRefund, { isLoading: processing }] = useProcessRefundMutation();
+
+  const refunds: any[] = data?.data || [];
+
+  const handleProcess = async (values: any) => {
+    try {
+      await processRefund({
+        id: refundTarget.id,
+        paymentMode: values.paymentMode,
+        refundDate: values.refundDate.format('YYYY-MM-DD'),
+        notes: values.notes,
+      }).unwrap();
+      message.success(`Refund of ₹${Number(refundTarget.refundAmount).toFixed(2)} processed`);
+      setRefundTarget(null);
+      form.resetFields();
+      refetch();
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to process refund');
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Return',
+      key: 'return',
+      render: (_: any, r: any) => (
+        <div>
+          <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.returnNumber}</div>
+          <div style={{ fontSize: 11, color: '#94a3b8' }}>{r.returnDate}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Customer / Order',
+      key: 'order',
+      render: (_: any, r: any) => (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{r.referenceOrderCustomerName || '—'}</div>
+          <div style={{ fontSize: 11, color: '#2563eb' }}>#{r.referenceOrderNumber}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Return Value',
+      dataIndex: 'totalAmount',
+      width: 120,
+      render: (v: number) => <span style={{ fontWeight: 700 }}>₹{Number(v).toFixed(2)}</span>,
+    },
+    {
+      title: 'Refund Due',
+      dataIndex: 'refundAmount',
+      width: 120,
+      render: (v: number) => <span style={{ fontWeight: 800, color: '#ef4444' }}>₹{Number(v).toFixed(2)}</span>,
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 150,
+      render: (_: any, r: any) => (
+        <Button
+          type="primary"
+          size="small"
+          icon={<RollbackOutlined />}
+          onClick={() => { setRefundTarget(r); form.setFieldsValue({ refundDate: dayjs(), paymentMode: 'CASH' }); }}
+          style={{ background: '#059669', border: 'none', borderRadius: 6, fontWeight: 600 }}
+        >
+          Process Refund
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      {!isLoading && refunds.length === 0 && (
+        <Card style={{ borderRadius: 16, border: '1px solid #d1fae5' }} styles={{ body: { padding: '60px 20px', textAlign: 'center' } }}>
+          <CheckCircleOutlined style={{ fontSize: 52, color: '#059669', display: 'block', marginBottom: 14 }} />
+          <div style={{ fontWeight: 700, fontSize: 18, color: '#059669' }}>No Pending Refunds</div>
+          <div style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>All customer refunds have been processed.</div>
+        </Card>
+      )}
+
+      {refunds.length > 0 && (
+        <Card style={{ borderRadius: 12 }} styles={{ body: { padding: 0 } }}>
+          <Table
+            columns={columns}
+            dataSource={refunds}
+            rowKey="id"
+            loading={isLoading}
+            size="middle"
+            pagination={false}
+            locale={{ emptyText: <Empty description="No pending refunds" /> }}
+          />
+        </Card>
+      )}
+
+      <Modal
+        open={!!refundTarget}
+        onCancel={() => { setRefundTarget(null); form.resetFields(); }}
+        title={
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Process Refund</div>
+            {refundTarget && (
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 2 }}>
+                {refundTarget.returnNumber} · {refundTarget.referenceOrderCustomerName} ·{' '}
+                <span style={{ color: '#ef4444', fontWeight: 700 }}>₹{Number(refundTarget?.refundAmount).toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        }
+        footer={null}
+        width={420}
+        centered
+      >
+        <Form form={form} layout="vertical" onFinish={handleProcess} style={{ marginTop: 16 }}>
+          <Form.Item name="paymentMode" label="Refund Method" rules={[{ required: true }]}>
+            <Select>
+              <Select.Option value="CASH">Cash</Select.Option>
+              <Select.Option value="UPI">UPI</Select.Option>
+              <Select.Option value="CHEQUE">Cheque</Select.Option>
+              <Select.Option value="NEFT">NEFT</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="refundDate" label="Refund Date" rules={[{ required: true }]}>
+            <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+          </Form.Item>
+          <Form.Item name="notes" label="Notes (optional)">
+            <Input placeholder="e.g. Returned at counter" />
+          </Form.Item>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+            <Button onClick={() => { setRefundTarget(null); form.resetFields(); }}>Cancel</Button>
+            <Button
+              type="primary" htmlType="submit" loading={processing}
+              style={{ background: '#059669', border: 'none', fontWeight: 700 }}
+            >
+              Confirm Refund ₹{Number(refundTarget?.refundAmount || 0).toFixed(2)}
+            </Button>
+          </div>
+        </Form>
+      </Modal>
+    </>
+  );
+};
+
 // ── Daily History Tab ────────────────────────────────────────────────────────
 const DailyHistoryTab: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -413,7 +568,11 @@ const DailyHistoryTab: React.FC = () => {
       title: 'Amount',
       dataIndex: 'amount',
       width: 110,
-      render: (v: number) => <span style={{ fontWeight: 800, color: '#0f172a' }}>₹{Number(v).toFixed(2)}</span>,
+      render: (v: number) => (
+        <span style={{ fontWeight: 800, color: Number(v) < 0 ? '#ef4444' : '#0f172a' }}>
+          {Number(v) < 0 ? `-₹${Math.abs(Number(v)).toFixed(2)}` : `₹${Number(v).toFixed(2)}`}
+        </span>
+      ),
     },
     {
       title: 'Method',
@@ -433,11 +592,13 @@ const DailyHistoryTab: React.FC = () => {
       key: 'status',
       width: 110,
       render: (_: any, r: any) => (
-        r.cleared
-          ? <Badge status="success" text="Cleared" />
-          : r.submitted
-            ? <Badge status="warning" text="Submitted" />
-            : <Badge status="default" text="Collected" />
+        Number(r.amount) < 0
+          ? <Badge status="error" text="Refunded" />
+          : r.cleared
+            ? <Badge status="success" text="Cleared" />
+            : r.submitted
+              ? <Badge status="warning" text="Submitted" />
+              : <Badge status="default" text="Collected" />
       ),
     },
   ];
@@ -493,6 +654,7 @@ const DailyHistoryTab: React.FC = () => {
 const PaymentsPage: React.FC = () => {
   const { data: pendingData } = useGetPendingVerificationsQuery();
   const { data: todaySummary } = useGetDailySummaryQuery({ date: dayjs().format('YYYY-MM-DD') });
+  const { data: refundsData } = useGetPendingRefundsQuery();
 
   const pendingVerifyCount = (pendingData?.data || []).reduce(
     (acc: number, g: any) => acc + (g.payments?.length || 0), 0
@@ -500,6 +662,7 @@ const PaymentsPage: React.FC = () => {
   const pendingSubmitCount = (todaySummary?.data || []).filter((g: any) =>
     (g.payments || []).some((p: any) => !p.submitted)
   ).length;
+  const pendingRefundCount = (refundsData?.data || []).length;
   const totalPending = pendingVerifyCount + pendingSubmitCount;
 
   const tabs = [
@@ -517,6 +680,19 @@ const PaymentsPage: React.FC = () => {
       children: <PendingVerificationTab />,
     },
     {
+      key: 'refunds',
+      label: (
+        <span>
+          <RollbackOutlined />
+          Pending Refunds
+          {pendingRefundCount > 0 && (
+            <Badge count={pendingRefundCount} size="small" style={{ marginLeft: 6, background: '#ef4444' }} />
+          )}
+        </span>
+      ),
+      children: <PendingRefundsTab />,
+    },
+    {
       key: 'history',
       label: <span><CalendarOutlined /> Daily History</span>,
       children: <DailyHistoryTab />,
@@ -527,9 +703,13 @@ const PaymentsPage: React.FC = () => {
     <div>
       <PageHeader
         title="Payments & Collections"
-        subtitle="Verify submitted collections and review daily history"
-        count={totalPending}
-        countLabel={pendingSubmitCount > 0 ? `${pendingSubmitCount} not submitted · ${pendingVerifyCount} to verify` : 'pending verification'}
+        subtitle="Verify submitted collections, process customer refunds, and review daily history"
+        count={totalPending + pendingRefundCount}
+        countLabel={[
+          pendingSubmitCount > 0 ? `${pendingSubmitCount} not submitted` : '',
+          pendingVerifyCount > 0 ? `${pendingVerifyCount} to verify` : '',
+          pendingRefundCount > 0 ? `${pendingRefundCount} refund${pendingRefundCount > 1 ? 's' : ''} pending` : '',
+        ].filter(Boolean).join(' · ') || 'all clear'}
       />
       <Tabs items={tabs} defaultActiveKey="verify" style={{ marginTop: 8 }} />
     </div>

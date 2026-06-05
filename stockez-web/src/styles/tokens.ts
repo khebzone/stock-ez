@@ -114,6 +114,7 @@ export const antdTheme = {
   components: {
     Menu: {
       darkItemBg:           colors.sidebar,
+      darkSubMenuItemBg:    colors.sidebar,
       darkItemHoverBg:      colors.sidebarHover,
       darkItemSelectedBg:   colors.sidebarActive,
       darkItemSelectedColor: '#ffffff',

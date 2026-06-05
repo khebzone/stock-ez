@@ -71,6 +71,7 @@ public class ReportDtos {
         private BigDecimal cashAmount;
         private BigDecimal upiAmount;
         private BigDecimal bankTransferAmount;
+        private BigDecimal creditAmount;
         private BigDecimal totalAmount;
     }
 
@@ -80,6 +81,7 @@ public class ReportDtos {
         private BigDecimal totalCollected;
         private BigDecimal totalCash;
         private BigDecimal totalDigital;
+        private BigDecimal totalCredit;
         private BigDecimal totalUncleared;
     }
 

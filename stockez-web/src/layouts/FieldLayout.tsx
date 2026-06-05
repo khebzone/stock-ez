@@ -36,13 +36,22 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const permDelivery = hasPermission('DELIVERY_VIEW') || hasPermission('DELIVERY_UPDATE');
 
   // Once loaded, gate pass allocation drives visibility
-  const hasSales    = myAllocation != null ? (myAllocation.isSales    ?? myAllocation.sales    ?? false) : permSales;
-  const hasDelivery = myAllocation != null ? (myAllocation.isDelivery ?? myAllocation.delivery ?? false) : permDelivery;
+  // Fall back to permission when allocation doesn't carry isSales/isDelivery flags
+  const hasSales    = myAllocation != null ? (myAllocation.isSales    ?? myAllocation.sales    ?? permSales)    : permSales;
+  const hasDelivery = myAllocation != null ? (myAllocation.isDelivery ?? myAllocation.delivery ?? permDelivery) : permDelivery;
   const allocated   = myAllocation != null ? myAllocation.allocated : null;
 
-  const dashboardKey  = hasSales ? '/sales/dashboard'  : '/delivery/dashboard';
-  const paymentsKey   = hasSales ? '/sales/payments'   : '/delivery/payments';
-  const attendanceKey = hasSales ? '/sales/attendance' : '/delivery/attendance';
+  // Single-role users: always follow permission.
+  // Dual-role users: let allocation decide (hasSales already incorporates the fallback above).
+  const dashboardKey  = (permSales && !permDelivery) ? '/sales/dashboard'
+    : (!permSales && permDelivery) ? '/delivery/dashboard'
+    : hasSales ? '/sales/dashboard' : '/delivery/dashboard';
+  const paymentsKey   = (permSales && !permDelivery) ? '/sales/payments'
+    : (!permSales && permDelivery) ? '/delivery/payments'
+    : hasSales ? '/sales/payments' : '/delivery/payments';
+  const attendanceKey = (permSales && !permDelivery) ? '/sales/attendance'
+    : (!permSales && permDelivery) ? '/delivery/attendance'
+    : hasSales ? '/sales/attendance' : '/delivery/attendance';
 
   const ALL_NAV = [
     { key: dashboardKey,          icon: <DashboardOutlined />,       label: 'Dashboard',   permission: null },

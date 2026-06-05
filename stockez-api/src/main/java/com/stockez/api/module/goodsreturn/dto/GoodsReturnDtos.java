@@ -53,15 +53,34 @@ public class GoodsReturnDtos {
     }
 
     @Data
+    public static class ProcessRefundRequest {
+        @NotNull(message = "Payment mode is required")
+        private String paymentMode;
+
+        @NotNull(message = "Refund date is required")
+        private LocalDate refundDate;
+
+        private String notes;
+    }
+
+    @Data
     public static class GoodsReturnResponse {
         private UUID id;
         private String returnNumber;
         private String type;
         private String supplierName;
         private String referenceOrderNumber;
+        private UUID referenceOrderId;
+        private String referenceOrderCustomerName;
         private LocalDate returnDate;
         private String reason;
         private BigDecimal totalAmount;
+        private String refundStatus;
+        private BigDecimal refundAmount;
+        private LocalDate refundDate;
+        private String refundMode;
+        private String refundNotes;
+        private PersonInfo refundProcessedBy;
         private Instant createdAt;
         private PersonInfo createdBy;
         private List<GoodsReturnItemResponse> items;

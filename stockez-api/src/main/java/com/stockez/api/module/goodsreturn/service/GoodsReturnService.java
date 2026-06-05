@@ -5,7 +5,9 @@ import com.stockez.api.module.goodsreturn.entity.GoodsReturn;
 import com.stockez.api.module.goodsreturn.entity.GoodsReturnItem;
 import com.stockez.api.module.goodsreturn.repository.GoodsReturnRepository;
 import com.stockez.api.module.order.entity.Order;
+import com.stockez.api.module.order.entity.Payment;
 import com.stockez.api.module.order.repository.OrderRepository;
+import com.stockez.api.module.order.repository.PaymentRepository;
 import com.stockez.api.module.product.entity.Product;
 import com.stockez.api.module.product.repository.ProductRepository;
 import com.stockez.api.module.purchase.entity.StockBatch;
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.Year;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +40,7 @@ public class GoodsReturnService {
     private final StockBatchRepository stockBatchRepository;
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
+    private final PaymentRepository paymentRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
@@ -172,15 +176,27 @@ public class GoodsReturnService {
             productRepository.save(product);
         }
 
-        // Update order totals once after all items processed
+        // Update order totals and determine refund
         if (returnType == GoodsReturn.ReturnType.SALES_RETURN && saved.getReferenceOrder() != null) {
             Order order = saved.getReferenceOrder();
             BigDecimal newTotal = order.getTotalAmount().subtract(saved.getTotalAmount());
             if (newTotal.compareTo(BigDecimal.ZERO) < 0) newTotal = BigDecimal.ZERO;
-            BigDecimal newBalance = newTotal.subtract(order.getPaidAmount());
-            if (newBalance.compareTo(BigDecimal.ZERO) < 0) newBalance = BigDecimal.ZERO;
+
+            BigDecimal paidSoFar = order.getPaidAmount();
+            BigDecimal refundAmt = paidSoFar.subtract(newTotal); // positive = overpaid relative to new total
+
+            if (refundAmt.compareTo(BigDecimal.ZERO) > 0) {
+                // Customer paid more than the new order value → refund needed
+                saved.setRefundAmount(refundAmt);
+                saved.setRefundStatus(GoodsReturn.RefundStatus.PENDING);
+                goodsReturnRepository.save(saved);
+                order.setPaidAmount(newTotal);
+                order.setBalanceAmount(BigDecimal.ZERO);
+            } else {
+                // Outstanding just reduced (or cleared), no cash to return
+                order.setBalanceAmount(newTotal.subtract(paidSoFar));
+            }
             order.setTotalAmount(newTotal);
-            order.setBalanceAmount(newBalance);
             orderRepository.save(order);
         }
 
@@ -203,6 +219,67 @@ public class GoodsReturnService {
         return toResponse(goodsReturn);
     }
 
+    @Transactional(readOnly = true)
+    public List<GoodsReturnDtos.GoodsReturnResponse> getPendingRefunds(UUID tenantId) {
+        return goodsReturnRepository
+                .findByTenantIdAndRefundStatusOrderByReturnDateDesc(tenantId, GoodsReturn.RefundStatus.PENDING)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public GoodsReturnDtos.GoodsReturnResponse processRefund(
+            UUID returnId, GoodsReturnDtos.ProcessRefundRequest req, UUID userId, UUID tenantId) {
+
+        GoodsReturn goodsReturn = goodsReturnRepository.findByIdAndTenantId(returnId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("GoodsReturn", returnId.toString()));
+
+        if (goodsReturn.getRefundStatus() != GoodsReturn.RefundStatus.PENDING) {
+            throw new BusinessException("This return does not have a pending refund", "INVALID_REFUND_STATUS");
+        }
+
+        User processedBy = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        Payment.PaymentMode mode;
+        try {
+            mode = Payment.PaymentMode.valueOf(req.getPaymentMode());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("Invalid payment mode: " + req.getPaymentMode(), "INVALID_PAYMENT_MODE");
+        }
+
+        // Negative payment = cash going out of the business to the customer
+        Instant now = Instant.now();
+        Payment refundPayment = Payment.builder()
+                .tenant(goodsReturn.getTenant())
+                .order(goodsReturn.getReferenceOrder())
+                .collectedBy(processedBy)
+                .amount(goodsReturn.getRefundAmount().negate())
+                .paymentMode(mode)
+                .collectionDate(req.getRefundDate())
+                .cleared(true)
+                .clearedAt(now)
+                .submitted(true)
+                .submittedAt(now)
+                .notes("Refund for " + goodsReturn.getReturnNumber() +
+                       (req.getNotes() != null && !req.getNotes().isBlank() ? " — " + req.getNotes() : ""))
+                .build();
+        paymentRepository.save(refundPayment);
+
+        goodsReturn.setRefundStatus(GoodsReturn.RefundStatus.PROCESSED);
+        goodsReturn.setRefundDate(req.getRefundDate());
+        goodsReturn.setRefundMode(req.getPaymentMode());
+        goodsReturn.setRefundProcessedBy(processedBy);
+        goodsReturn.setRefundProcessedAt(now);
+        goodsReturn.setRefundNotes(req.getNotes());
+        GoodsReturn updated = goodsReturnRepository.save(goodsReturn);
+
+        auditService.record(tenantId, "GOODS_RETURN", returnId, "REFUND_PROCESSED",
+                "Refund ₹" + goodsReturn.getRefundAmount().toPlainString() +
+                " via " + req.getPaymentMode() + " processed by " + processedBy.getFullName());
+
+        return toResponse(updated);
+    }
+
     // ── Mapping helpers ──────────────────────────────────────────────────────────
 
     private GoodsReturnDtos.GoodsReturnResponse toResponse(GoodsReturn gr) {
@@ -214,10 +291,26 @@ public class GoodsReturnService {
         res.setReturnDate(gr.getReturnDate());
         res.setReason(gr.getReason());
         res.setTotalAmount(gr.getTotalAmount());
+        res.setRefundStatus(gr.getRefundStatus().name());
+        res.setRefundAmount(gr.getRefundAmount());
+        res.setRefundDate(gr.getRefundDate());
+        res.setRefundMode(gr.getRefundMode());
+        res.setRefundNotes(gr.getRefundNotes());
         res.setCreatedAt(gr.getCreatedAt());
 
         if (gr.getReferenceOrder() != null) {
             res.setReferenceOrderNumber(gr.getReferenceOrder().getOrderNumber());
+            res.setReferenceOrderId(gr.getReferenceOrder().getId());
+            if (gr.getReferenceOrder().getCustomer() != null) {
+                res.setReferenceOrderCustomerName(gr.getReferenceOrder().getCustomer().getBusinessName());
+            }
+        }
+
+        if (gr.getRefundProcessedBy() != null) {
+            GoodsReturnDtos.PersonInfo rp = new GoodsReturnDtos.PersonInfo();
+            rp.setId(gr.getRefundProcessedBy().getId());
+            rp.setFullName(gr.getRefundProcessedBy().getFullName());
+            res.setRefundProcessedBy(rp);
         }
 
         if (gr.getCreatedBy() != null) {

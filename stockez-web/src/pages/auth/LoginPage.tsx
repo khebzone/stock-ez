@@ -11,6 +11,7 @@ const LoginPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loginError, setLoginError] = useState<string>('');
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [usernameReadOnly, setUsernameReadOnly] = useState(true);
   const orb1Ref = useRef<HTMLDivElement>(null);
   const orb2Ref = useRef<HTMLDivElement>(null);
 
@@ -393,8 +394,9 @@ const LoginPage: React.FC = () => {
                   prefix={<UserOutlined />}
                   placeholder="Phone number or email"
                   size="large"
-                  autoComplete="username"
-                  autoFocus
+                  autoComplete="off"
+                  readOnly={usernameReadOnly}
+                  onFocus={() => setUsernameReadOnly(false)}
                 />
               </Form.Item>
 
