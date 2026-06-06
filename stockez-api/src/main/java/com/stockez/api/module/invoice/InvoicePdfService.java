@@ -2,6 +2,7 @@ package com.stockez.api.module.invoice;
 
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
+import com.lowagie.text.pdf.draw.LineSeparator;
 import com.stockez.api.module.order.dto.OrderDtos;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
