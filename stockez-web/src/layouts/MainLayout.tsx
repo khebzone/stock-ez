@@ -13,6 +13,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useChangePasswordMutation } from '../store/api/userApi';
 import { colors } from '../styles/tokens';
 import { hasPermission, isAdmin } from '../utils/permissions';
+import { hasPlan, type RequiredPlan } from '../utils/planGate';
 
 const { Header, Sider, Content } = Layout;
 
@@ -26,86 +27,87 @@ const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 // permission: undefined = admin-only; permission: string = shown when user has that permission
+// minPlan: feature requires this plan or higher (soft lock — still visible, upgrade overlay on click)
 const NAV_SECTIONS = [
   {
     section: 'MAIN',
     items: [
-      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', permission: undefined as string | undefined },
+      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', permission: undefined as string | undefined, minPlan: undefined as RequiredPlan | undefined },
     ],
   },
   {
     section: 'ORDERS',
     items: [
-      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders', permission: 'ORDERS_VIEW' },
-      { key: '/counter-sale', icon: <ShoppingCartOutlined />, label: 'Counter Sale', permission: 'ORDERS_CREATE' },
-      { key: '/invoice/approver', icon: <AuditOutlined />, label: 'Approve Orders', permission: 'INVOICE_VIEW' },
-      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', permission: 'PICKLIST_VIEW' },
+      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders', permission: 'ORDERS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/counter-sale', icon: <ShoppingCartOutlined />, label: 'Counter Sale', permission: 'ORDERS_CREATE', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/invoice/approver', icon: <AuditOutlined />, label: 'Approve Orders', permission: 'INVOICE_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', permission: 'PICKLIST_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
   {
     section: 'INVENTORY',
     items: [
-      { key: '/purchases', icon: <InboxOutlined />, label: 'Purchases', permission: 'PURCHASES_VIEW' },
-      { key: '/stock-batches', icon: <HddOutlined />, label: 'Stock Batches', permission: 'STOCK_VIEW' },
-      { key: '/goods-return', icon: <RollbackOutlined />, label: 'Goods Return', permission: 'RETURNS_VIEW' },
-      { key: '/gate-pass', icon: <EyeOutlined />, label: 'Gate Pass', permission: 'GATE_PASS_VIEW' },
+      { key: '/purchases', icon: <InboxOutlined />, label: 'Purchases', permission: 'PURCHASES_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/stock-batches', icon: <HddOutlined />, label: 'Stock Batches', permission: 'STOCK_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/goods-return', icon: <RollbackOutlined />, label: 'Goods Return', permission: 'RETURNS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/gate-pass', icon: <EyeOutlined />, label: 'Gate Pass', permission: 'GATE_PASS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
   {
     section: 'CRM',
     items: [
-      { key: '/customers', icon: <TeamOutlined />, label: 'Customers', permission: 'CUSTOMERS_VIEW' },
-      { key: '/suppliers', icon: <ShopOutlined />, label: 'Suppliers', permission: 'SUPPLIERS_VIEW' },
-      { key: '/products', icon: <ShoppingOutlined />, label: 'Products', permission: 'PRODUCTS_VIEW' },
+      { key: '/customers', icon: <TeamOutlined />, label: 'Customers', permission: 'CUSTOMERS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/suppliers', icon: <ShopOutlined />, label: 'Suppliers', permission: 'SUPPLIERS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/products', icon: <ShoppingOutlined />, label: 'Products', permission: 'PRODUCTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
     ],
   },
   {
     section: 'FINANCE',
     items: [
-      { key: '/payments', icon: <WalletOutlined />, label: 'Collections', permission: 'PAYMENTS_VIEW' },
-      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', permission: 'PAYMENTS_VIEW' },
-      { key: '/supplier-payments', icon: <WalletOutlined />, label: 'Supplier Payments', permission: 'SUPPLIER_PAYMENTS_VIEW' },
-      { key: '/expenses', icon: <FileTextOutlined />, label: 'Expenses', permission: 'EXPENSES_VIEW' },
-      { key: '/day-closure', icon: <CalculatorOutlined />, label: 'Day Counter', permission: 'DAY_CLOSURE_VIEW' },
+      { key: '/payments', icon: <WalletOutlined />, label: 'Collections', permission: 'PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', permission: 'PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/supplier-payments', icon: <WalletOutlined />, label: 'Supplier Payments', permission: 'SUPPLIER_PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/expenses', icon: <FileTextOutlined />, label: 'Expenses', permission: 'EXPENSES_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/day-closure', icon: <CalculatorOutlined />, label: 'Day Counter', permission: 'DAY_CLOSURE_VIEW', minPlan: undefined as RequiredPlan | undefined },
     ],
   },
   {
     section: 'REPORTS',
     items: [
-      { key: '/reports', icon: <BarChartOutlined />, label: 'Reports Hub', permission: 'REPORTS_VIEW' },
-      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', permission: 'REPORTS_VIEW' },
-      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', permission: 'REPORTS_VIEW' },
-      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', permission: 'REPORTS_VIEW' },
-      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', permission: 'REPORTS_VIEW' },
-      { key: '/reports/audit', icon: <AuditOutlined />, label: 'Audit Report', permission: undefined },
+      { key: '/reports', icon: <BarChartOutlined />, label: 'Reports Hub', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/audit', icon: <AuditOutlined />, label: 'Audit Report', permission: undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
   {
     section: 'INCENTIVES',
     items: [
-      { key: '/incentives/targets', icon: <TrophyOutlined />, label: 'Brand Targets', permission: 'INCENTIVES_VIEW' },
-      { key: '/incentives/collection/targets', icon: <WalletOutlined />, label: 'Collection Targets', permission: 'INCENTIVES_VIEW' },
-      { key: '/incentives/slabs', icon: <LineChartOutlined />, label: 'Incentive Slabs', permission: 'INCENTIVES_VIEW' },
-      { key: '/incentives/credits', icon: <WalletOutlined />, label: 'Incentive Credits', permission: 'INCENTIVES_VIEW' },
+      { key: '/incentives/targets', icon: <TrophyOutlined />, label: 'Brand Targets', permission: 'INCENTIVES_VIEW', minPlan: 'PREMIUM' as RequiredPlan | undefined },
+      { key: '/incentives/collection/targets', icon: <WalletOutlined />, label: 'Collection Targets', permission: 'INCENTIVES_VIEW', minPlan: 'PREMIUM' as RequiredPlan | undefined },
+      { key: '/incentives/slabs', icon: <LineChartOutlined />, label: 'Incentive Slabs', permission: 'INCENTIVES_VIEW', minPlan: 'PREMIUM' as RequiredPlan | undefined },
+      { key: '/incentives/credits', icon: <WalletOutlined />, label: 'Incentive Credits', permission: 'INCENTIVES_VIEW', minPlan: 'PREMIUM' as RequiredPlan | undefined },
     ],
   },
   {
     section: 'FIELD OPS',
     items: [
-      { key: '/attendance', icon: <ClockCircleOutlined />, label: 'Attendance', permission: 'ATTENDANCE_VIEW' },
-      { key: '/field-monitor', icon: <GlobalOutlined />, label: 'Field Monitor', permission: 'FIELD_MONITOR_VIEW' },
+      { key: '/attendance', icon: <ClockCircleOutlined />, label: 'Attendance', permission: 'ATTENDANCE_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/field-monitor', icon: <GlobalOutlined />, label: 'Field Monitor', permission: 'FIELD_MONITOR_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
   {
     section: 'SETUP',
     items: [
-      { key: '/vehicles', icon: <CarOutlined />, label: 'Vehicles', permission: 'VEHICLES_VIEW' },
-      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', permission: undefined },
-      { key: '/users', icon: <UserOutlined />, label: 'Team', permission: undefined },
-      { key: '/roles', icon: <SettingOutlined />, label: 'Roles', permission: undefined },
-      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', permission: undefined },
-      { key: '/import', icon: <UploadOutlined />, label: 'Data Import', permission: 'IMPORT_VIEW' },
-      { key: '/settings/company', icon: <SettingOutlined />, label: 'Company Settings', permission: undefined },
+      { key: '/vehicles', icon: <CarOutlined />, label: 'Vehicles', permission: 'VEHICLES_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', permission: undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/users', icon: <UserOutlined />, label: 'Team', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
+      { key: '/roles', icon: <SettingOutlined />, label: 'Roles', permission: undefined, minPlan: 'PREMIUM' as RequiredPlan | undefined },
+      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
+      { key: '/import', icon: <UploadOutlined />, label: 'Data Import', permission: 'IMPORT_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/settings/company', icon: <SettingOutlined />, label: 'Company Settings', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
     ],
   },
 ];
@@ -200,11 +202,19 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     NAV_SECTIONS.flatMap(section => {
       const filtered = section.items.filter(isItemVisible);
       if (filtered.length === 0) return [];
-      const children = filtered.map(item => ({
-        key: item.key,
-        icon: item.icon,
-        label: <Link to={item.key} onClick={onLinkClick}>{item.label}</Link>,
-      }));
+      const children = filtered.map(item => {
+        const locked = !!item.minPlan && !hasPlan(item.minPlan);
+        return {
+          key: item.key,
+          icon: item.icon,
+          label: (
+            <Link to={item.key} onClick={onLinkClick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>{item.label}</span>
+              {locked && <LockOutlined style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 6, flexShrink: 0 }} />}
+            </Link>
+          ),
+        };
+      });
       if (section.section === 'MAIN') return children;
       const meta = SECTION_META[section.section];
       return [{ key: section.section, icon: meta?.icon, label: meta?.label, children }];

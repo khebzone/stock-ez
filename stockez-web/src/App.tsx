@@ -25,6 +25,7 @@ import SalesOrderPage from './pages/sales/SalesOrderPage';
 import SalesPaymentPage from './pages/sales/SalesPaymentPage';
 import SalesHistoryPage from './pages/sales/SalesHistoryPage';
 import InvoiceApproverPage from './pages/invoice/InvoiceApproverPage';
+import InvoicePage from './pages/invoice/InvoicePage';
 import PurchaseListPage from './pages/purchases/PurchaseListPage';
 import PurchaseEntryPage from './pages/purchases/PurchaseEntryPage';
 import DayClosurePage from './pages/dayclosure/DayClosurePage';
@@ -53,6 +54,7 @@ import SalesIncentivePage from './pages/sales/SalesIncentivePage';
 import CounterSalePage from './pages/countersale/CounterSalePage';
 import AuditReportPage from './pages/reports/AuditReportPage';
 import { isAdmin, isFieldUser, getDefaultRoute } from './utils/permissions';
+import PlanGate from './components/PlanGate';
 
 const isTokenValid = (token: string | null): boolean => {
   if (!token) return false;
@@ -118,21 +120,22 @@ const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/invoice/:orderNumber" element={<InvoicePage />} />
 
         {/* ── Office / Admin routes ── */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
-        <Route path="/routes" element={<ProtectedRoute><RoutesPage /></ProtectedRoute>} />
+        <Route path="/routes" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><RoutesPage /></PlanGate></ProtectedRoute>} />
         <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
-        <Route path="/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
+        <Route path="/roles" element={<AdminRoute><PlanGate required="PREMIUM"><RolesPage /></PlanGate></AdminRoute>} />
         <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
         <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-        <Route path="/reports/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
-        <Route path="/reports/sales" element={<ProtectedRoute><SalesAnalysisPage /></ProtectedRoute>} />
-        <Route path="/reports/ledger" element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
-        <Route path="/reports/targets" element={<ProtectedRoute><TargetsPage /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><ReportsPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/reports/aging" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><AgingReportPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/reports/sales" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><SalesAnalysisPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/reports/ledger" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><LedgerPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/reports/targets" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><TargetsPage /></PlanGate></ProtectedRoute>} />
         <Route path="/masters" element={<AdminRoute><MastersPage /></AdminRoute>} />
         <Route path="/invoice/approver" element={<ProtectedRoute><InvoiceApproverPage /></ProtectedRoute>} />
         <Route path="/purchases" element={<ProtectedRoute><PurchaseListPage /></ProtectedRoute>} />
@@ -142,20 +145,20 @@ const App: React.FC = () => {
         <Route path="/day-closure" element={<ProtectedRoute><DayClosurePage /></ProtectedRoute>} />
         <Route path="/goods-return" element={<ProtectedRoute><GoodsReturnPage /></ProtectedRoute>} />
         <Route path="/stock-batches" element={<ProtectedRoute><StockBatchesPage /></ProtectedRoute>} />
-        <Route path="/gate-pass" element={<ProtectedRoute><GatePassPage /></ProtectedRoute>} />
-        <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
-        <Route path="/field-monitor" element={<ProtectedRoute><FieldMonitorPage /></ProtectedRoute>} />
+        <Route path="/gate-pass" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><GatePassPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/vehicles" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><VehiclesPage /></PlanGate></ProtectedRoute>} />
+        <Route path="/field-monitor" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><FieldMonitorPage /></PlanGate></ProtectedRoute>} />
         <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
         <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
-        <Route path="/warehouse/picklist" element={<ProtectedRoute><WarehousePicklistPage /></ProtectedRoute>} />
+        <Route path="/warehouse/picklist" element={<ProtectedRoute><PlanGate required="PROFESSIONAL"><WarehousePicklistPage /></PlanGate></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
-        <Route path="/attendance" element={<AdminRoute><AttendancePage /></AdminRoute>} />
-        <Route path="/incentives/targets" element={<AdminRoute><BrandTargetPage /></AdminRoute>} />
-        <Route path="/incentives/slabs" element={<AdminRoute><IncentiveSlabPage /></AdminRoute>} />
-        <Route path="/incentives/credits" element={<AdminRoute><IncentiveCreditsPage /></AdminRoute>} />
-        <Route path="/incentives/collection/targets" element={<AdminRoute><CollectionTargetPage /></AdminRoute>} />
+        <Route path="/attendance" element={<AdminRoute><PlanGate required="PROFESSIONAL"><AttendancePage /></PlanGate></AdminRoute>} />
+        <Route path="/incentives/targets" element={<AdminRoute><PlanGate required="PREMIUM"><BrandTargetPage /></PlanGate></AdminRoute>} />
+        <Route path="/incentives/slabs" element={<AdminRoute><PlanGate required="PREMIUM"><IncentiveSlabPage /></PlanGate></AdminRoute>} />
+        <Route path="/incentives/credits" element={<AdminRoute><PlanGate required="PREMIUM"><IncentiveCreditsPage /></PlanGate></AdminRoute>} />
+        <Route path="/incentives/collection/targets" element={<AdminRoute><PlanGate required="PREMIUM"><CollectionTargetPage /></PlanGate></AdminRoute>} />
         <Route path="/counter-sale" element={<ProtectedRoute><CounterSalePage /></ProtectedRoute>} />
-        <Route path="/reports/audit" element={<AdminRoute><AuditReportPage /></AdminRoute>} />
+        <Route path="/reports/audit" element={<AdminRoute><PlanGate required="PROFESSIONAL"><AuditReportPage /></PlanGate></AdminRoute>} />
         <Route path="/settings/company" element={<AdminRoute><CompanySettingsPage /></AdminRoute>} />
 
         {/* ── Field routes (sales + delivery combined) ── */}

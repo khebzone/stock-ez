@@ -7,12 +7,9 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
-/**
- * Represents a distributor company using the StockEz platform.
- * Each tenant is completely isolated from other tenants.
- */
 @Entity
 @Table(name = "tenants")
 @EntityListeners(AuditingEntityListener.class)
@@ -27,10 +24,10 @@ public class Tenant {
     private String name;
 
     @Column(nullable = false, unique = true, length = 50)
-    private String schemaName; // e.g., "tenant_abc"
+    private String schemaName;
 
     @Column(nullable = false, unique = true, length = 100)
-    private String subdomain; // e.g., "abc" → abc.StockEz.com
+    private String subdomain;
 
     @Column(nullable = false, length = 50)
     private String ownerName;
@@ -73,6 +70,25 @@ public class Tenant {
     @Column(name = "trial_ends_at")
     private Instant trialEndsAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private TenantPlan plan = TenantPlan.TRIAL;
+
+    @Column(name = "billing_cycle", nullable = false, length = 10)
+    @Builder.Default
+    private String billingCycle = "MONTHLY";
+
+    @Column(name = "plan_end_date")
+    private LocalDate planEndDate;
+
+    @Column(name = "max_users", nullable = false)
+    @Builder.Default
+    private int maxUsers = 5;
+
+    @Column(columnDefinition = "TEXT")
+    private String notes;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -81,6 +97,10 @@ public class Tenant {
     private Instant updatedAt;
 
     public enum TenantStatus {
-        ACTIVE, SUSPENDED, TRIAL, INACTIVE
+        ACTIVE, SUSPENDED, TRIAL, INACTIVE, READ_ONLY
+    }
+
+    public enum TenantPlan {
+        TRIAL, ESSENTIALS, PROFESSIONAL, PREMIUM
     }
 }

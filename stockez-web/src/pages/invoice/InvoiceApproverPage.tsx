@@ -82,8 +82,9 @@ const InvoiceApproverPage: React.FC = () => {
   // Collect payment state
   const [payModal, setPayModal]   = useState(false);
   const [payForm]                 = Form.useForm();
+  const [salesPersonFilter, setSalesPersonFilter] = useState<string | null>(null);
 
-  const { data: ordersData, isLoading, refetch } = useGetOrdersQuery({});
+  const { data: ordersData, isLoading, refetch } = useGetOrdersQuery({ size: 500 });
   const { data: productsData } = useGetProductsQuery({ size: 500 });
   const { data: customersData, isLoading: customersLoading } = useGetCustomersQuery({});
   const { data: methodsData } = useGetPaymentMethodsQuery();
@@ -97,6 +98,18 @@ const InvoiceApproverPage: React.FC = () => {
   const products:  any[] = productsData?.data?.content || productsData?.data || [];
   const customers: any[] = customersData?.data?.content || customersData?.data || [];
   const methods:   any[] = methodsData?.data || [];
+
+  const salesPersonOptions = Array.from(
+    new Map(
+      orders
+        .filter((o: any) => o.salesPerson?.id)
+        .map((o: any) => [o.salesPerson.id, o.salesPerson.fullName])
+    ).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const filteredOrders = salesPersonFilter
+    ? orders.filter((o: any) => o.salesPerson?.id === salesPersonFilter)
+    : orders;
 
   const REQUIRES_REFERENCE = ['UPI', 'CHEQUE', 'NEFT', 'RTGS'];
   const selectedMethodId = Form.useWatch('paymentMethodId', payForm);
@@ -414,10 +427,20 @@ const InvoiceApproverPage: React.FC = () => {
       <PageHeader
         title="Invoice Approver"
         subtitle="Review, edit and approve submitted orders"
-        count={orders.filter((o: any) => o.status === 'SUBMITTED').length}
+        count={filteredOrders.filter((o: any) => o.status === 'SUBMITTED').length}
         countLabel="pending"
         action={
-          <Space>
+          <Space wrap>
+            {salesPersonOptions.length > 0 && (
+              <Select
+                allowClear
+                placeholder="All salespersons"
+                value={salesPersonFilter}
+                onChange={(v) => { setSalesPersonFilter(v ?? null); setSelectedRowKeys([]); }}
+                style={{ width: 180 }}
+                options={salesPersonOptions.map(([id, name]) => ({ value: id, label: name }))}
+              />
+            )}
             {!isMobile && selectedRowKeys.length > 0 && (
               <Button type="primary" icon={<CheckCircleOutlined />} loading={bulkApproving}
                 onClick={handleApproveSelected}
@@ -437,12 +460,12 @@ const InvoiceApproverPage: React.FC = () => {
       {isMobile ? (
         <Spin spinning={isLoading}>
           <div style={{ paddingBottom: 24 }}>
-            {orders.length === 0 && !isLoading && (
+            {filteredOrders.length === 0 && !isLoading && (
               <div style={{ padding: '48px 0', color: '#64748b', textAlign: 'center', fontSize: 14 }}>
                 No orders found
               </div>
             )}
-            {orders.map((record: any) => (
+            {filteredOrders.map((record: any) => (
               <div key={record.id} style={{
                 background: '#fff',
                 borderRadius: 12,
@@ -543,7 +566,7 @@ const InvoiceApproverPage: React.FC = () => {
           <Table
             rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as string[]) }}
             columns={columns}
-            dataSource={orders}
+            dataSource={filteredOrders}
             rowKey="id"
             loading={isLoading}
             pagination={{ pageSize: 20, showTotal: t => `${t} orders` }}

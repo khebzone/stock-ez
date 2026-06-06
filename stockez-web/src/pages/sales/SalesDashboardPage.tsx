@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { Skeleton, Grid, Drawer } from 'antd';
+import { Skeleton, Grid, Drawer, message } from 'antd';
 import {
   UserOutlined, FileTextOutlined, WalletOutlined,
   RightOutlined, EnvironmentOutlined, PlusOutlined,
-  ClockCircleOutlined, CloseOutlined, WarningOutlined,
+  ClockCircleOutlined, CloseOutlined, WarningOutlined, ShoppingOutlined,
+  ShareAltOutlined, LockOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetMyOrdersQuery } from '../../store/api/orderApi';
 import { useGetMyDayCollectionsQuery } from '../../store/api/paymentApi';
 import { useGetNearExpiryAlertsQuery } from '../../store/api/purchaseApi';
+import { useGetTodayStatusQuery } from '../../store/api/attendanceApi';
+import { useGetWorkflowSettingsQuery } from '../../store/api/supplierApi';
 import dayjs from 'dayjs';
 
 const { useBreakpoint } = Grid;
@@ -65,11 +68,45 @@ const SalesDashboardPage: React.FC = () => {
   const isSmall   = !screens.sm;
   const user      = JSON.parse(localStorage.getItem('user') || '{}');
   const [viewOrder, setViewOrder] = useState<any>(null);
+  const [sharingOrderNum, setSharingOrderNum] = useState<string | null>(null);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+  const shareInvoice = async (order: any) => {
+    const phone = order.customer?.phone || order.walkInPhone;
+    setSharingOrderNum(order.orderNumber);
+    try {
+      const res = await fetch(`${API_BASE}/api/public/invoice/${order.orderNumber}/pdf`);
+      const json = await res.json();
+      if (json.success && json.data.pdfUrl) {
+        const pdfUrl = json.data.pdfUrl;
+        const customerName = order.customer?.businessName || order.customer?.ownerName || order.walkInName || 'Customer';
+        const msg = `Hello ${customerName},\n\nYour invoice ${order.orderNumber} for ₹${Number(order.totalAmount).toFixed(2)} is ready.\n\nDownload PDF: ${pdfUrl}\n\nThank you!`;
+        if (phone) {
+          const cleaned = phone.replace(/\D/g, '');
+          const waPhone = cleaned.length === 10 ? `91${cleaned}` : cleaned;
+          window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+        } else {
+          await navigator.clipboard.writeText(pdfUrl);
+          message.success('PDF link copied to clipboard');
+        }
+      } else {
+        message.error('Could not generate PDF');
+      }
+    } catch {
+      message.error('Failed to generate invoice PDF');
+    } finally {
+      setSharingOrderNum(null);
+    }
+  };
 
   const { data: allocData,  isLoading: allocLoading  } = useGetMyAllocationQuery();
   const { data: ordersData, isLoading: ordersLoading } = useGetMyOrdersQuery();
   const { data: dayData } = useGetMyDayCollectionsQuery();
   const { data: nearExpiryData } = useGetNearExpiryAlertsQuery({ days: 30 });
+  const { data: attendanceData }  = useGetTodayStatusQuery();
+  const { data: workflowData }    = useGetWorkflowSettingsQuery();
+  const billingLocked = !!(workflowData?.data?.lockBillingAfterCheckout && attendanceData?.data?.checkedOut);
 
   const allocation     = allocData?.data;
   const orders: any[]  = ordersData?.data || [];
@@ -81,12 +118,13 @@ const SalesDashboardPage: React.FC = () => {
 
   const totalCustomers = allocation?.customers?.length || 0;
   const totalOrders    = orders.length;
+  const totalSales     = orders.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
   const totalCollected = Number(daySummary?.totalCollected || 0);
   const pendingSubmit  = (daySummary?.payments || []).filter((p: any) => !p.submitted).length;
 
-  const collectedLabel = totalCollected >= 1000
-    ? `₹${(totalCollected / 1000).toFixed(1)}k`
-    : `₹${totalCollected.toFixed(0)}`;
+  const formatAmt = (v: number) => v >= 1000 ? `₹${(v / 1000).toFixed(1)}k` : `₹${v.toFixed(0)}`;
+  const collectedLabel = formatAmt(totalCollected);
+  const salesLabel     = formatAmt(totalSales);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -136,14 +174,15 @@ const SalesDashboardPage: React.FC = () => {
 
       {/* Stats */}
       {ordersLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: isSmall ? 8 : 12 }}>
-          {[1, 2, 3].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} title={false} />)}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isSmall ? 8 : 12 }}>
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} active paragraph={{ rows: 2 }} title={false} />)}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: isSmall ? 8 : 12 }}>
-          <StatCard icon={<UserOutlined />}     label="Customers" value={totalCustomers} color={P}       bg={PL}      small={isSmall} />
-          <StatCard icon={<FileTextOutlined />} label="Orders"    value={totalOrders}    color="#8b5cf6" bg="#f5f3ff" small={isSmall} />
-          <StatCard icon={<WalletOutlined />}   label="Collected" value={collectedLabel} color="#d97706" bg="#fffbeb" small={isSmall} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isSmall ? 8 : 12 }}>
+          <StatCard icon={<UserOutlined />}     label="Customers"   value={totalCustomers} color={P}        bg={PL}        small={isSmall} />
+          <StatCard icon={<FileTextOutlined />} label="Orders"      value={totalOrders}    color="#8b5cf6"  bg="#f5f3ff"   small={isSmall} />
+          <StatCard icon={<ShoppingOutlined />} label="Sales Today" value={salesLabel}     color="#0ea5e9"  bg="#e0f2fe"   small={isSmall} />
+          <StatCard icon={<WalletOutlined />}   label="Collected"   value={collectedLabel} color="#d97706"  bg="#fffbeb"   small={isSmall} />
         </div>
       )}
 
@@ -224,27 +263,35 @@ const SalesDashboardPage: React.FC = () => {
             { label: 'New Order', sub: 'Create order for a customer',  icon: <PlusOutlined />,        color: P,        bg: PL,        path: '/sales/order'    },
             { label: 'My Route',  sub: "View today's customer list",   icon: <EnvironmentOutlined />, color: '#8b5cf6', bg: '#f5f3ff', path: '/sales/route'    },
             { label: 'Payments',  sub: 'Collect & submit payments',    icon: <WalletOutlined />,      color: '#d97706', bg: '#fffbeb', path: '/sales/payments' },
-          ].map(action => (
-            <div
-              key={action.path}
-              onClick={() => navigate(action.path)}
-              className="card-clickable"
-              style={{
-                background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
-                padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-              }}
-            >
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: action.color, fontSize: 18, flexShrink: 0 }}>
-                {action.icon}
+          ].map(action => {
+            const isLocked = billingLocked && action.path === '/sales/order';
+            return (
+              <div
+                key={action.path}
+                onClick={() => !isLocked && navigate(action.path)}
+                className={isLocked ? undefined : 'card-clickable'}
+                style={{
+                  background: isLocked ? '#f8fafc' : '#fff',
+                  border: '1px solid #e2e8f0', borderRadius: 14,
+                  padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+                  cursor: isLocked ? 'default' : 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                  opacity: isLocked ? 0.6 : 1,
+                }}
+              >
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: isLocked ? '#f1f5f9' : action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isLocked ? '#94a3b8' : action.color, fontSize: 18, flexShrink: 0 }}>
+                  {isLocked ? <LockOutlined /> : action.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: isLocked ? '#94a3b8' : '#0f172a', fontSize: 14 }}>{action.label}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>
+                    {isLocked ? 'Locked — you have checked out for today' : action.sub}
+                  </div>
+                </div>
+                {!isLocked && <RightOutlined style={{ color: '#cbd5e1', fontSize: 12, flexShrink: 0 }} />}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>{action.label}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>{action.sub}</div>
-              </div>
-              <RightOutlined style={{ color: '#cbd5e1', fontSize: 12, flexShrink: 0 }} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -300,13 +347,17 @@ const SalesDashboardPage: React.FC = () => {
             <FileTextOutlined />
           </div>
           <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15 }}>No orders yet today</div>
-          <div style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Start by visiting your route customers</div>
-          <div
-            onClick={() => navigate('/sales/order')}
-            style={{ display: 'inline-block', marginTop: 16, background: P, color: '#fff', fontWeight: 700, fontSize: 13, padding: '10px 24px', borderRadius: 10, cursor: 'pointer' }}
-          >
-            Create First Order
+          <div style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>
+            {billingLocked ? 'Billing is locked after checkout' : 'Start by visiting your route customers'}
           </div>
+          {!billingLocked && (
+            <div
+              onClick={() => navigate('/sales/order')}
+              style={{ display: 'inline-block', marginTop: 16, background: P, color: '#fff', fontWeight: 700, fontSize: 13, padding: '10px 24px', borderRadius: 10, cursor: 'pointer' }}
+            >
+              Create First Order
+            </div>
+          )}
         </div>
       )}
 
@@ -345,6 +396,14 @@ const SalesDashboardPage: React.FC = () => {
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: sc.bg, color: sc.color, border: `1px solid ${sc.color}30` }}>
                     {sc.label}
                   </span>
+                  <button
+                    onClick={() => shareInvoice(viewOrder)}
+                    disabled={sharingOrderNum === viewOrder.orderNumber}
+                    title={viewOrder.customer?.phone ? `Share to ${viewOrder.customer.phone}` : 'Copy link'}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid #25d366', background: sharingOrderNum === viewOrder.orderNumber ? '#f0fdf4' : '#25d366', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, opacity: sharingOrderNum === viewOrder.orderNumber ? 0.6 : 1 }}
+                  >
+                    <ShareAltOutlined style={{ fontSize: 13 }} />
+                  </button>
                   <button
                     onClick={() => setViewOrder(null)}
                     style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Table, Button, Drawer, Form, Input, Checkbox, Tag, Popconfirm,
-  message, Space, Typography,
+  message, Space, Typography, Grid, Card,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined, TeamOutlined } from '@ant-design/icons';
 import {
@@ -13,6 +13,7 @@ import {
 import PageHeader from '../../components/PageHeader';
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface ModuleAction { perm: string; label: string; }
 interface Module { module: string; actions: ModuleAction[]; }
@@ -97,6 +98,9 @@ const buildPermSummary = (perms: string[]): { module: string; actions: string[] 
 };
 
 const RolesPage: React.FC = () => {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
   const { data, isLoading } = useGetRolesQuery();
   const [createRole, { isLoading: creating }] = useCreateRoleMutation();
   const [updateRole, { isLoading: updating }] = useUpdateRoleMutation();
@@ -238,6 +242,84 @@ const RolesPage: React.FC = () => {
     },
   ];
 
+  const permissionMatrix = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {MODULE_GROUPS.map(group => {
+        const groupPerms = group.modules.flatMap(m => m.actions.map(a => a.perm));
+        const groupChecked = groupPerms.filter(p => checkedPerms.has(p)).length;
+        const groupTotal = groupPerms.length;
+        const groupAllChecked = groupChecked === groupTotal;
+        const groupIndeterminate = groupChecked > 0 && groupChecked < groupTotal;
+
+        return (
+          <div key={group.group} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{
+              background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+              padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <Checkbox
+                checked={groupAllChecked}
+                indeterminate={groupIndeterminate}
+                onChange={() => toggleGroup(group)}
+              >
+                <span style={{ fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {group.group}
+                </span>
+              </Checkbox>
+              <Text type="secondary" style={{ fontSize: 11 }}>{groupChecked}/{groupTotal}</Text>
+            </div>
+
+            <div style={{ padding: '4px 0' }}>
+              {group.modules.map((mod, idx) => {
+                const modChecked = mod.actions.filter(a => checkedPerms.has(a.perm)).length;
+                const modAllChecked = modChecked === mod.actions.length;
+                const modIndeterminate = modChecked > 0 && modChecked < mod.actions.length;
+                const isLast = idx === group.modules.length - 1;
+
+                return (
+                  <div key={mod.module} style={{
+                    padding: '8px 14px',
+                    borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    gap: isMobile ? 8 : 12,
+                  }}>
+                    <div style={{ minWidth: isMobile ? 'auto' : 180 }}>
+                      <Checkbox
+                        checked={modAllChecked}
+                        indeterminate={modIndeterminate}
+                        onChange={() => toggleModule(mod)}
+                      >
+                        <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{mod.module}</span>
+                      </Checkbox>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      gap: isMobile ? 12 : 16,
+                      flexWrap: 'wrap',
+                      paddingLeft: isMobile ? 24 : 0,
+                    }}>
+                      {mod.actions.map(action => (
+                        <Checkbox
+                          key={action.perm}
+                          checked={checkedPerms.has(action.perm)}
+                          onChange={() => togglePerm(action.perm)}
+                        >
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>{action.label}</span>
+                        </Checkbox>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div>
       <PageHeader
@@ -251,14 +333,73 @@ const RolesPage: React.FC = () => {
         }
       />
 
-      <Table
-        dataSource={roles}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-      />
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {isLoading ? (
+            <div style={{ padding: 24, textAlign: 'center' }}><Text type="secondary">Loading...</Text></div>
+          ) : roles.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center' }}><Text type="secondary">No roles yet. Create your first role.</Text></div>
+          ) : roles.map((role: any) => {
+            const summary = buildPermSummary(role.permissions || []);
+            return (
+              <Card
+                key={role.id}
+                size="small"
+                styles={{ body: { padding: '12px 14px' } }}
+                style={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 6 }}>
+                      {role.name}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <TeamOutlined style={{ fontSize: 12, color: '#64748b' }} />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {role.userCount} user{role.userCount !== 1 ? 's' : ''}
+                      </Text>
+                      <span style={{ color: '#d1d5db' }}>·</span>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {(role.permissions || []).length} permissions
+                      </Text>
+                    </div>
+                    {summary.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {summary.map(s => (
+                          <Tag key={s.module} style={{ margin: 0, fontSize: 11, color: '#374151', borderColor: '#d1d5db', background: '#f9fafb' }}>
+                            {s.module}
+                          </Tag>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Space style={{ marginLeft: 12, flexShrink: 0 }}>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(role)} />
+                    <Popconfirm
+                      title="Delete this role?"
+                      description={role.userCount > 0 ? `${role.userCount} user(s) assigned — cannot delete.` : 'This action cannot be undone.'}
+                      onConfirm={() => handleDelete(role.id)}
+                      okText="Delete" okButtonProps={{ danger: true }}
+                      disabled={role.userCount > 0}
+                    >
+                      <Button size="small" icon={<DeleteOutlined />} danger disabled={role.userCount > 0} />
+                    </Popconfirm>
+                  </Space>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <Table
+          dataSource={roles}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          pagination={false}
+          size="middle"
+        />
+      )}
 
       <Drawer
         title={
@@ -269,17 +410,23 @@ const RolesPage: React.FC = () => {
         }
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={680}
+        width={isMobile ? '100%' : 680}
         footer={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Space>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: isMobile ? 10 : 0,
+          }}>
+            <Space wrap>
               <Button size="small" onClick={() => setCheckedPerms(new Set(ALL_PERMISSIONS))}>Select All</Button>
               <Button size="small" onClick={() => setCheckedPerms(new Set())}>Clear All</Button>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {checkedPerms.size} / {ALL_PERMISSIONS.length} permissions
               </Text>
             </Space>
-            <Space>
+            <Space style={isMobile ? { display: 'flex', justifyContent: 'flex-end' } : {}}>
               <Button onClick={() => setDrawerOpen(false)}>Cancel</Button>
               <Button type="primary" onClick={handleSave} loading={creating || updating}>
                 {editingId ? 'Save Changes' : 'Create Role'}
@@ -303,74 +450,7 @@ const RolesPage: React.FC = () => {
           Permissions
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {MODULE_GROUPS.map(group => {
-            const groupPerms = group.modules.flatMap(m => m.actions.map(a => a.perm));
-            const groupChecked = groupPerms.filter(p => checkedPerms.has(p)).length;
-            const groupTotal = groupPerms.length;
-            const groupAllChecked = groupChecked === groupTotal;
-            const groupIndeterminate = groupChecked > 0 && groupChecked < groupTotal;
-
-            return (
-              <div key={group.group} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                <div style={{
-                  background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
-                  padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <Checkbox
-                    checked={groupAllChecked}
-                    indeterminate={groupIndeterminate}
-                    onChange={() => toggleGroup(group)}
-                  >
-                    <span style={{ fontWeight: 700, fontSize: 12, color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {group.group}
-                    </span>
-                  </Checkbox>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{groupChecked}/{groupTotal}</Text>
-                </div>
-
-                <div style={{ padding: '4px 0' }}>
-                  {group.modules.map((mod, idx) => {
-                    const modChecked = mod.actions.filter(a => checkedPerms.has(a.perm)).length;
-                    const modAllChecked = modChecked === mod.actions.length;
-                    const modIndeterminate = modChecked > 0 && modChecked < mod.actions.length;
-                    const isLast = idx === group.modules.length - 1;
-
-                    return (
-                      <div key={mod.module} style={{
-                        display: 'grid',
-                        gridTemplateColumns: '180px 1fr',
-                        alignItems: 'center',
-                        padding: '7px 14px',
-                        borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
-                        gap: 12,
-                      }}>
-                        <Checkbox
-                          checked={modAllChecked}
-                          indeterminate={modIndeterminate}
-                          onChange={() => toggleModule(mod)}
-                        >
-                          <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{mod.module}</span>
-                        </Checkbox>
-                        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                          {mod.actions.map(action => (
-                            <Checkbox
-                              key={action.perm}
-                              checked={checkedPerms.has(action.perm)}
-                              onChange={() => togglePerm(action.perm)}
-                            >
-                              <span style={{ fontSize: 12, color: '#6b7280' }}>{action.label}</span>
-                            </Checkbox>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {permissionMatrix}
       </Drawer>
     </div>
   );

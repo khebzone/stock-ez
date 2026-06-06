@@ -16,6 +16,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -36,7 +39,16 @@ public class TenantService {
             throw new BusinessException("Email is already registered", "EMAIL_EXISTS");
         }
 
-        Tenant.TenantStatus status = req.getStatus() != null ? req.getStatus() : Tenant.TenantStatus.ACTIVE;
+        Tenant.TenantStatus status = req.getStatus() != null ? req.getStatus() : Tenant.TenantStatus.TRIAL;
+        Tenant.TenantPlan plan = req.getPlan() != null ? req.getPlan() : Tenant.TenantPlan.TRIAL;
+
+        LocalDate planEndDate = req.getPlanEndDate();
+        if (planEndDate == null && status == Tenant.TenantStatus.TRIAL) {
+            int days = req.getTrialDays() > 0 ? req.getTrialDays() : 7;
+            planEndDate = LocalDate.now().plusDays(days);
+        }
+
+        int maxUsers = maxUsersForPlan(plan);
 
         Tenant tenant = Tenant.builder()
                 .name(req.getName())
@@ -50,7 +62,10 @@ public class TenantService {
                 .city(req.getCity())
                 .state(req.getState())
                 .status(status)
-                .trialEndsAt(req.getTrialEndsAt())
+                .plan(plan)
+                .billingCycle(req.getBillingCycle() != null ? req.getBillingCycle() : "MONTHLY")
+                .planEndDate(planEndDate)
+                .maxUsers(maxUsers)
                 .build();
 
         Tenant saved = tenantRepository.save(tenant);
@@ -77,6 +92,18 @@ public class TenantService {
         stats.setTrial(tenantRepository.countByStatus(Tenant.TenantStatus.TRIAL));
         stats.setSuspended(tenantRepository.countByStatus(Tenant.TenantStatus.SUSPENDED));
         stats.setInactive(tenantRepository.countByStatus(Tenant.TenantStatus.INACTIVE));
+        stats.setReadOnly(tenantRepository.countByStatus(Tenant.TenantStatus.READ_ONLY));
+
+        LocalDate today = LocalDate.now();
+        LocalDate cutoff = today.plusDays(30);
+        stats.setExpiringSoon(tenantRepository.countExpiringSoon(today, cutoff,
+                List.of(Tenant.TenantStatus.ACTIVE, Tenant.TenantStatus.TRIAL)));
+
+        long mrr = tenantRepository.findByStatus(Tenant.TenantStatus.ACTIVE).stream()
+                .mapToLong(this::monthlyRevenue)
+                .sum();
+        stats.setMrr(mrr);
+
         return stats;
     }
 
@@ -94,6 +121,21 @@ public class TenantService {
         return toResponse(tenantRepository.save(tenant));
     }
 
+    public TenantDtos.TenantResponse setReadOnly(UUID id) {
+        Tenant tenant = tenantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", id.toString()));
+        tenant.setStatus(Tenant.TenantStatus.READ_ONLY);
+        return toResponse(tenantRepository.save(tenant));
+    }
+
+    public TenantDtos.TenantResponse extendTrial(UUID id, int days) {
+        Tenant tenant = tenantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", id.toString()));
+        LocalDate base = tenant.getPlanEndDate() != null ? tenant.getPlanEndDate() : LocalDate.now();
+        tenant.setPlanEndDate(base.plusDays(days));
+        return toResponse(tenantRepository.save(tenant));
+    }
+
     @Transactional(readOnly = true)
     public Page<TenantDtos.TenantResponse> getAllTenants(Pageable pageable) {
         return tenantRepository.findAll(pageable).map(this::toResponse);
@@ -101,9 +143,8 @@ public class TenantService {
 
     @Transactional(readOnly = true)
     public TenantDtos.TenantResponse getTenantById(UUID id) {
-        Tenant tenant = tenantRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Tenant", id.toString()));
-        return toResponse(tenant);
+        return toResponse(tenantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", id.toString())));
     }
 
     public TenantDtos.TenantResponse updateTenant(UUID id, TenantDtos.UpdateTenantRequest req) {
@@ -118,13 +159,16 @@ public class TenantService {
         tenant.setAddress(req.getAddress());
         tenant.setCity(req.getCity());
         tenant.setState(req.getState());
-        
-        if (req.getStatus() != null) {
-            tenant.setStatus(req.getStatus());
+
+        if (req.getStatus() != null) tenant.setStatus(req.getStatus());
+        if (req.getPlan() != null) {
+            tenant.setPlan(req.getPlan());
+            tenant.setMaxUsers(maxUsersForPlan(req.getPlan()));
         }
-        if (req.getTrialEndsAt() != null) {
-            tenant.setTrialEndsAt(req.getTrialEndsAt());
-        }
+        if (req.getBillingCycle() != null) tenant.setBillingCycle(req.getBillingCycle());
+        if (req.getPlanEndDate() != null) tenant.setPlanEndDate(req.getPlanEndDate());
+        if (req.getMaxUsers() != null && req.getMaxUsers() > 0) tenant.setMaxUsers(req.getMaxUsers());
+        if (req.getNotes() != null) tenant.setNotes(req.getNotes());
 
         return toResponse(tenantRepository.save(tenant));
     }
@@ -174,7 +218,29 @@ public class TenantService {
         settings.setMaxDiscountPercent(req.getMaxDiscountPercent());
         settings.setLockBillingAfterCheckout(req.isLockBillingAfterCheckout());
         settings.setSeparateDeliveryAllocation(req.isSeparateDeliveryAllocation());
+        if (req.getDiscountType() != null) settings.setDiscountType(req.getDiscountType());
         return toSettingsResponse(tenantSettingsRepository.save(settings));
+    }
+
+    private int maxUsersForPlan(Tenant.TenantPlan plan) {
+        if (plan == null) return 5;
+        return switch (plan) {
+            case ESSENTIALS -> 5;
+            case PROFESSIONAL -> 15;
+            case PREMIUM -> 999;
+            default -> 5;
+        };
+    }
+
+    private long monthlyRevenue(Tenant t) {
+        if (t.getPlan() == null) return 0;
+        boolean annual = "ANNUAL".equals(t.getBillingCycle());
+        return switch (t.getPlan()) {
+            case ESSENTIALS   -> annual ? 1250L : 1500L;
+            case PROFESSIONAL -> annual ? 2083L : 2500L;
+            case PREMIUM      -> annual ? 3333L : 4000L;
+            default           -> 0L;
+        };
     }
 
     private TenantDtos.WorkflowSettingsResponse toSettingsResponse(TenantSettings s) {
@@ -186,6 +252,7 @@ public class TenantService {
         res.setMaxDiscountPercent(s.getMaxDiscountPercent());
         res.setLockBillingAfterCheckout(s.isLockBillingAfterCheckout());
         res.setSeparateDeliveryAllocation(s.isSeparateDeliveryAllocation());
+        res.setDiscountType(s.getDiscountType());
         return res;
     }
 
@@ -205,9 +272,17 @@ public class TenantService {
         res.setState(t.getState());
         res.setPinCode(t.getPinCode());
         res.setStatus(t.getStatus());
+        res.setPlan(t.getPlan());
+        res.setBillingCycle(t.getBillingCycle());
+        res.setPlanEndDate(t.getPlanEndDate());
+        res.setMaxUsers(t.getMaxUsers());
+        res.setNotes(t.getNotes());
         res.setLogoUrl(t.getLogoUrl());
         res.setTrialEndsAt(t.getTrialEndsAt());
         res.setCreatedAt(t.getCreatedAt());
+        if (t.getPlanEndDate() != null) {
+            res.setDaysUntilExpiry(ChronoUnit.DAYS.between(LocalDate.now(), t.getPlanEndDate()));
+        }
         return res;
     }
 }

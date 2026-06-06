@@ -43,6 +43,7 @@ const CompanySettingsPage: React.FC = () => {
     maxDiscountPercent: null as number | null,
     lockBillingAfterCheckout: false,
     separateDeliveryAllocation: false,
+    discountType: 'PERCENT' as 'PERCENT' | 'AMOUNT',
   });
 
   useEffect(() => {
@@ -56,6 +57,7 @@ const CompanySettingsPage: React.FC = () => {
         maxDiscountPercent: s.maxDiscountPercent ?? null,
         lockBillingAfterCheckout: s.lockBillingAfterCheckout ?? false,
         separateDeliveryAllocation: s.separateDeliveryAllocation ?? false,
+        discountType: s.discountType ?? 'PERCENT',
       });
     }
   }, [settingsData]);
@@ -345,6 +347,21 @@ const CompanySettingsPage: React.FC = () => {
                   />
                 }
               />
+              <SettingRow
+                label="Discount Input Type"
+                description="Percentage: salesman enters discount as %. Amount: salesman enters a flat ₹ discount per line."
+                control={
+                  <Select
+                    value={ws.discountType}
+                    onChange={v => setWs(prev => ({ ...prev, discountType: v }))}
+                    style={{ width: 140 }}
+                    options={[
+                      { value: 'PERCENT', label: 'Percentage (%)' },
+                      { value: 'AMOUNT',  label: 'Flat Amount (₹)' },
+                    ]}
+                  />
+                }
+              />
 
               <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, padding: '20px 0 8px' }}>
                 Field Operations
@@ -402,6 +419,9 @@ const CompanySettingsPage: React.FC = () => {
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: 11 }}>
                   Max discount: <strong>{ws.maxDiscountPercent != null ? `${ws.maxDiscountPercent}% cap enforced` : 'No restriction'}</strong>
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: 11 }}>
+                  Discount input: <strong>{ws.discountType === 'AMOUNT' ? 'Flat ₹ amount per line' : 'Percentage %'}</strong>
                 </div>
                 <div style={{ marginTop: 12, color: '#94a3b8', fontSize: 11 }}>
                   Billing lock: <strong>{ws.lockBillingAfterCheckout ? 'Locked after checkout' : 'Always open'}</strong>

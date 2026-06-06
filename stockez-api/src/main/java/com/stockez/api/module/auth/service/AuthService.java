@@ -55,8 +55,11 @@ public class AuthService {
         }
 
         Tenant tenant = user.getTenant();
-        if (tenant.getStatus() != Tenant.TenantStatus.ACTIVE) {
-            throw new BusinessException("Your account is suspended. Contact support.", "TENANT_SUSPENDED");
+        if (tenant.getStatus() == Tenant.TenantStatus.SUSPENDED) {
+            throw new BusinessException("Your account has been suspended. Please contact support.", "TENANT_SUSPENDED");
+        }
+        if (tenant.getStatus() == Tenant.TenantStatus.INACTIVE) {
+            throw new BusinessException("Your account is inactive. Please contact support.", "TENANT_INACTIVE");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
@@ -111,6 +114,8 @@ public class AuthService {
         summary.setRole(user.getRole().name());
         summary.setTenantId(tenant.getId().toString());
         summary.setTenantName(tenant.getName());
+        summary.setTenantStatus(tenant.getStatus().name());
+        summary.setPlan(tenant.getPlan() != null ? tenant.getPlan().name() : "TRIAL");
         summary.setProfileImageUrl(user.getProfileImageUrl());
 
         if (user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN) {

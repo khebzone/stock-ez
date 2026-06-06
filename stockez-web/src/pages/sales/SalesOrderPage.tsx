@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Input, message, Spin, Button, InputNumber, Grid, Tooltip, Modal, Form, Select, Switch } from 'antd';
+import { Input, message, Spin, Button, InputNumber, Grid, Tooltip, Modal, Form, Select, Switch, Result } from 'antd';
 import {
   SearchOutlined, PlusOutlined, MinusOutlined, CheckCircleOutlined,
   ShoppingCartOutlined, ArrowLeftOutlined, CloseOutlined,
   UserOutlined, AppstoreOutlined, FileTextOutlined,
-  AimOutlined, LoadingOutlined,
+  AimOutlined, LoadingOutlined, LockOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useGetMyCustomersQuery, useGetMyAllocationQuery } from '../../store/api/salesApi';
@@ -12,6 +12,8 @@ import { useGetProductsQuery } from '../../store/api/productApi';
 import { useCreateOrderMutation } from '../../store/api/orderApi';
 import { useGetCustomerOutstandingQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
 import { useGetRoutePlanQuery } from '../../store/api/routeApi';
+import { useGetWorkflowSettingsQuery } from '../../store/api/supplierApi';
+import { useGetTodayStatusQuery } from '../../store/api/attendanceApi';
 import { getProductRates, isPriceOutOfRange, defaultUnitPrice } from '../../utils/priceUtils';
 
 const { useBreakpoint } = Grid;
@@ -100,6 +102,7 @@ const SalesOrderPage: React.FC = () => {
   const [step, setStep] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch]     = useState('');
+  const [filterStop, setFilterStop]             = useState<string>('ALL');
   const [productSearch, setProductSearch]       = useState('');
   const [selectedBrand, setSelectedBrand]       = useState<string>('ALL');
   const [cart, setCart]                         = useState<CartItem[]>([]);
@@ -114,7 +117,11 @@ const SalesOrderPage: React.FC = () => {
   const [createOrder, { isLoading: creating }]           = useCreateOrderMutation();
   const [createCustomer, { isLoading: creatingCust }]    = useCreateCustomerMutation();
   const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id });
-  const { data: allocData }       = useGetMyAllocationQuery();
+  const { data: allocData }         = useGetMyAllocationQuery();
+  const { data: workflowData }      = useGetWorkflowSettingsQuery();
+  const discountType = workflowData?.data?.discountType ?? 'PERCENT';
+  const { data: attendanceData }    = useGetTodayStatusQuery();
+  const billingLocked = !!(workflowData?.data?.lockBillingAfterCheckout && attendanceData?.data?.checkedOut);
   const { data: planData }        = useGetRoutePlanQuery(
     allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId }
   );
@@ -125,7 +132,8 @@ const SalesOrderPage: React.FC = () => {
   const customers: any[] = customersData?.data || [];
   const products: any[]  = productsData?.data?.content || productsData?.data || [];
   const outstanding  = outstandingData?.data;
-  const isOverLimit  = outstanding?.overLimit === true;
+  const creditEnforcement = workflowData?.data?.creditLimitEnforcement ?? 'HARD_BLOCK';
+  const isOverLimit  = creditEnforcement !== 'DISABLED' && outstanding?.overLimit === true;
 
   useEffect(() => {
     const state = location.state as any;
@@ -142,12 +150,25 @@ const SalesOrderPage: React.FC = () => {
     setStep(1);
   };
 
-  const filteredCustomers = customers.filter((c: any) =>
-    !customerSearch ||
-    c.businessName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.ownerName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.phone?.includes(customerSearch)
-  );
+  // Build ordered stop list from plan for filter chips
+  const stopList: { id: string; name: string }[] = (planData?.data?.plan || []).map((p: any) => ({ id: p.id, name: p.name }));
+
+  // Customer IDs per stop (from plan's embedded customer lists)
+  const stopCustomerIds: Record<string, Set<string>> = {};
+  (planData?.data?.plan || []).forEach((p: any) => {
+    stopCustomerIds[p.id] = new Set((p.customers || []).map((c: any) => c.id));
+  });
+
+  const filteredCustomers = customers.filter((c: any) => {
+    if (filterStop !== 'ALL' && !stopCustomerIds[filterStop]?.has(c.id)) return false;
+    if (!customerSearch) return true;
+    const q = customerSearch.toLowerCase();
+    return (
+      c.businessName?.toLowerCase().includes(q) ||
+      c.ownerName?.toLowerCase().includes(q) ||
+      c.phone?.includes(customerSearch)
+    );
+  });
 
   const brandList: string[] = [
     'ALL',
@@ -194,7 +215,10 @@ const SalesOrderPage: React.FC = () => {
 
   const removeFromCart = (productId: string) => setCart(prev => prev.filter(i => i.productId !== productId));
 
-  const lineTotal    = (item: CartItem) => item.unitPrice * item.quantity * (1 - (item.discountPercent || 0) / 100);
+  const lineGross    = (item: CartItem) => item.unitPrice * item.quantity;
+  const lineTotal    = (item: CartItem) => discountType === 'AMOUNT'
+    ? Math.max(0, lineGross(item) - (discountAmounts[item.productId] ?? 0))
+    : lineGross(item) * (1 - (item.discountPercent || 0) / 100);
   const lineBase     = (item: CartItem) => lineTotal(item) * 100 / (100 + item.gstPercent);
   const cartTotal    = () => cart.reduce((s, i) => s + lineTotal(i), 0);
   const cartSubtotal = () => cart.reduce((s, i) => s + lineBase(i), 0);
@@ -247,7 +271,7 @@ const SalesOrderPage: React.FC = () => {
     }
   };
 
-  const [brandSearch, setBrandSearch] = useState('');
+  const [discountAmounts, setDiscountAmounts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
 
   const handleSubmit = async () => {
@@ -261,7 +285,12 @@ const SalesOrderPage: React.FC = () => {
     try {
       await createOrder({
         customerId: selectedCustomer.id,
-        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: i.discountPercent || 0 })),
+        items: cart.map(i => {
+          const discPct = discountType === 'AMOUNT'
+            ? Math.min(100, ((discountAmounts[i.productId] ?? 0) / (i.unitPrice * i.quantity)) * 100)
+            : (i.discountPercent || 0);
+          return { productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: discPct };
+        }),
         notes: notes.trim() || undefined,
       }).unwrap();
       message.success('Order placed successfully!');
@@ -277,6 +306,21 @@ const SalesOrderPage: React.FC = () => {
     fontSize: 10, fontWeight: 600, color: '#94a3b8',
     textTransform: 'uppercase', letterSpacing: 0.5,
   };
+
+  if (billingLocked) {
+    return (
+      <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+        <Result
+          icon={<LockOutlined style={{ color: '#94a3b8', fontSize: 48 }} />}
+          title="Billing Locked"
+          subTitle="You have checked out for today. New orders cannot be created after checkout."
+          extra={
+            <Button onClick={() => navigate(-1)}>Go Back</Button>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -321,6 +365,20 @@ const SalesOrderPage: React.FC = () => {
             allowClear
             style={{ borderRadius: 8 }}
           />
+
+          {/* Stop filter */}
+          {stopList.length > 0 && (
+            <Select
+              style={{ width: '100%' }}
+              value={filterStop}
+              onChange={v => setFilterStop(v)}
+              options={[
+                { value: 'ALL', label: 'All Stops' },
+                ...stopList.map(stop => ({ value: stop.id, label: stop.name })),
+              ]}
+            />
+          )}
+
           {custLoading ? (
             <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
           ) : filteredCustomers.length === 0 ? (
@@ -647,7 +705,7 @@ const SalesOrderPage: React.FC = () => {
               }}>
                 <div style={{ ...colLabel }}>Product</div>
                 <div style={{ ...colLabel }}>Rate</div>
-                <div style={{ ...colLabel, textAlign: 'center' }}>Disc %</div>
+                <div style={{ ...colLabel, textAlign: 'center' }}>{discountType === 'AMOUNT' ? 'Disc ₹' : 'Disc %'}</div>
                 <div style={{ ...colLabel, textAlign: 'center' }}>Qty</div>
                 <div style={{ ...colLabel, textAlign: 'right' }}>Gross</div>
                 <div style={{ ...colLabel, textAlign: 'right' }}>GST</div>
@@ -664,8 +722,16 @@ const SalesOrderPage: React.FC = () => {
               const hasError = belowMin || aboveMax;
               const gross    = lineTotal(item);
               const gstAmt   = gross * item.gstPercent / (100 + item.gstPercent);
-              const updateDiscount = (v: number | null) =>
-                setCart(prev => prev.map(c => c.productId === item.productId ? { ...c, discountPercent: v ?? 0 } : c));
+              const updateDiscount = (v: number | null) => {
+                if (discountType === 'AMOUNT') {
+                  setDiscountAmounts(prev => ({ ...prev, [item.productId]: v ?? 0 }));
+                } else {
+                  setCart(prev => prev.map(c => c.productId === item.productId ? { ...c, discountPercent: v ?? 0 } : c));
+                }
+              };
+              const discountValue = discountType === 'AMOUNT'
+                ? (discountAmounts[item.productId] ?? 0)
+                : item.discountPercent;
 
               const qtyH    = isTablet ? 26 : 30;
               const btnW    = isMobile ? 28 : 22;
@@ -719,7 +785,7 @@ const SalesOrderPage: React.FC = () => {
                           >
                             <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: isSmall ? 100 : 110, height: 30 }} status={hasError ? 'error' : ''} />
                           </Tooltip>
-                          <InputNumber size="small" min={0} max={100} precision={1} value={item.discountPercent} onChange={updateDiscount} suffix="%" style={{ width: 72, height: 30 }} placeholder="Disc%" />
+                          <InputNumber size="small" min={0} precision={2} value={discountValue} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹', style: { width: 82, height: 30 }, placeholder: '₹ disc' } : { suffix: '%', max: 100, style: { width: 72, height: 30 }, placeholder: 'Disc%' })} />
                         </div>
                         {hasError && (
                           <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
@@ -746,7 +812,7 @@ const SalesOrderPage: React.FC = () => {
                       >
                         <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: '100%', height: isTablet ? 26 : 30 }} status={hasError ? 'error' : ''} />
                       </Tooltip>
-                      <InputNumber size="small" min={0} max={100} precision={1} value={item.discountPercent} onChange={updateDiscount} suffix="%" style={{ width: '100%', height: isTablet ? 26 : 30 }} />
+                      <InputNumber size="small" min={0} precision={2} value={discountValue} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%', max: 100 })} style={{ width: '100%', height: isTablet ? 26 : 30 }} />
                       {QtyControl}
                       <div style={{ textAlign: 'right', fontSize: 13, color: '#475569' }}>₹{gross.toFixed(2)}</div>
                       <div style={{ textAlign: 'right', fontSize: 13, color: '#475569' }}>₹{gstAmt.toFixed(2)}</div>

@@ -211,6 +211,65 @@ To move everything to any other cloud:
 
 ---
 
+## Demo Instance (demo.stockez.com)
+
+A separate Oracle Cloud A1 free-tier VM is used exclusively for sales demos — zero cost, zero risk to production.
+
+### Why separate?
+
+| | Production (app.stockez.com) | Demo (demo.stockez.com) |
+|---|---|---|
+| Purpose | Real paying clients | Sales demonstrations only |
+| Database | PostgreSQL — client data | PostgreSQL — dummy data |
+| Reset | Never | Anytime — wipe and reload |
+| Risk | Zero tolerance | Freely breakable |
+
+### Architecture
+
+```
+demo.stockez.com
+        │
+   Cloudflare DNS → Oracle Cloud VM 2 (A1 free tier)
+   ├── Nginx
+   ├── Spring Boot (same JAR as production)
+   └── PostgreSQL (stockez_demo database)
+```
+
+Same codebase as production. Only `application.properties` differs:
+
+```properties
+# Production (VM 1)
+spring.datasource.url=jdbc:postgresql://localhost:5432/stockez_prod
+
+# Demo (VM 2)
+spring.datasource.url=jdbc:postgresql://localhost:5432/stockez_demo
+```
+
+### Resetting demo data
+
+```sql
+-- Run on demo VM only — never on production
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+```
+
+Then restart Spring Boot. Flyway reapplies V1 + V2, giving a clean slate with the seed tenant and admin user. Reload demo-specific sample data (products, customers, orders) from a SQL script kept in the repo.
+
+### Trial Tenants vs Demo
+
+| | Trial Tenant | Demo Instance |
+|---|---|---|
+| Who uses it | The prospect themselves | You (sales presentation) |
+| Where | Production database | Separate demo database |
+| Data | Their real data | Dummy data you control |
+| Reset | Never (their data) | Anytime |
+| Plan | TRIAL (full access) | PREMIUM (show everything) |
+| After expiry | Downgrades to ESSENTIALS | You wipe and reload |
+
+Trial tenants are real tenants on production with the TRIAL plan. After trial expires, plan downgrades to ESSENTIALS — features lock, data stays. Archive/delete tenant after 90 days of inactivity.
+
+---
+
 ## Go-Live Checklist (Sunday)
 
 - [ ] Create Oracle Cloud account → provision A1 Flex instance (Ubuntu 22.04)

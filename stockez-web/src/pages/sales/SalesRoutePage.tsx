@@ -3,7 +3,7 @@ import { Modal, Button, Skeleton, Form, Input, InputNumber, Select, Switch, mess
 import {
   PhoneOutlined, EnvironmentOutlined, PlusOutlined,
   CheckCircleOutlined, ShoppingOutlined,
-  AimOutlined, LoadingOutlined,
+  AimOutlined, LoadingOutlined, SearchOutlined, CloseCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useGetMyAllocationQuery } from '../../store/api/salesApi';
@@ -33,6 +33,7 @@ const SalesRoutePage: React.FC = () => {
   );
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [newCustomerForm] = Form.useForm();
@@ -41,7 +42,7 @@ const SalesRoutePage: React.FC = () => {
   const allocation = allocData?.data;
   const customers: any[] = allocation?.customers || [];
   const orders: any[] = ordersData?.data || [];
-  const routePlaces: any[] = planData?.data?.plan || [];
+  const routePlaces: any[] = planData?.data?.plan || [];  // kept for New Customer modal stop selector
 
   const customerOrderMap: Record<string, any> = {};
   orders.forEach((o: any) => { if (o.customer?.id) customerOrderMap[o.customer.id] = o; });
@@ -128,6 +129,32 @@ const SalesRoutePage: React.FC = () => {
 
   const selectedOrder = selectedCustomer ? customerOrderMap[selectedCustomer.id] : null;
 
+  // Group customers by stop using plan's embedded customer order
+  const grouped: { placeId: string | null; placeName: string; customers: any[] }[] = [];
+  const plan: any[] = planData?.data?.plan || [];
+  if (plan.length > 0) {
+    const assigned = new Set<string>();
+    plan.forEach((place: any) => {
+      const placeIds: string[] = (place.customers || []).map((c: any) => c.id);
+      const stopCusts = placeIds
+        .map((id: string) => customers.find((c: any) => c.id === id))
+        .filter(Boolean);
+      placeIds.forEach((id: string) => assigned.add(id));
+      if (stopCusts.length > 0) grouped.push({ placeId: place.id, placeName: place.name, customers: stopCusts });
+    });
+    const unassigned = customers.filter((c: any) => !assigned.has(c.id));
+    if (unassigned.length > 0) grouped.push({ placeId: null, placeName: 'Unassigned', customers: unassigned });
+  } else {
+    // Fallback: group by placeName field on customer
+    const byPlace: Record<string, any[]> = {};
+    customers.forEach((c: any) => {
+      const key = c.placeName || 'Unassigned';
+      if (!byPlace[key]) byPlace[key] = [];
+      byPlace[key].push(c);
+    });
+    Object.entries(byPlace).forEach(([name, custs]) => grouped.push({ placeId: null, placeName: name, customers: custs }));
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
@@ -177,117 +204,200 @@ const SalesRoutePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Customer list */}
+      {/* Search bar */}
+      <div style={{ position: 'relative' }}>
+        <SearchOutlined style={{
+          position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)',
+          color: '#94a3b8', fontSize: 15, zIndex: 1,
+        }} />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search customer or phone…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '11px 36px 11px 38px',
+            border: '1.5px solid #e2e8f0', borderRadius: 12,
+            fontSize: 14, color: '#0f172a', outline: 'none',
+            background: '#fff',
+          }}
+        />
+        {search && (
+          <CloseCircleOutlined
+            onClick={() => setSearch('')}
+            style={{
+              position: 'absolute', right: 13, top: '50%', transform: 'translateY(-50%)',
+              color: '#94a3b8', fontSize: 15, cursor: 'pointer',
+            }}
+          />
+        )}
+      </div>
+
+      {/* Customer list — grouped by stop */}
       {customers.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
           No customers on this route
         </div>
-      ) : (
-        customers.map((c: any, idx: number) => {
-          const status = getStatus(c.id);
-          const cfg = STATUS_CFG[status as keyof typeof STATUS_CFG];
-          const order = customerOrderMap[c.id];
+      ) : (() => {
+        const q = search.toLowerCase();
+        const filtered = q
+          ? grouped
+              .map(g => ({
+                ...g,
+                customers: g.customers.filter((c: any) =>
+                  c.businessName?.toLowerCase().includes(q) ||
+                  c.ownerName?.toLowerCase().includes(q) ||
+                  c.phone?.includes(q)
+                ),
+              }))
+              .filter(g => g.customers.length > 0)
+          : grouped;
 
+        if (filtered.length === 0) {
           return (
-            <div
-              key={c.id}
-              onClick={() => setSelectedCustomer(c)}
-              className="card-clickable"
-              style={{
-                background: '#fff', borderRadius: 14,
-                border: `1.5px solid ${cfg.border}`,
-                padding: '14px 16px', cursor: 'pointer',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                {/* Step badge */}
-                <div style={{
-                  width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                  background: cfg.bg, border: `2px solid ${cfg.border}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: cfg.color, fontWeight: 800, fontSize: 13,
-                }}>
-                  {status === 'not_visited' ? idx + 1 : <CheckCircleOutlined style={{ fontSize: 16 }} />}
-                </div>
+            <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              No customers match "{search}"
+            </div>
+          );
+        }
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, lineHeight: 1.3 }}>
-                        {c.businessName}
+        return filtered.map((group, stopIdx) => {
+        const stopVisited = group.customers.filter((c: any) => getStatus(c.id) !== 'not_visited').length;
+        const stopDone = stopVisited === group.customers.length;
+        const stopColor = stopDone ? '#06b6d4' : P;
+
+        return (
+          <div key={group.placeId || 'unassigned'} style={{ marginBottom: 4 }}>
+
+            {/* Stop header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                background: stopColor, color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 800, fontSize: 11,
+              }}>
+                {stopDone ? <CheckCircleOutlined /> : stopIdx + 1}
+              </div>
+              <span style={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>{group.placeName}</span>
+              <span style={{ fontSize: 11, color: stopDone ? '#06b6d4' : '#94a3b8', fontWeight: 600 }}>
+                {stopVisited}/{group.customers.length}
+              </span>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+            </div>
+
+            {/* Customer cards for this stop */}
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 8,
+              paddingLeft: 14,
+              borderLeft: `2px solid ${stopDone ? '#a5f3fc' : '#a7f3d0'}`,
+              marginLeft: 12,
+              marginBottom: 16,
+            }}>
+              {group.customers.map((c: any, localIdx: number) => {
+                const status = getStatus(c.id);
+                const cfg = STATUS_CFG[status as keyof typeof STATUS_CFG];
+                const order = customerOrderMap[c.id];
+
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedCustomer(c)}
+                    className="card-clickable"
+                    style={{
+                      background: '#fff', borderRadius: 14,
+                      border: `1.5px solid ${cfg.border}`,
+                      padding: '14px 16px', cursor: 'pointer',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      {/* Step badge */}
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                        background: cfg.bg, border: `2px solid ${cfg.border}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: cfg.color, fontWeight: 800, fontSize: 12,
+                      }}>
+                        {status === 'not_visited' ? localIdx + 1 : <CheckCircleOutlined style={{ fontSize: 15 }} />}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        {c.ownerName}
-                      </div>
-                      {c.placeName && (
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <EnvironmentOutlined style={{ fontSize: 10 }} />{c.placeName}
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, lineHeight: 1.3 }}>
+                              {c.businessName}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                              {c.ownerName}
+                            </div>
+                          </div>
+                          <span style={{
+                            flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '3px 10px',
+                            borderRadius: 20, background: cfg.bg, color: cfg.color,
+                            border: `1px solid ${cfg.border}`,
+                          }}>
+                            {cfg.label}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                    <span style={{
-                      flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '3px 10px',
-                      borderRadius: 20, background: cfg.bg, color: cfg.color,
-                      border: `1px solid ${cfg.border}`,
-                    }}>
-                      {cfg.label}
-                    </span>
-                  </div>
 
-                  {order && (
-                    <div style={{
-                      marginTop: 10, background: '#f8fafc', borderRadius: 10,
-                      padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <ShoppingOutlined style={{ color: '#94a3b8', fontSize: 12 }} />
-                        <span style={{ fontSize: 12, color: '#475569' }}>
-                          #{order.orderNumber} · {order.items?.length || 0} items
-                        </span>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, color: P, fontSize: 13 }}>₹{order.totalAmount?.toFixed(0)}</div>
-                        {(order.balanceAmount || 0) > 0 && (
-                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
-                            Due ₹{order.balanceAmount?.toFixed(0)}
+                        {order && (
+                          <div style={{
+                            marginTop: 10, background: '#f8fafc', borderRadius: 10,
+                            padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <ShoppingOutlined style={{ color: '#94a3b8', fontSize: 12 }} />
+                              <span style={{ fontSize: 12, color: '#475569' }}>
+                                #{order.orderNumber} · {order.items?.length || 0} items
+                              </span>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 800, color: P, fontSize: 13 }}>₹{order.totalAmount?.toFixed(0)}</div>
+                              {(order.balanceAmount || 0) > 0 && (
+                                <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
+                                  Due ₹{order.balanceAmount?.toFixed(0)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {!order && (
+                          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                            <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} style={{
+                              display: 'flex', alignItems: 'center', gap: 5, flex: 1,
+                              fontSize: 12, color: '#2563eb', textDecoration: 'none',
+                              background: '#eff6ff', borderRadius: 8,
+                              padding: isSmall ? '10px 12px' : '6px 10px',
+                              justifyContent: 'center', minHeight: 40,
+                            }}>
+                              <PhoneOutlined style={{ fontSize: 12 }} />{c.phone}
+                            </a>
+                            <button
+                              onClick={e => { e.stopPropagation(); navigate('/sales/order', { state: { customerId: c.id } }); }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 5, flex: 1,
+                                fontSize: 12, color: P, border: `1.5px solid ${P}`,
+                                background: '#fff', borderRadius: 8,
+                                padding: isSmall ? '10px 12px' : '6px 12px',
+                                cursor: 'pointer', fontWeight: 700, justifyContent: 'center', minHeight: 40,
+                              }}
+                            >
+                              <PlusOutlined style={{ fontSize: 12 }} />New Order
+                            </button>
                           </div>
                         )}
                       </div>
                     </div>
-                  )}
-
-                  {!order && (
-                    <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                      <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} style={{
-                        display: 'flex', alignItems: 'center', gap: 5, flex: 1,
-                        fontSize: 12, color: '#2563eb', textDecoration: 'none',
-                        background: '#eff6ff', borderRadius: 8,
-                        padding: isSmall ? '10px 12px' : '6px 10px',
-                        justifyContent: 'center', minHeight: 40,
-                      }}>
-                        <PhoneOutlined style={{ fontSize: 12 }} />{c.phone}
-                      </a>
-                      <button
-                        onClick={e => { e.stopPropagation(); navigate('/sales/order', { state: { customerId: c.id } }); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 5, flex: 1,
-                          fontSize: 12, color: P, border: `1.5px solid ${P}`,
-                          background: '#fff', borderRadius: 8,
-                          padding: isSmall ? '10px 12px' : '6px 12px',
-                          cursor: 'pointer', fontWeight: 700, justifyContent: 'center', minHeight: 40,
-                        }}
-                      >
-                        <PlusOutlined style={{ fontSize: 12 }} />New Order
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })
-      )}
+          </div>
+        );
+      });
+      })()}
 
       {/* Add New Customer button */}
       <button

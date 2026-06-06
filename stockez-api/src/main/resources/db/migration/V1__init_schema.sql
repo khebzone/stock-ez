@@ -17,11 +17,16 @@ CREATE TABLE tenants (
     city         VARCHAR(100),
     state        VARCHAR(50),
     pin_code     VARCHAR(10),
-    status         VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-    logo_url       VARCHAR(500),
-    trial_ends_at  TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ
+    status          VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+    logo_url        VARCHAR(500),
+    trial_ends_at   TIMESTAMPTZ,
+    plan            VARCHAR(20)  NOT NULL DEFAULT 'TRIAL',
+    billing_cycle   VARCHAR(10)  NOT NULL DEFAULT 'MONTHLY',
+    plan_end_date   DATE,
+    max_users       INT          NOT NULL DEFAULT 5,
+    notes           TEXT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ
 );
 
 -- =========== TENANT SETTINGS ===========
@@ -35,6 +40,7 @@ CREATE TABLE tenant_settings (
     max_discount_percent            DECIMAL(5,2),
     lock_billing_after_checkout     BOOLEAN NOT NULL DEFAULT false,
     separate_delivery_allocation    BOOLEAN NOT NULL DEFAULT false,
+    discount_type                   VARCHAR(10) NOT NULL DEFAULT 'PERCENT',
     updated_at                      TIMESTAMPTZ
 );
 

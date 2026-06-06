@@ -24,7 +24,7 @@ A professional SaaS platform for FMCG distributors. The standard to match is **Z
 
 ---
 
-## Database Reset (when migrations change)
+## Database Reset (DEV ONLY — never on production)
 ```sql
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
@@ -34,10 +34,19 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 ---
 
 ## Migration Rules
+
+### Before go-live (dev)
 - All schema lives in **V1__init_schema.sql** — add new tables/columns directly here
 - **V2__seed_data.sql** — only tenant + admin user seed
 - No separate ALTER TABLE migration files — consolidate into V1
 - If V1 changes: drop and recreate the DB, then restart
+
+### After go-live (production) — CRITICAL
+- **Never edit V1 or V2 again** — Flyway tracks checksums; editing an applied migration causes startup failure
+- Every schema change = a new migration file: `V3__description.sql`, `V4__description.sql`, etc.
+- Use `ALTER TABLE` in new migration files — never `DROP` and recreate tables with live data
+- Flyway runs only new (unapplied) migrations on restart — existing data is untouched
+- Example: adding a column → create `V3__add_gst_number_to_customers.sql` with `ALTER TABLE customers ADD COLUMN gst_number VARCHAR(15);`
 
 ---
 

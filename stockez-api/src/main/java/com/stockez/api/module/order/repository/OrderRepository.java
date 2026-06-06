@@ -95,6 +95,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             @Param("to") LocalDate to,
             @Param("statuses") List<Order.OrderStatus> statuses);
 
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product LEFT JOIN FETCH o.customer LEFT JOIN FETCH o.salesPerson LEFT JOIN FETCH o.tenant WHERE o.orderNumber = :orderNumber")
+    Optional<Order> findByOrderNumberWithItems(@Param("orderNumber") String orderNumber);
+
     @Query("SELECT DISTINCT oi.product.brand FROM OrderItem oi " +
            "WHERE oi.order.tenant.id = :tenantId " +
            "AND oi.order.salesPerson.id = :salesPersonId " +

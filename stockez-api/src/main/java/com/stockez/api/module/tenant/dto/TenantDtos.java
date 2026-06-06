@@ -7,6 +7,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public class TenantDtos {
@@ -48,22 +49,36 @@ public class TenantDtos {
         private String adminPassword;
 
         private Tenant.TenantStatus status;
+        private Tenant.TenantPlan plan;
+        private String billingCycle;
+        private LocalDate planEndDate;
 
-        private Instant trialEndsAt;
+        @Min(1) @Max(365)
+        private int trialDays = 7;
     }
 
     @Data
     public static class UpdateTenantRequest {
         @NotBlank @Size(max = 100) private String name;
-        @NotBlank @Size(max = 50) private String ownerName;
+        @NotBlank @Size(max = 50)  private String ownerName;
         @NotBlank @Pattern(regexp = "^[6-9]\\d{9}$") private String phone;
-        @NotBlank @Email private String email;
+        @NotBlank @Email           private String email;
         private String gstin;
         private String address;
         private String city;
         private String state;
         private Tenant.TenantStatus status;
-        private Instant trialEndsAt;
+        private Tenant.TenantPlan plan;
+        private String billingCycle;
+        private LocalDate planEndDate;
+        private Integer maxUsers;
+        private String notes;
+    }
+
+    @Data
+    public static class ExtendTrialRequest {
+        @Min(1) @Max(365)
+        private int days;
     }
 
     @Data
@@ -82,9 +97,15 @@ public class TenantDtos {
         private String state;
         private String pinCode;
         private Tenant.TenantStatus status;
+        private Tenant.TenantPlan plan;
+        private String billingCycle;
+        private LocalDate planEndDate;
+        private int maxUsers;
+        private String notes;
         private String logoUrl;
         private Instant trialEndsAt;
         private Instant createdAt;
+        private Long daysUntilExpiry;
     }
 
     @Data
@@ -94,6 +115,9 @@ public class TenantDtos {
         private long trial;
         private long suspended;
         private long inactive;
+        private long readOnly;
+        private long expiringSoon;
+        private long mrr;
     }
 
     @Data
@@ -121,6 +145,7 @@ public class TenantDtos {
         private BigDecimal maxDiscountPercent;
         private boolean lockBillingAfterCheckout;
         private boolean separateDeliveryAllocation;
+        private TenantSettings.DiscountType discountType;
     }
 
     @Data
@@ -132,5 +157,6 @@ public class TenantDtos {
         private BigDecimal maxDiscountPercent;
         private boolean lockBillingAfterCheckout;
         private boolean separateDeliveryAllocation;
+        private TenantSettings.DiscountType discountType;
     }
 }

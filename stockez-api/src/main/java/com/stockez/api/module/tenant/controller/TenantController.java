@@ -83,6 +83,22 @@ public class TenantController {
         return ResponseEntity.ok(ApiResponse.success(tenantService.activateTenant(id), "Tenant activated"));
     }
 
+    @PostMapping("/{id}/set-read-only")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Set tenant to read-only [SUPER_ADMIN]")
+    public ResponseEntity<ApiResponse<TenantDtos.TenantResponse>> setReadOnly(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(tenantService.setReadOnly(id), "Tenant set to read-only"));
+    }
+
+    @PostMapping("/{id}/extend-trial")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Extend tenant trial [SUPER_ADMIN]")
+    public ResponseEntity<ApiResponse<TenantDtos.TenantResponse>> extendTrial(
+            @PathVariable UUID id,
+            @Valid @RequestBody TenantDtos.ExtendTrialRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(tenantService.extendTrial(id, request.getDays()), "Trial extended"));
+    }
+
     @GetMapping("/profile")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get company profile [ADMIN]")

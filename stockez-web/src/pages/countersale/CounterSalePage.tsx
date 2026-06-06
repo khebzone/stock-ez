@@ -4,8 +4,6 @@ import {
   Row, Col, Input, Grid, Modal, Form, Switch, Tooltip,
 } from 'antd';
 import { PlusOutlined, MinusOutlined, DeleteOutlined, ShoppingCartOutlined, SearchOutlined, UserAddOutlined } from '@ant-design/icons';
-
-const { useBreakpoint } = Grid;
 import { useGetCustomersQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
 import { useGetProductsQuery } from '../../store/api/productApi';
 import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
@@ -13,6 +11,8 @@ import { useCounterSaleMutation } from '../../store/api/orderApi';
 import { useGetRoutesQuery } from '../../store/api/routeApi';
 import PageHeader from '../../components/PageHeader';
 import { getProductRates, isPriceOutOfRange, defaultUnitPrice } from '../../utils/priceUtils';
+
+const { useBreakpoint } = Grid;
 
 const fmt = (v: any) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -45,6 +45,9 @@ const CounterSalePage: React.FC = () => {
   const [addCustOpen, setAddCustOpen]         = useState(false);
   const [addCustForm]                         = Form.useForm();
   const [addCustRouteId, setAddCustRouteId]   = useState<string | undefined>();
+  const [filterRouteId, setFilterRouteId]     = useState<string | undefined>();
+  const [filterPlaceId, setFilterPlaceId]     = useState<string | undefined>();
+  const [filterPhone, setFilterPhone]         = useState('');
 
   const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({});
   const { data: productsData }        = useGetProductsQuery({});
@@ -62,6 +65,15 @@ const CounterSalePage: React.FC = () => {
     const route = routes.find((r: any) => r.id === routeId);
     return [...(route?.places || [])].sort((a: any, b: any) => a.sortOrder - b.sortOrder);
   };
+
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c: any) => {
+      if (filterRouteId && c.routeId !== filterRouteId) return false;
+      if (filterPlaceId && c.routePlaceId !== filterPlaceId) return false;
+      if (filterPhone && !c.phone?.includes(filterPhone)) return false;
+      return true;
+    });
+  }, [customers, filterRouteId, filterPlaceId, filterPhone]);
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.toLowerCase();
@@ -266,11 +278,11 @@ const CounterSalePage: React.FC = () => {
   ];
 
   return (
-    <div>
+    <div style={{ paddingBottom: isSmall && items.length > 0 ? 76 : 0 }}>
       <PageHeader
         title="Counter Sale"
         subtitle="Sell to walk-in customers — order is immediately delivered"
-        action={
+        action={isSmall ? undefined : (
           <Button
             type="primary" size="large" icon={<ShoppingCartOutlined />}
             loading={submitting} onClick={handleSubmit}
@@ -279,13 +291,13 @@ const CounterSalePage: React.FC = () => {
           >
             {priceErrors.length > 0 ? 'Fix Price Errors First' : 'Bill & Collect'}
           </Button>
-        }
+        )}
       />
 
       <Row gutter={[20, 20]}>
         {/* ── Left: Customer + Items ── */}
         <Col xs={24} lg={15}>
-          <Card style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: 20 } }}>
+          <Card style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: isSmall ? 14 : 20 } }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
                 Customer
@@ -298,16 +310,61 @@ const CounterSalePage: React.FC = () => {
                 Add Customer
               </Button>
             </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              <Select
+                placeholder="Filter by Route"
+                allowClear
+                size="small"
+                style={{ flex: 1, minWidth: 130 }}
+                value={filterRouteId}
+                onChange={(v) => { setFilterRouteId(v); setFilterPlaceId(undefined); }}
+                options={routes.map((r: any) => ({ value: r.id, label: r.name }))}
+                showSearch
+                optionFilterProp="label"
+              />
+              <Select
+                placeholder="Filter by Stop"
+                allowClear
+                size="small"
+                style={{ flex: 1, minWidth: 130 }}
+                value={filterPlaceId}
+                onChange={setFilterPlaceId}
+                disabled={!filterRouteId}
+                options={getPlacesForRoute(filterRouteId || '').map((p: any) => ({ value: p.id, label: p.name }))}
+              />
+              <Input
+                placeholder="Mobile number"
+                size="small"
+                style={{ flex: 1, minWidth: 130 }}
+                value={filterPhone}
+                onChange={e => setFilterPhone(e.target.value.replace(/\D/g, ''))}
+                allowClear
+                maxLength={10}
+                prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 11 }} />}
+              />
+            </div>
+
             <Select
               showSearch placeholder="Search customer by name or phone..."
               style={{ width: '100%' }} size="large"
               value={customerId} onChange={setCustomerId}
               optionFilterProp="label"
-              options={customers.map((c: any) => ({
+              options={filteredCustomers.map((c: any) => ({
                 value: c.id,
                 label: `${c.businessName}${c.phone ? ` — ${c.phone}` : ''}`,
               }))}
+              notFoundContent={
+                <div style={{ padding: '8px 0', color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
+                  {filterRouteId || filterPlaceId ? 'No customers on this route/stop' : 'No customers found'}
+                </div>
+              }
             />
+            {(filterRouteId || filterPlaceId || filterPhone) && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+                {filteredCustomers.length} customer{filteredCustomers.length !== 1 ? 's' : ''} matched
+              </div>
+            )}
           </Card>
 
           {/* Add Customer Modal */}
@@ -381,10 +438,68 @@ const CounterSalePage: React.FC = () => {
             </Form>
           </Modal>
 
-          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: 20 } }}>
+          <Card style={{ borderRadius: 12 }} styles={{ body: { padding: isSmall ? 14 : 20 } }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
               Products
             </div>
+
+            {items.length > 0 && (
+              isSmall ? (
+                <div style={{ marginBottom: 12 }}>
+                  {items.map(r => {
+                    const hasError = isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate);
+                    const belowMin = r.minSaleRate != null && r.unitPrice < r.minSaleRate;
+                    return (
+                      <div key={r.key} style={{ border: `1px solid ${hasError ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 8, padding: 10, marginBottom: 8, background: hasError ? '#fff5f5' : '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                          <div style={{ flex: 1, marginRight: 8 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{r.productName}</div>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>{r.unit}</div>
+                            {hasError && (
+                              <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600, marginTop: 2 }}>
+                                {belowMin ? `Below min ₹${r.minSaleRate!.toFixed(2)}` : `Above max ₹${r.maxSaleRate!.toFixed(2)}`}
+                              </div>
+                            )}
+                          </div>
+                          <Button icon={<DeleteOutlined />} size="small" type="text" danger onClick={() => removeItem(r.key)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 6, padding: '2px 4px', gap: 4 }}>
+                            <button onClick={() => adjustQty(r.productId, r.quantity - 1)} style={{ width: 26, height: 26, border: 'none', background: '#fff', borderRadius: 4, cursor: 'pointer', color: '#475569', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <MinusOutlined style={{ fontSize: 9 }} />
+                            </button>
+                            <span style={{ fontWeight: 700, fontSize: 14, minWidth: 20, textAlign: 'center', color: '#0f172a' }}>{r.quantity}</span>
+                            <button onClick={() => adjustQty(r.productId, r.quantity + 1)} style={{ width: 26, height: 26, border: 'none', background: '#475569', borderRadius: 4, cursor: 'pointer', color: '#fff', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <PlusOutlined style={{ fontSize: 9 }} />
+                            </button>
+                          </div>
+                          <InputNumber
+                            min={0.01} precision={2} value={r.unitPrice} size="small"
+                            style={{ flex: 1, minWidth: 0 }}
+                            onChange={v => updateItem(r.key, 'unitPrice', v || 0)}
+                            status={hasError ? 'error' : undefined}
+                            prefix="₹"
+                          />
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: hasError ? '#dc2626' : '#0f172a', fontSize: 13, minWidth: 60, textAlign: 'right' }}>
+                            {fmt(r.unitPrice * r.quantity)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Table
+                  columns={itemColumns}
+                  dataSource={items}
+                  rowKey="key"
+                  size="small"
+                  pagination={false}
+                  style={{ marginBottom: 12 }}
+                  rowClassName={(r: LineItem) => isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate) ? 'row-price-error' : ''}
+                />
+              )
+            )}
 
             <Input
               prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
@@ -466,18 +581,6 @@ const CounterSalePage: React.FC = () => {
               </div>
             )}
 
-            {items.length > 0 && (
-              <Table
-                columns={itemColumns}
-                dataSource={items}
-                rowKey="key"
-                size="small"
-                pagination={false}
-                style={{ marginTop: 4 }}
-                rowClassName={(r: LineItem) => isPriceOutOfRange(r.unitPrice, r.minSaleRate, r.maxSaleRate) ? 'row-price-error' : ''}
-              />
-            )}
-
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 }}>
                 Notes (optional)
@@ -554,14 +657,16 @@ const CounterSalePage: React.FC = () => {
               </div>
             )}
 
-            <Button
-              type="primary" size="large" block icon={<ShoppingCartOutlined />}
-              loading={submitting} onClick={handleSubmit}
-              disabled={!customerId || items.length === 0}
-              style={{ background: '#059669', borderColor: '#059669', fontWeight: 700, height: 48 }}
-            >
-              Bill &amp; Collect
-            </Button>
+            {!isSmall && (
+              <Button
+                type="primary" size="large" block icon={<ShoppingCartOutlined />}
+                loading={submitting} onClick={handleSubmit}
+                disabled={!customerId || items.length === 0}
+                style={{ background: '#059669', borderColor: '#059669', fontWeight: 700, height: 48 }}
+              >
+                Bill &amp; Collect
+              </Button>
+            )}
 
             {lastOrder && (
               <div style={{ marginTop: 16, background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 14px' }}>
@@ -577,6 +682,24 @@ const CounterSalePage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      {isSmall && items.length > 0 && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, background: '#fff', borderTop: '2px solid #e2e8f0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 -4px 12px rgba(0,0,0,0.08)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#64748b' }}>{items.length} item{items.length > 1 ? 's' : ''}</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a', fontFamily: 'monospace', lineHeight: 1.2 }}>{fmt(totals.total)}</div>
+            {balance > 0 && <div style={{ fontSize: 10, color: '#dc2626' }}>Due: {fmt(balance)}</div>}
+          </div>
+          <Button
+            type="primary" size="large" icon={<ShoppingCartOutlined />}
+            loading={submitting} onClick={handleSubmit}
+            disabled={!customerId || items.length === 0 || priceErrors.length > 0}
+            style={{ background: priceErrors.length > 0 ? '#94a3b8' : '#059669', borderColor: priceErrors.length > 0 ? '#94a3b8' : '#059669', fontWeight: 700, height: 48 }}
+          >
+            {priceErrors.length > 0 ? 'Fix Prices' : 'Bill & Collect'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

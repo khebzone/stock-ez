@@ -52,15 +52,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userDetailsService.loadUserByUsername(phone);
-
             List<SimpleGrantedAuthority> authorities = buildAuthorities(token);
-
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
             SecurityContextHolder.getContext().setAuthentication(authToken);
             log.debug("Authenticated user: {} role: {}", phone, jwtService.extractRole(token));
+        }
+
+        String tenantStatus = jwtService.extractTenantStatus(token);
+        if ("SUSPENDED".equals(tenantStatus)) {
+            sendError(response, HttpServletResponse.SC_FORBIDDEN,
+                    "TENANT_SUSPENDED", "Your account has been suspended. Please contact support.");
+            return;
+        }
+        if ("READ_ONLY".equals(tenantStatus)) {
+            String method = request.getMethod();
+            if (!"GET".equals(method) && !"OPTIONS".equals(method)) {
+                sendError(response, HttpServletResponse.SC_FORBIDDEN,
+                        "TENANT_READ_ONLY", "Your subscription has expired. Please renew to continue.");
+                return;
+            }
         }
 
         filterChain.doFilter(request, response);
@@ -82,5 +94,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 .map(SimpleGrantedAuthority::new)
                 .map(a -> (SimpleGrantedAuthority) a)
                 .toList();
+    }
+
+    private void sendError(HttpServletResponse response, int status, String code, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.getWriter().write(String.format("{\"code\":\"%s\",\"message\":\"%s\"}", code, message));
     }
 }

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
-  DatePicker, Table, Spin, message, Popconfirm, Grid, Tag,
+  DatePicker, Table, Spin, message, Popconfirm, Grid, Tag, Button,
 } from 'antd';
 import {
   CheckCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined,
-  EnvironmentOutlined, InboxOutlined,
+  EnvironmentOutlined, InboxOutlined, DownloadOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import {
@@ -33,6 +33,110 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     </span>
   );
 };
+
+function buildRouteHtml(route: any, date: string): string {
+  const dateLabel = dayjs(date).format('DD MMM YYYY');
+  const pickRows = (route.pickList || []).map((item: any) => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${item.productName}</div>
+        ${item.brand ? `<div style="font-size:10px;color:#888">${item.brand}</div>` : ''}
+      </td>
+      <td>${item.unit || ''}</td>
+      <td class="right qty">${item.totalQuantity}</td>
+      <td style="font-size:10px;color:#555">
+        ${(item.breakdown || []).map((b: any) =>
+          `${b.businessName}: <strong>${b.quantity}</strong> <span style="color:#aaa">(${b.orderNumber})</span>`
+        ).join('<br/>')}
+      </td>
+    </tr>`).join('');
+
+  const orderRows = (route.orders || []).map((o: any) => `
+    <tr>
+      <td style="font-family:monospace;font-size:11px">${o.orderNumber}</td>
+      <td>${o.customerName}</td>
+      <td class="right">${o.itemCount}</td>
+      <td class="right">&#8377;${Number(o.totalAmount || 0).toFixed(2)}</td>
+      <td>${o.status}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="route-block">
+      <div class="route-title">${route.routeName}</div>
+      <div class="route-meta">${dateLabel} &nbsp;·&nbsp; ${route.totalOrders} order${route.totalOrders !== 1 ? 's' : ''} &nbsp;·&nbsp; ${route.pickList?.length || 0} products</div>
+
+      <div class="section-label">Consolidated Pick List</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th><th>Unit</th><th class="right">Total Qty</th><th>Order Breakdown</th>
+          </tr>
+        </thead>
+        <tbody>${pickRows}</tbody>
+      </table>
+
+      <div class="section-label" style="margin-top:16px">Orders (${route.totalOrders})</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Order #</th><th>Customer</th><th class="right">Items</th><th class="right">Amount</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${orderRows}</tbody>
+      </table>
+    </div>`;
+}
+
+function buildFullHtml(routes: any[], date: string, title: string): string {
+  const dateLabel = dayjs(date).format('DD MMM YYYY');
+  const body = routes.map(r => buildRouteHtml(r, date)).join('<div class="page-break"></div>');
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>${title} — ${dateLabel}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:Arial,sans-serif; font-size:12px; color:#111; padding:20px 24px; }
+    h1 { font-size:16px; font-weight:800; margin-bottom:2px; }
+    .doc-meta { font-size:11px; color:#555; margin-bottom:18px; }
+    .route-block { margin-bottom:24px; }
+    .route-title { font-size:15px; font-weight:800; color:#000; margin-bottom:2px; }
+    .route-meta { font-size:11px; color:#555; margin-bottom:10px; }
+    .section-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
+                     color:#555; margin:12px 0 5px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+    table { width:100%; border-collapse:collapse; margin-bottom:6px; }
+    th { background:#f5f5f5; text-align:left; padding:5px 8px; font-size:10px; border:1px solid #ccc; }
+    td { padding:4px 8px; border:1px solid #ddd; vertical-align:top; font-size:11px; }
+    .right { text-align:right; }
+    .qty { font-weight:800; font-size:14px; }
+    .page-break { page-break-after:always; }
+    @media print {
+      body { padding:8px; }
+      .page-break { page-break-after:always; }
+    }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="doc-meta">${dateLabel} &nbsp;·&nbsp; ${routes.length} route${routes.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${routes.reduce((s: number, r: any) => s + (r.totalOrders || 0), 0)} orders</div>
+  ${body}
+  <script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`;
+}
+
+function downloadHtml(html: string, filename: string) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 const WarehousePicklistPage: React.FC = () => {
   const screens = useBreakpoint();
@@ -73,6 +177,18 @@ const WarehousePicklistPage: React.FC = () => {
     }
   };
 
+  const handleDownloadRoute = () => {
+    if (!selected) return;
+    const html = buildFullHtml([selected], dateStr, `Pick List — ${selected.routeName}`);
+    downloadHtml(html, `picklist-${selected.routeName.replace(/\s+/g, '-')}-${dateStr}.html`);
+  };
+
+  const handleDownloadAll = () => {
+    if (!routes.length) return;
+    const html = buildFullHtml(routes, dateStr, 'Pick List — All Routes');
+    downloadHtml(html, `picklist-all-routes-${dateStr}.html`);
+  };
+
   const pickListColumns = [
     {
       title: 'Product',
@@ -84,11 +200,7 @@ const WarehousePicklistPage: React.FC = () => {
         </div>
       ),
     },
-    {
-      title: 'Unit',
-      dataIndex: 'unit',
-      width: 70,
-    },
+    { title: 'Unit', dataIndex: 'unit', width: 70 },
     {
       title: 'Total Qty',
       dataIndex: 'totalQuantity',
@@ -107,12 +219,7 @@ const WarehousePicklistPage: React.FC = () => {
       render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span>,
     },
     { title: 'Customer', dataIndex: 'customerName', ellipsis: true },
-    {
-      title: 'Items',
-      dataIndex: 'itemCount',
-      width: 60,
-      align: 'right' as const,
-    },
+    { title: 'Items', dataIndex: 'itemCount', width: 60, align: 'right' as const },
     {
       title: 'Total',
       dataIndex: 'totalAmount',
@@ -147,22 +254,22 @@ const WarehousePicklistPage: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button icon={<DownloadOutlined />} onClick={handleDownloadRoute}>
+              Download
+            </Button>
             {selected.approvedCount > 0 && (
               <Popconfirm
                 title={`Start preparing ${selected.approvedCount} approved order(s) for ${selected.routeName}?`}
                 onConfirm={handleStartPreparing}
                 okText="Start"
               >
-                <button
-                  disabled={starting}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-                    background: '#f97316', color: '#fff', border: 'none', borderRadius: 7,
-                    fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                  }}
+                <Button
+                  loading={starting}
+                  style={{ background: '#f97316', borderColor: '#f97316', color: '#fff' }}
+                  icon={<PlayCircleOutlined />}
                 >
-                  <PlayCircleOutlined /> Start Preparing
-                </button>
+                  Start Preparing
+                </Button>
               </Popconfirm>
             )}
             {selected.preparingCount > 0 && (
@@ -171,16 +278,13 @@ const WarehousePicklistPage: React.FC = () => {
                 onConfirm={handleMarkPrepared}
                 okText="Confirm"
               >
-                <button
-                  disabled={marking}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-                    background: '#06b6d4', color: '#fff', border: 'none', borderRadius: 7,
-                    fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                  }}
+                <Button
+                  loading={marking}
+                  style={{ background: '#06b6d4', borderColor: '#06b6d4', color: '#fff' }}
+                  icon={<CheckCircleOutlined />}
                 >
-                  <CheckCircleOutlined /> Mark All Prepared
-                </button>
+                  Mark All Prepared
+                </Button>
               </Popconfirm>
             )}
           </div>
@@ -267,8 +371,8 @@ const WarehousePicklistPage: React.FC = () => {
       />
       <div style={{ padding: '0 24px 24px' }}>
 
-        {/* Date selector */}
-        <div style={{ marginBottom: 16 }}>
+        {/* Date selector + Download All */}
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
           <DatePicker
             value={date}
             onChange={d => { if (d) { setDate(d); setSelectedRouteId(null); } }}
@@ -276,6 +380,14 @@ const WarehousePicklistPage: React.FC = () => {
             allowClear={false}
             style={{ width: 180 }}
           />
+          {routes.length > 0 && (
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadAll}
+            >
+              Download All Routes
+            </Button>
+          )}
         </div>
 
         {isLoading ? (

@@ -51,8 +51,14 @@ public class TenantSettings {
     @Column(nullable = false)
     private boolean separateDeliveryAllocation = false;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private DiscountType discountType = DiscountType.PERCENT;
+
     @LastModifiedDate
     private Instant updatedAt;
 
     public enum CreditLimitEnforcement { HARD_BLOCK, DISABLED }
+    public enum DiscountType { PERCENT, AMOUNT }
 }

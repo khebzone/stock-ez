@@ -2,7 +2,7 @@
 -- Tenant + Admin user only. Custom roles are created by each tenant admin.
 
 -- Default development tenant
-INSERT INTO tenants (id, name, schema_name, subdomain, owner_name, phone, email, address, city, state, status)
+INSERT INTO tenants (id, name, schema_name, subdomain, owner_name, phone, email, address, city, state, status, plan, billing_cycle, max_users)
 VALUES (
     'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     'My Distributors',
@@ -14,7 +14,10 @@ VALUES (
     'No.1, Trade Centre',
     'Chennai',
     'Tamil Nadu',
-    'ACTIVE'
+    'ACTIVE',
+    'PREMIUM',
+    'MONTHLY',
+    999
 ) ON CONFLICT (subdomain) DO NOTHING;
 
 -- SUPER_ADMIN — platform owner (password: Admin@1234)

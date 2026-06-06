@@ -251,8 +251,13 @@ const AttendancePage: React.FC = () => {
       {!settingsLoading && settings && !settings.configured && (
         <Alert
           type="warning"
-          message="Office location not configured. Staff cannot check in until you set the office location."
-          action={<Button size="small" onClick={() => setSettingsOpen(true)}>Configure Now</Button>}
+          message="Office location not configured"
+          description={
+            <div>
+              <div style={{ marginBottom: 8 }}>Staff cannot check in until you set the office location.</div>
+              <Button size="small" onClick={() => setSettingsOpen(true)}>Configure Now</Button>
+            </div>
+          }
           style={{ marginBottom: 16 }}
         />
       )}
@@ -260,8 +265,9 @@ const AttendancePage: React.FC = () => {
       {/* Settings Panel */}
       {settingsOpen && (
         <Card
-          title={<span style={{ fontWeight: 700 }}><EnvironmentOutlined /> Office Attendance Settings</span>}
+          title={<span style={{ fontWeight: 700 }}><EnvironmentOutlined /> {isMobile ? 'Attendance Settings' : 'Office Attendance Settings'}</span>}
           style={{ marginBottom: 20 }}
+          styles={{ body: { padding: isMobile ? 12 : 24 } }}
           extra={<Button type="text" onClick={() => setSettingsOpen(false)}>✕</Button>}
         >
           <Form form={settingsForm} layout="vertical" onFinish={handleSaveSettings}>
@@ -289,14 +295,19 @@ const AttendancePage: React.FC = () => {
                 </Form.Item>
               </Col>
             </Row>
-            <Space>
-              <Button type="default" icon={<EnvironmentOutlined />} onClick={handleUseCurrentLocation}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8 }}>
+              <Button
+                type="default"
+                icon={<EnvironmentOutlined />}
+                onClick={handleUseCurrentLocation}
+                block={isMobile}
+              >
                 Use Current Location
               </Button>
-              <Button type="primary" htmlType="submit" loading={saving}>
+              <Button type="primary" htmlType="submit" loading={saving} block={isMobile}>
                 Save Settings
               </Button>
-            </Space>
+            </div>
           </Form>
         </Card>
       )}

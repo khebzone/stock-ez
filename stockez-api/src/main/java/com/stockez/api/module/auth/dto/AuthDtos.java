@@ -43,6 +43,8 @@ public class AuthDtos {
         private java.util.List<String> permissions;
         private String tenantId;
         private String tenantName;
+        private String tenantStatus;
+        private String plan;
         private String profileImageUrl;
     }
 }

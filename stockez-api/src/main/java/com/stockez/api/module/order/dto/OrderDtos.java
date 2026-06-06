@@ -331,4 +331,26 @@ public class OrderDtos {
         private OrderResponse order;
         private PaymentResponse payment;
     }
+
+    @Data
+    public static class CompanyInfo {
+        private String name;
+        private String ownerName;
+        private String phone;
+        private String email;
+        private String address;
+        private String city;
+        private String state;
+        private String pinCode;
+        private String gstin;
+        private String fssaiNumber;
+        private String logoUrl;
+    }
+
+    @Data
+    public static class PublicInvoiceResponse {
+        private OrderResponse order;
+        private CompanyInfo company;
+        private String pdfUrl;
+    }
 }

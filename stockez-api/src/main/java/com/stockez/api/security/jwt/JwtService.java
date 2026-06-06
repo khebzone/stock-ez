@@ -43,6 +43,8 @@ public class JwtService {
         claims.put("userId", user.getId().toString());
         claims.put("tenantId", user.getTenant().getId().toString());
         claims.put("role", user.getRole().name());
+        claims.put("tenantStatus", user.getTenant().getStatus().name());
+        claims.put("plan", user.getTenant().getPlan() != null ? user.getTenant().getPlan().name() : "TRIAL");
         claims.put("type", "ACCESS");
 
         List<String> permissions;
@@ -106,6 +108,10 @@ public class JwtService {
 
     public String extractRole(String token) {
         return (String) extractAllClaims(token).get("role");
+    }
+
+    public String extractTenantStatus(String token) {
+        return (String) extractAllClaims(token).get("tenantStatus");
     }
 
     @SuppressWarnings("unchecked")
