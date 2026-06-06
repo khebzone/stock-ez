@@ -199,10 +199,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   }, [location.pathname]);
 
-  const buildMenuItems = (onLinkClick?: () => void): MenuProps['items'] =>
-    NAV_SECTIONS.flatMap(section => {
+  const buildMenuItems = (onLinkClick?: () => void): MenuProps['items'] => {
+    const result: NonNullable<MenuProps['items']> = [];
+    for (const section of NAV_SECTIONS) {
       const filtered = section.items.filter(isItemVisible);
-      if (filtered.length === 0) return [];
+      if (filtered.length === 0) continue;
       const children = filtered.map(item => {
         const locked = !!item.minPlan && !hasPlan(item.minPlan);
         return {
@@ -216,10 +217,15 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           ),
         };
       });
-      if (section.section === 'MAIN') return children;
-      const meta = SECTION_META[section.section];
-      return [{ key: section.section, icon: meta?.icon, label: meta?.label, children }];
-    }) as MenuProps['items'];
+      if (section.section === 'MAIN') {
+        result.push(...children);
+      } else {
+        const meta = SECTION_META[section.section];
+        result.push({ key: section.section, icon: meta?.icon, label: meta?.label, children });
+      }
+    }
+    return result;
+  };
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
