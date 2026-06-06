@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Badge, Breadcrumb, Input, Tooltip, Modal, Form, message, Grid, Drawer } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, UserOutlined, LogoutOutlined,
   GlobalOutlined, TeamOutlined, WalletOutlined, BarChartOutlined,
@@ -198,7 +199,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   }, [location.pathname]);
 
-  const buildMenuItems = (onLinkClick?: () => void) =>
+  const buildMenuItems = (onLinkClick?: () => void): MenuProps['items'] =>
     NAV_SECTIONS.flatMap(section => {
       const filtered = section.items.filter(isItemVisible);
       if (filtered.length === 0) return [];

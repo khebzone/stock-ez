@@ -105,6 +105,7 @@ const SalesOrderPage: React.FC = () => {
   const [filterStop, setFilterStop]             = useState<string>('ALL');
   const [productSearch, setProductSearch]       = useState('');
   const [selectedBrand, setSelectedBrand]       = useState<string>('ALL');
+  const [brandSearch, setBrandSearch]           = useState('');
   const [cart, setCart]                         = useState<CartItem[]>([]);
 
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
