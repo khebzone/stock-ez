@@ -219,7 +219,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (section.section === 'MAIN') return children;
       const meta = SECTION_META[section.section];
       return [{ key: section.section, icon: meta?.icon, label: meta?.label, children }];
-    });
+    }) as MenuProps['items'];
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
