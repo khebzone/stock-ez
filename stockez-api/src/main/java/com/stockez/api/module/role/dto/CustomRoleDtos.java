@@ -3,6 +3,7 @@ package com.stockez.api.module.role.dto;
 import com.stockez.api.module.role.entity.Permission;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -16,7 +17,10 @@ public class CustomRoleDtos {
     public static class CreateRoleRequest {
         @NotBlank(message = "Role name is required")
         @Size(min = 2, max = 100)
+        @Pattern(regexp = "^(?=.*[a-zA-Z])[a-zA-Z0-9\\s\\-]+$", message = "Role name must contain at least one letter and only letters, numbers, spaces or hyphens are allowed")
         private String name;
+
+        private boolean fieldStaff;
 
         @NotNull(message = "Permissions are required")
         private Set<Permission> permissions;
@@ -26,7 +30,10 @@ public class CustomRoleDtos {
     public static class UpdateRoleRequest {
         @NotBlank(message = "Role name is required")
         @Size(min = 2, max = 100)
+        @Pattern(regexp = "^(?=.*[a-zA-Z])[a-zA-Z0-9\\s\\-]+$", message = "Role name must contain at least one letter and only letters, numbers, spaces or hyphens are allowed")
         private String name;
+
+        private boolean fieldStaff;
 
         @NotNull(message = "Permissions are required")
         private Set<Permission> permissions;
@@ -36,6 +43,7 @@ public class CustomRoleDtos {
     public static class RoleResponse {
         private UUID id;
         private String name;
+        private boolean fieldStaff;
         private Set<Permission> permissions;
         private long userCount;
         private Instant createdAt;
@@ -45,6 +53,7 @@ public class CustomRoleDtos {
     public static class RoleSummary {
         private UUID id;
         private String name;
+        private boolean fieldStaff;
         private Set<Permission> permissions;
     }
 }

@@ -41,16 +41,17 @@ public class ProductController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "List products with optional search and category filter")
+    @Operation(summary = "List products with optional search, category and brand filter")
     public ResponseEntity<ApiResponse<PagedResponse<ProductDtos.ProductResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String category,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) UUID brandId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         Page<ProductDtos.ProductResponse> result = productService.getProducts(
-                tenantId, search, category, PageRequest.of(page, size, Sort.by("name")));
+                tenantId, search, categoryId, brandId, PageRequest.of(page, size, Sort.by("name")));
 
         PagedResponse<ProductDtos.ProductResponse> paged = PagedResponse.<ProductDtos.ProductResponse>builder()
                 .content(result.getContent())
@@ -93,17 +94,12 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success(null, "Product deleted"));
     }
 
-    @GetMapping("/categories")
+    @GetMapping("/all")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Get all product categories")
-    public ResponseEntity<ApiResponse<List<String>>> categories(@RequestHeader("X-Tenant-Id") UUID tenantId) {
-        return ResponseEntity.ok(ApiResponse.success(productService.getCategories(tenantId)));
+    @Operation(summary = "Get all active products (unpaginated, for pickers)")
+    public ResponseEntity<ApiResponse<List<ProductDtos.ProductResponse>>> all(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(productService.getAllProducts(tenantId)));
     }
 
-    @GetMapping("/brands")
-    @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Get all product brands")
-    public ResponseEntity<ApiResponse<List<String>>> brands(@RequestHeader("X-Tenant-Id") UUID tenantId) {
-        return ResponseEntity.ok(ApiResponse.success(productService.getBrands(tenantId)));
-    }
 }

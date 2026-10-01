@@ -12,6 +12,7 @@ import {
 import {
   useGetMastersQuery, useCreateMasterMutation, useDeleteMasterMutation,
 } from '../../store/api/productMasterApi';
+import { hasPermission } from '../../utils/permissions';
 import {
   useGetPaymentMethodsQuery, useCreatePaymentMethodMutation, useDeletePaymentMethodMutation,
 } from '../../store/api/paymentMethodApi';
@@ -29,7 +30,8 @@ const useIsMobile = () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const hasAlphanumeric = (name: string) => /[a-zA-Z0-9]/.test(name);
+const hasLetter = (name: string) => /[a-zA-Z]/.test(name);
+const hasOnlyAllowedChars = (name: string) => /^[a-zA-Z0-9\s\-\.&'\/,()]+$/.test(name);
 
 // Auto-detect payment mode from display name
 const detectMode = (name: string): string => {
@@ -62,6 +64,7 @@ const SIMPLE_TYPES = [
 
 const FlatMasterTab: React.FC<{ masterType: typeof SIMPLE_TYPES[0] }> = ({ masterType }) => {
   const [newName, setNewName] = useState('');
+  const [nameError, setNameError] = useState('');
   const { data, isLoading } = useGetMastersQuery(masterType.key);
   const [createMaster, { isLoading: creating }] = useCreateMasterMutation();
   const [deleteMaster] = useDeleteMasterMutation();
@@ -69,25 +72,35 @@ const FlatMasterTab: React.FC<{ masterType: typeof SIMPLE_TYPES[0] }> = ({ maste
   const singular = masterType.label.slice(0, -1);
   const isMobile = useIsMobile();
 
+  const validate = (name: string): string => {
+    if (!name) return `${singular} name is required`;
+    if (name.length < 2) return `Must be at least 2 characters`;
+    if (!hasLetter(name)) return 'Name must contain letters — it cannot be only numbers';
+    if (!hasOnlyAllowedChars(name)) return `Special characters like @, #, $, !, % are not allowed`;
+    if (items.some((i: any) => i.name.toLowerCase() === name.toLowerCase())) return `"${name}" already exists`;
+    return '';
+  };
+
+  const handleChange = (val: string) => {
+    setNewName(val);
+    if (nameError) setNameError(validate(val.trim()));
+  };
+
   const handleAdd = async () => {
     const name = newName.trim();
-    if (!name) { message.warning(`Enter a ${singular.toLowerCase()} name`); return; }
-    if (name.length < 2) { message.warning(`${singular} name must be at least 2 characters`); return; }
-    if (['BRAND', 'CATEGORY', 'SUB_CATEGORY', 'UNIT'].includes(masterType.key) && !hasAlphanumeric(name)) {
-      message.error(`${singular} name must contain at least one letter or number — special characters only are not allowed`); return;
-    }
-    const exists = items.some((i: any) => i.name.toLowerCase() === name.toLowerCase());
-    if (exists) { message.error(`"${name}" already exists in ${masterType.label.toLowerCase()}`); return; }
+    const err = validate(name);
+    if (err) { setNameError(err); return; }
+    setNameError('');
     try {
       await createMaster({ type: masterType.key, name }).unwrap();
       setNewName('');
-      message.success(`${singular} "${name}" added successfully`);
-    } catch (err: any) {
-      const errMsg = err?.data?.message;
-      if (errMsg?.toLowerCase().includes('duplicate') || errMsg?.toLowerCase().includes('exists')) {
-        message.error(`"${name}" already exists. Please use a different name.`);
+      message.success(`${singular} "${name}" added`);
+    } catch (e: any) {
+      const errMsg = e?.data?.message || '';
+      if (errMsg.toLowerCase().includes('duplicate') || errMsg.toLowerCase().includes('exists')) {
+        setNameError(`"${name}" already exists`);
       } else {
-        message.error(errMsg || `Failed to add ${singular.toLowerCase()}. Please try again.`);
+        setNameError(errMsg || `Failed to add ${singular.toLowerCase()}`);
       }
     }
   };
@@ -98,18 +111,24 @@ const FlatMasterTab: React.FC<{ masterType: typeof SIMPLE_TYPES[0] }> = ({ maste
         <div style={{ fontSize: 11, fontWeight: 700, color: masterType.color, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 }}>
           Add New {masterType.label.slice(0, -1)}
         </div>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
-          <Input
-            value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder={masterType.placeholder}
-            onPressEnter={handleAdd}
-            size="large" style={{ borderRadius: 10, flex: 1 }}
-            maxLength={100}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} loading={creating} size="large"
-            style={{ borderRadius: 10, background: masterType.color, border: 'none', fontWeight: 700, width: isMobile ? '100%' : 'auto' }}>
-            Add {singular}
-          </Button>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, width: '100%' }}>
+            <Input
+              value={newName} onChange={e => handleChange(e.target.value)}
+              placeholder={masterType.placeholder}
+              onPressEnter={handleAdd}
+              size="large" style={{ borderRadius: 10 }}
+              maxLength={100}
+              status={nameError ? 'error' : ''}
+            />
+            {nameError && <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>{nameError}</div>}
+          </div>
+          {hasPermission('MASTERS_MANAGE') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} loading={creating} size="large"
+              style={{ borderRadius: 10, background: masterType.color, border: 'none', fontWeight: 700, width: isMobile ? '100%' : 'auto', flexShrink: 0 }}>
+              Add {singular}
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -136,13 +155,15 @@ const FlatMasterTab: React.FC<{ masterType: typeof SIMPLE_TYPES[0] }> = ({ maste
                 {masterType.icon}
               </div>
               <div style={{ flex: 1, fontWeight: 600, fontSize: 14, color: '#0f172a' }}>{item.name}</div>
-              <Popconfirm title={`Remove "${item.name}"?`} description="This cannot be undone." okText="Remove" okButtonProps={{ danger: true }}
-                onConfirm={async () => {
-                  try { await deleteMaster({ id: item.id, type: masterType.key }).unwrap(); message.success(`"${item.name}" removed`); }
-                  catch (err: any) { message.error(err?.data?.message || `Cannot remove "${item.name}". It may be in use.`); }
-                }}>
-                <Button icon={<DeleteOutlined />} size="small" shape="circle" danger type="text" />
-              </Popconfirm>
+              {hasPermission('MASTERS_MANAGE') && (
+                <Popconfirm title={`Remove "${item.name}"?`} description="This cannot be undone." okText="Remove" okButtonProps={{ danger: true }}
+                  onConfirm={async () => {
+                    try { await deleteMaster({ id: item.id, type: masterType.key }).unwrap(); message.success(`"${item.name}" removed`); }
+                    catch (err: any) { message.error(err?.data?.message || `Cannot remove "${item.name}". It may be in use.`); }
+                  }}>
+                  <Button icon={<DeleteOutlined />} size="small" shape="circle" danger type="text" />
+                </Popconfirm>
+              )}
             </div>
           ))
         )}
@@ -232,7 +253,7 @@ const TaxRatesTab: React.FC = () => {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>GST {item.name}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                  CGST {Number(item.value) / 2}% + SGST {Number(item.value) / 2}%
+                  {(() => { const v = item.value != null && item.value !== '' ? Number(item.value) : parseFloat(item.name); const half = v / 2; return `CGST ${half}% + SGST ${half}%`; })()}
                 </div>
               </div>
               <Popconfirm title={`Remove ${item.name} GST?`} description="Products using this rate will not be affected." okText="Remove" okButtonProps={{ danger: true }}
@@ -259,28 +280,34 @@ const CategoryRow: React.FC<{
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [subName, setSubName] = useState('');
+  const [subError, setSubError] = useState('');
   const [createMaster, { isLoading: creating }] = useCreateMasterMutation();
   const [deleteMaster] = useDeleteMasterMutation();
   const isMobile = useIsMobile();
 
+  const validateSub = (name: string): string => {
+    if (!name) return 'Sub-category name is required';
+    if (name.length < 2) return 'Must be at least 2 characters';
+    if (!hasLetter(name)) return 'Name must contain letters — it cannot be only numbers';
+    if (!hasOnlyAllowedChars(name)) return `Special characters like @, #, $, !, % are not allowed`;
+    if (subCategories.some((s: any) => s.name.toLowerCase() === name.toLowerCase())) return `"${name}" already exists under ${category.name}`;
+    return '';
+  };
+
   const handleAddSub = async () => {
     const name = subName.trim();
-    if (!name) { message.warning('Please enter a sub-category name'); return; }
-    if (name.length < 2) { message.warning('Sub-category name must be at least 2 characters'); return; }
-    if (!hasAlphanumeric(name)) { message.error('Sub-category name must contain at least one letter or number — special characters only are not allowed'); return; }
-    const exists = subCategories.some((s: any) => s.name.toLowerCase() === name.toLowerCase());
-    if (exists) { message.error(`"${name}" already exists under ${category.name}`); return; }
+    const err = validateSub(name);
+    if (err) { setSubError(err); return; }
+    setSubError('');
     try {
-      await createMaster({ type: 'SUB_CATEGORY', name, parentName: category.name }).unwrap();
+      await createMaster({ type: 'SUB_CATEGORY', name, parentId: category.id }).unwrap();
       setSubName(''); setAdding(false);
       message.success(`"${name}" added under ${category.name}`);
-    } catch (err: any) {
-      const errMsg = err?.data?.message;
-      if (errMsg?.toLowerCase().includes('duplicate') || errMsg?.toLowerCase().includes('exists')) {
-        message.error(`"${name}" already exists under ${category.name}`);
-      } else {
-        message.error(errMsg || 'Failed to add sub-category. Please try again.');
-      }
+    } catch (e: any) {
+      const errMsg = e?.data?.message || '';
+      setSubError(errMsg.toLowerCase().includes('duplicate') || errMsg.toLowerCase().includes('exists')
+        ? `"${name}" already exists under ${category.name}`
+        : errMsg || 'Failed to add sub-category');
     }
   };
 
@@ -341,23 +368,30 @@ const CategoryRow: React.FC<{
             </Button>
           )}
           {adding && (
-            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginBottom: 12 }}>
-              <Input
-                value={subName} onChange={e => setSubName(e.target.value)}
-                placeholder={`Sub-category name under ${category.name}`}
-                onPressEnter={handleAddSub} autoFocus size="middle"
-                maxLength={100}
-                style={{ borderRadius: 8, flex: 1, border: '1.5px solid #059669' }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button type="primary" size="middle" loading={creating} onClick={handleAddSub}
-                  style={{ background: '#059669', border: 'none', borderRadius: 8, fontWeight: 600, flex: isMobile ? 1 : 'none' }}>
-                  Add
-                </Button>
-                <Button size="middle" onClick={() => { setAdding(false); setSubName(''); }}
-                  style={{ borderRadius: 8, flex: isMobile ? 1 : 'none' }}>
-                  Cancel
-                </Button>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    value={subName}
+                    onChange={e => { setSubName(e.target.value); if (subError) setSubError(validateSub(e.target.value.trim())); }}
+                    placeholder={`Sub-category name under ${category.name}`}
+                    onPressEnter={handleAddSub} autoFocus size="middle"
+                    maxLength={100}
+                    status={subError ? 'error' : ''}
+                    style={{ borderRadius: 8, border: `1.5px solid ${subError ? '#ef4444' : '#059669'}` }}
+                  />
+                  {subError && <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>{subError}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button type="primary" size="middle" loading={creating} onClick={handleAddSub}
+                    style={{ background: '#059669', border: 'none', borderRadius: 8, fontWeight: 600, flex: isMobile ? 1 : 'none' }}>
+                    Add
+                  </Button>
+                  <Button size="middle" onClick={() => { setAdding(false); setSubName(''); setSubError(''); }}
+                    style={{ borderRadius: 8, flex: isMobile ? 1 : 'none' }}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -402,6 +436,7 @@ const CategoryRow: React.FC<{
 
 const CategoriesTab: React.FC = () => {
   const [newCatName, setNewCatName] = useState('');
+  const [catError, setCatError] = useState('');
   const { data: catData, isLoading: catLoading } = useGetMastersQuery('CATEGORY');
   const { data: subData } = useGetMastersQuery('SUB_CATEGORY');
   const [createMaster, { isLoading: creating }] = useCreateMasterMutation();
@@ -411,31 +446,36 @@ const CategoriesTab: React.FC = () => {
   const categories: any[] = catData?.data || [];
   const allSubCategories: any[] = subData?.data || [];
 
+  const validateCat = (name: string): string => {
+    if (!name) return 'Category name is required';
+    if (name.length < 2) return 'Must be at least 2 characters';
+    if (!hasLetter(name)) return 'Name must contain letters — it cannot be only numbers';
+    if (!hasOnlyAllowedChars(name)) return `Special characters like @, #, $, !, % are not allowed`;
+    if (categories.some((c: any) => c.name.toLowerCase() === name.toLowerCase())) return `"${name}" already exists`;
+    return '';
+  };
+
   const handleAddCategory = async () => {
     const name = newCatName.trim();
-    if (!name) { message.warning('Please enter a category name'); return; }
-    if (name.length < 2) { message.warning('Category name must be at least 2 characters'); return; }
-    if (!hasAlphanumeric(name)) { message.error('Category name must contain at least one letter or number — special characters only are not allowed'); return; }
-    const exists = categories.some((c: any) => c.name.toLowerCase() === name.toLowerCase());
-    if (exists) { message.error(`Category "${name}" already exists`); return; }
+    const err = validateCat(name);
+    if (err) { setCatError(err); return; }
+    setCatError('');
     try {
       await createMaster({ type: 'CATEGORY', name }).unwrap();
       setNewCatName('');
       message.success(`Category "${name}" added`);
-    } catch (err: any) {
-      const errMsg = err?.data?.message;
-      if (errMsg?.toLowerCase().includes('duplicate') || errMsg?.toLowerCase().includes('exists')) {
-        message.error(`Category "${name}" already exists`);
-      } else {
-        message.error(errMsg || 'Failed to add category. Please try again.');
-      }
+    } catch (e: any) {
+      const errMsg = e?.data?.message || '';
+      setCatError(errMsg.toLowerCase().includes('duplicate') || errMsg.toLowerCase().includes('exists')
+        ? `"${name}" already exists`
+        : errMsg || 'Failed to add category');
     }
   };
 
   const handleDeleteCategory = async (cat: any) => {
     try {
       await deleteMaster({ id: cat.id, type: 'CATEGORY' }).unwrap();
-      const subs = allSubCategories.filter((s: any) => s.parentName === cat.name);
+      const subs = allSubCategories.filter((s: any) => s.parentId === cat.id);
       await Promise.all(subs.map((s: any) => deleteMaster({ id: s.id, type: 'SUB_CATEGORY' }).unwrap()));
       message.success(`Category "${cat.name}" and its sub-categories removed`);
     } catch (err: any) { message.error(err?.data?.message || `Cannot remove "${cat.name}". Please try again.`); }
@@ -447,15 +487,20 @@ const CategoriesTab: React.FC = () => {
         <div style={{ fontSize: 11, fontWeight: 700, color: '#0891b2', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 }}>
           Add New Category
         </div>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
-          <Input
-            value={newCatName} onChange={e => setNewCatName(e.target.value)}
-            placeholder="e.g. Masala, Oils, Rice, Pulses, Biscuits"
-            onPressEnter={handleAddCategory} size="large"
-            style={{ borderRadius: 10, flex: 1 }} maxLength={100}
-          />
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, width: '100%' }}>
+            <Input
+              value={newCatName}
+              onChange={e => { setNewCatName(e.target.value); if (catError) setCatError(validateCat(e.target.value.trim())); }}
+              placeholder="e.g. Masala, Oils, Rice, Pulses, Biscuits"
+              onPressEnter={handleAddCategory} size="large"
+              style={{ borderRadius: 10 }} maxLength={100}
+              status={catError ? 'error' : ''}
+            />
+            {catError && <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>{catError}</div>}
+          </div>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAddCategory} loading={creating} size="large"
-            style={{ borderRadius: 10, background: '#0891b2', border: 'none', fontWeight: 700, width: isMobile ? '100%' : 'auto' }}>
+            style={{ borderRadius: 10, background: '#0891b2', border: 'none', fontWeight: 700, width: isMobile ? '100%' : 'auto', flexShrink: 0 }}>
             Add Category
           </Button>
         </div>
@@ -473,7 +518,7 @@ const CategoriesTab: React.FC = () => {
           <CategoryRow
             key={cat.id}
             category={cat}
-            subCategories={allSubCategories.filter((s: any) => s.parentName === cat.name)}
+            subCategories={allSubCategories.filter((s: any) => s.parentId === cat.id)}
             onDeleteCategory={handleDeleteCategory}
           />
         ))
@@ -486,6 +531,7 @@ const CategoriesTab: React.FC = () => {
 
 const PaymentMethodsTab: React.FC = () => {
   const [newName, setNewName] = useState('');
+  const [nameError, setNameError] = useState('');
   const [selectedMode, setSelectedMode] = useState<string>('CASH');
   const { data, isLoading } = useGetPaymentMethodsQuery();
   const [createMethod, { isLoading: creating }] = useCreatePaymentMethodMutation();
@@ -493,10 +539,20 @@ const PaymentMethodsTab: React.FC = () => {
   const items: any[] = data?.data || [];
   const isMobile = useIsMobile();
 
-  // Auto-detect mode when name changes, but only if user hasn't manually changed the dropdown
   const [modeManuallySet, setModeManuallySet] = useState(false);
+
+  const validateName = (name: string): string => {
+    if (!name) return 'Payment method name is required';
+    if (name.length < 2) return 'Must be at least 2 characters';
+    if (!hasLetter(name)) return 'Name must contain letters — it cannot be only numbers';
+    if (!hasOnlyAllowedChars(name)) return 'Special characters like @, #, $, !, % are not allowed';
+    if (items.some((i: any) => i.name.toLowerCase() === name.toLowerCase())) return `"${name}" already exists`;
+    return '';
+  };
+
   const handleNameChange = (val: string) => {
     setNewName(val);
+    if (nameError) setNameError(validateName(val.trim()));
     if (!modeManuallySet) {
       setSelectedMode(val.trim() ? detectMode(val.trim()) : 'CASH');
     }
@@ -508,10 +564,9 @@ const PaymentMethodsTab: React.FC = () => {
 
   const handleAdd = async () => {
     const name = newName.trim();
-    if (!name) { message.warning('Please enter a payment method name (e.g. Cash, GPay, Cheque)'); return; }
-    if (name.length < 2) { message.warning('Payment method name must be at least 2 characters'); return; }
-    const exists = items.some((i: any) => i.name.toLowerCase() === name.toLowerCase());
-    if (exists) { message.error(`"${name}" already exists. Use a different name.`); return; }
+    const err = validateName(name);
+    if (err) { setNameError(err); return; }
+    setNameError('');
     try {
       await createMethod({ name, mode: selectedMode, sortOrder: items.length }).unwrap();
       setNewName('');
@@ -521,9 +576,9 @@ const PaymentMethodsTab: React.FC = () => {
     } catch (err: any) {
       const errMsg = err?.data?.message;
       if (errMsg?.toLowerCase().includes('duplicate') || errMsg?.toLowerCase().includes('exists')) {
-        message.error(`"${name}" already exists. Please use a different name.`);
+        setNameError(`"${name}" already exists`);
       } else {
-        message.error(errMsg || 'Failed to add payment method. Please try again.');
+        setNameError(errMsg || 'Failed to add payment method. Please try again.');
       }
     }
   };
@@ -542,7 +597,9 @@ const PaymentMethodsTab: React.FC = () => {
             placeholder="e.g. Cash, GPay, PhonePe, Cheque, Credit"
             onPressEnter={handleAdd} size="large"
             style={{ borderRadius: 10 }} maxLength={100}
+            status={nameError ? 'error' : ''}
           />
+          {nameError && <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>{nameError}</div>}
           <div style={{ display: 'flex', gap: 10 }}>
             <Select
               value={selectedMode}
@@ -629,33 +686,48 @@ const PaymentMethodsTab: React.FC = () => {
 const MastersPage: React.FC = () => {
   const isMobile = useIsMobile();
 
+  const { data: brandData }       = useGetMastersQuery('BRAND');
+  const { data: categoryData }    = useGetMastersQuery('CATEGORY');
+  const { data: subCategoryData } = useGetMastersQuery('SUB_CATEGORY');
+  const { data: unitData }        = useGetMastersQuery('UNIT');
+  const { data: taxRateData }     = useGetMastersQuery('TAX_RATE');
+
+  const brandCount       = brandData?.data?.length ?? 0;
+  const categoryCount    = categoryData?.data?.length ?? 0;
+  const subCategoryCount = subCategoryData?.data?.length ?? 0;
+  const unitCount        = unitData?.data?.length ?? 0;
+  const taxRateCount     = taxRateData?.data?.length ?? 0;
+
+  const countBadge = (n: number) =>
+    n > 0 ? <span style={{ marginLeft: 5, fontSize: 11, fontWeight: 700, color: '#64748b' }}>({n})</span> : null;
+
   const tabs = [
     {
       key: 'BRAND',
       label: isMobile
         ? <span title="Brands"><TagOutlined /></span>
-        : <span><TagOutlined style={{ marginRight: 6 }} />Brands</span>,
+        : <span><TagOutlined style={{ marginRight: 6 }} />Brands{countBadge(brandCount)}</span>,
       children: <FlatMasterTab masterType={SIMPLE_TYPES[0]} />,
     },
     {
       key: 'CATEGORY',
       label: isMobile
         ? <span title="Categories"><AppstoreOutlined /></span>
-        : <span><AppstoreOutlined style={{ marginRight: 6 }} />Categories</span>,
+        : <span><AppstoreOutlined style={{ marginRight: 6 }} />Categories{countBadge(categoryCount)}<span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 3 }}>{subCategoryCount > 0 ? `/ ${subCategoryCount} sub` : ''}</span></span>,
       children: <CategoriesTab />,
     },
     {
       key: 'UNIT',
       label: isMobile
         ? <span title="Units"><InboxOutlined /></span>
-        : <span><InboxOutlined style={{ marginRight: 6 }} />Units</span>,
+        : <span><InboxOutlined style={{ marginRight: 6 }} />Units{countBadge(unitCount)}</span>,
       children: <FlatMasterTab masterType={SIMPLE_TYPES[1]} />,
     },
     {
       key: 'TAX_RATE',
       label: isMobile
         ? <span title="GST Rates"><CalculatorOutlined /></span>
-        : <span><CalculatorOutlined style={{ marginRight: 6 }} />GST Rates</span>,
+        : <span><CalculatorOutlined style={{ marginRight: 6 }} />GST Rates{countBadge(taxRateCount)}</span>,
       children: <TaxRatesTab />,
     },
     {

@@ -28,6 +28,10 @@ public class CustomerDtos {
 
         @Size(max = 500) private String address;
 
+        @Size(max = 100) private String city;
+        @Size(max = 50)  private String state;
+        @Size(max = 10)  private String pinCode;
+
         @Pattern(regexp = "^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$",
                  message = "Invalid GSTIN format")
         private String gstin;
@@ -54,6 +58,9 @@ public class CustomerDtos {
         @Pattern(regexp = "^[6-9]\\d{9}$") private String altPhone;
         @Email private String email;
         @Size(max = 500) private String address;
+        @Size(max = 100) private String city;
+        @Size(max = 50)  private String state;
+        @Size(max = 10)  private String pinCode;
         private String gstin;
         private UUID routeId;
         private UUID routePlaceId;
@@ -75,6 +82,9 @@ public class CustomerDtos {
         private String altPhone;
         private String email;
         private String address;
+        private String city;
+        private String state;
+        private String pinCode;
         private String gstin;
         private RouteInfo route;
         private PlaceInfo routePlace;

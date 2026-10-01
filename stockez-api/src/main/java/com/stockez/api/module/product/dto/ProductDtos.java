@@ -19,18 +19,10 @@ public class ProductDtos {
         @Size(max = 50)
         private String hsnCode;
 
-        @Size(max = 100)
-        private String brand;
-
-        @Size(max = 100)
-        private String category;
-
-        @Size(max = 100)
-        private String subCategory;
-
-        @NotBlank(message = "Unit is required")
-        @Size(max = 20)
-        private String unit;
+        @NotNull(message = "Brand is required")       private UUID brandId;
+        @NotNull(message = "Category is required")    private UUID categoryId;
+        @NotNull(message = "Sub Category is required") private UUID subCategoryId;
+        @NotNull(message = "Unit is required")        private UUID unitId;
 
         @NotNull @DecimalMin("0.01")
         private BigDecimal mrp;
@@ -38,19 +30,17 @@ public class ProductDtos {
         @NotNull @DecimalMin("0.01")
         private BigDecimal purchaseRate;
 
-        /** Floor rate — salesperson cannot bill below this */
         @DecimalMin("0.01")
         private BigDecimal minSaleRate;
 
-        /** Ceiling rate — salesperson cannot bill above this */
         @DecimalMin("0.01")
         private BigDecimal maxSaleRate;
 
-        @DecimalMin("0") @DecimalMax("28")
+        @DecimalMin("0") @DecimalMax("100")
         private BigDecimal purchaseGstPercent;
 
         @NotNull
-        @DecimalMin("0") @DecimalMax("28")
+        @DecimalMin("0") @DecimalMax("100")
         private BigDecimal salesGstPercent;
 
         @Size(max = 1000)
@@ -70,17 +60,20 @@ public class ProductDtos {
     public static class UpdateProductRequest {
         @NotBlank @Size(max = 200)
         private String name;
-        @Size(max = 50)  private String hsnCode;
-        @Size(max = 100) private String brand;
-        @Size(max = 100) private String category;
-        @Size(max = 100) private String subCategory;
-        @NotBlank @Size(max = 20) private String unit;
+
+        @Size(max = 50) private String hsnCode;
+
+        @NotNull(message = "Brand is required")       private UUID brandId;
+        @NotNull(message = "Category is required")    private UUID categoryId;
+        @NotNull(message = "Sub Category is required") private UUID subCategoryId;
+        @NotNull(message = "Unit is required")        private UUID unitId;
+
         @NotNull @DecimalMin("0.01") private BigDecimal mrp;
         @NotNull @DecimalMin("0.01") private BigDecimal purchaseRate;
         @DecimalMin("0.01") private BigDecimal minSaleRate;
         @DecimalMin("0.01") private BigDecimal maxSaleRate;
-        @DecimalMin("0") @DecimalMax("28") private BigDecimal purchaseGstPercent;
-        @NotNull @DecimalMin("0") @DecimalMax("28") private BigDecimal salesGstPercent;
+        @DecimalMin("0") @DecimalMax("100") private BigDecimal purchaseGstPercent;
+        @NotNull @DecimalMin("0") @DecimalMax("100") private BigDecimal salesGstPercent;
         @Size(max = 1000) private String description;
         @Size(max = 500) private String imageUrl;
         @Min(0) private Integer stockQuantity;
@@ -94,16 +87,26 @@ public class ProductDtos {
         private UUID id;
         private String name;
         private String hsnCode;
+        // String names for display (reports, orders, PDF stay unchanged)
         private String brand;
         private String category;
         private String subCategory;
         private String unit;
+        // UUIDs for form pre-population on edit
+        private UUID brandId;
+        private UUID categoryId;
+        private UUID subCategoryId;
+        private UUID unitId;
         private BigDecimal mrp;
         private BigDecimal purchaseRate;
         private BigDecimal minSaleRate;
         private BigDecimal maxSaleRate;
+        private BigDecimal fifoMrp;
         private BigDecimal fifoMinSaleRate;
         private BigDecimal fifoMaxSaleRate;
+        private Integer fifoBatchAvailable;
+        private BigDecimal fifoPurchaseRate;
+        private BigDecimal fifoPurchaseGstPercent;
         private BigDecimal purchaseGstPercent;
         private BigDecimal salesGstPercent;
         private BigDecimal cgstPercent;

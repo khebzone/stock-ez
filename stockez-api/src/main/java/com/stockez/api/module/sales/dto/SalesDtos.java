@@ -3,6 +3,7 @@ package com.stockez.api.module.sales.dto;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -46,6 +47,7 @@ public class SalesDtos {
         private BigDecimal otherCollected;
         private BigDecimal totalCollected;
         private List<OrderSummary> orders;
+        private List<PaymentSummary> payments;
 
         @Data
         public static class OrderSummary {
@@ -57,6 +59,19 @@ public class SalesDtos {
             private BigDecimal paidAmount;
             private String status;
             private int itemCount;
+        }
+
+        @Data
+        public static class PaymentSummary {
+            private UUID paymentId;
+            private String orderNumber;
+            private String customerName;
+            private BigDecimal amount;
+            private String paymentMode;
+            private String paymentMethodName;
+            private String referenceNumber;
+            private boolean submitted;
+            private Instant collectedAt;
         }
     }
 }

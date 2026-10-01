@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,19 @@ public class SalesService {
     private final PaymentRepository paymentRepository;
 
     /**
+     * A sales person can end up with more than one allocation on the same day
+     * (e.g. their morning route was marked Complete and admin then assigned
+     * them a second route). Only a still-open allocation counts as "today's
+     * route" — if every allocation for the day is completed, this returns
+     * empty, which callers turn into the same "no allocation today" response
+     * as a day with zero allocations. That way a completed route disappears
+     * from the app exactly like a route that was never assigned.
+     */
+    private Optional<RouteAllocation> pickActiveAllocation(List<RouteAllocation> allocations) {
+        return allocations.stream().filter(a -> !a.isSalesCompleted()).findFirst();
+    }
+
+    /**
      * Get today's allocation for the calling sales person.
      * Returns route info + customers in visit order.
      */
@@ -40,12 +54,41 @@ public class SalesService {
         List<RouteAllocation> allocations = allocationRepository
                 .findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, salesPersonId, LocalDate.now());
 
-        if (allocations.isEmpty()) {
-            throw new ResourceNotFoundException("RouteAllocation",
-                    "No allocation found for sales person today");
-        }
+        RouteAllocation allocation = pickActiveAllocation(allocations)
+                .orElseThrow(() -> new ResourceNotFoundException("RouteAllocation",
+                        "No allocation found for sales person today"));
+        Route route = allocation.getRoute();
 
-        RouteAllocation allocation = allocations.get(0);
+        List<Customer> customers = customerRepository.findByTenantIdAndRouteIdAndActiveTrue(tenantId, route.getId())
+                .stream()
+                .sorted(Comparator.comparingInt(Customer::getVisitOrder))
+                .collect(Collectors.toList());
+
+        SalesDtos.MyAllocationResponse response = new SalesDtos.MyAllocationResponse();
+        response.setAllocationId(allocation.getId());
+        response.setRouteId(route.getId());
+        response.setRouteName(route.getName());
+        response.setAllocationDate(allocation.getAllocationDate());
+        response.setStatus(allocation.getStatus());
+        response.setCustomers(customers.stream().map(this::toCustomerSummary).collect(Collectors.toList()));
+
+        return response;
+    }
+
+    /**
+     * Get today's allocation for the calling delivery person.
+     * Mirrors getMyAllocation but keyed off the delivery-person side of the
+     * allocation, so a delivery-only user sees their own route + stop count.
+     */
+    public SalesDtos.MyAllocationResponse getMyDeliveryAllocation(UUID deliveryPersonId, UUID tenantId) {
+        List<RouteAllocation> allocations = allocationRepository
+                .findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, deliveryPersonId, LocalDate.now());
+
+        RouteAllocation allocation = allocations.stream()
+                .filter(a -> !a.isDeliveryCompleted())
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("RouteAllocation",
+                        "No allocation found for delivery person today"));
         Route route = allocation.getRoute();
 
         List<Customer> customers = customerRepository.findByTenantIdAndRouteIdAndActiveTrue(tenantId, route.getId())
@@ -71,12 +114,10 @@ public class SalesService {
         List<RouteAllocation> allocations = allocationRepository
                 .findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, salesPersonId, LocalDate.now());
 
-        if (allocations.isEmpty()) {
-            throw new ResourceNotFoundException("RouteAllocation",
-                    "No allocation found for sales person today");
-        }
-
-        Route route = allocations.get(0).getRoute();
+        RouteAllocation allocation = pickActiveAllocation(allocations)
+                .orElseThrow(() -> new ResourceNotFoundException("RouteAllocation",
+                        "No allocation found for sales person today"));
+        Route route = allocation.getRoute();
 
         return customerRepository.findByTenantIdAndRouteIdAndActiveTrue(tenantId, route.getId())
                 .stream()
@@ -88,7 +129,15 @@ public class SalesService {
     public SalesDtos.MyHistoryResponse getMyHistory(UUID salesPersonId, UUID tenantId, LocalDate date) {
         List<RouteAllocation> allocations = allocationRepository
                 .findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, salesPersonId, date);
-        String routeName = allocations.isEmpty() ? null : allocations.get(0).getRoute().getName();
+        // A sales person can work more than one route in a day (e.g. their first
+        // route was completed and admin allocated a second one) — show all of
+        // them, in the order they were assigned, not just an arbitrary one.
+        String routeName = allocations.stream()
+                .sorted(Comparator.comparing(RouteAllocation::getCreatedAt))
+                .map(a -> a.getRoute().getName())
+                .distinct()
+                .collect(Collectors.joining(", "));
+        if (routeName.isEmpty()) routeName = null;
 
         List<Order> orders = orderRepository.findByTenantIdAndSalesPersonIdAndOrderDate(tenantId, salesPersonId, date);
 
@@ -121,6 +170,19 @@ public class SalesService {
             s.setPaidAmount(o.getPaidAmount());
             s.setStatus(o.getStatus().name());
             s.setItemCount(o.getItems().size());
+            return s;
+        }).collect(Collectors.toList()));
+        res.setPayments(payments.stream().map(p -> {
+            SalesDtos.MyHistoryResponse.PaymentSummary s = new SalesDtos.MyHistoryResponse.PaymentSummary();
+            s.setPaymentId(p.getId());
+            s.setOrderNumber(p.getOrder() != null ? p.getOrder().getOrderNumber() : null);
+            s.setCustomerName(p.getCustomer() != null ? p.getCustomer().getBusinessName() : null);
+            s.setAmount(p.getAmount());
+            s.setPaymentMode(p.getPaymentMode() != null ? p.getPaymentMode().name() : null);
+            s.setPaymentMethodName(p.getPaymentMethodName());
+            s.setReferenceNumber(p.getReferenceNumber());
+            s.setSubmitted(p.isSubmitted());
+            s.setCollectedAt(p.getCreatedAt());
             return s;
         }).collect(Collectors.toList()));
         return res;

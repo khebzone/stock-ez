@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import PageHeader from '../../components/PageHeader';
+import { hasPermission } from '../../utils/permissions';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
 import {
   useGetExpenseCategoriesQuery, useCreateExpenseCategoryMutation,
@@ -183,14 +184,18 @@ const ExpensesPage: React.FC = () => {
       width: 110,
       render: (_: any, r: any) => (
         <Space>
-          <Tooltip title="Edit">
-            <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
-          </Tooltip>
-          <Popconfirm title="Delete this expense?" onConfirm={() => handleDelete(r.id)} okText="Yes" okButtonProps={{ danger: true }}>
-            <Tooltip title="Delete">
-              <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
+          {hasPermission('EXPENSES_CREATE') && (
+            <Tooltip title="Edit">
+              <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
             </Tooltip>
-          </Popconfirm>
+          )}
+          {hasPermission('EXPENSES_DELETE') && (
+            <Popconfirm title="Delete this expense?" onConfirm={() => handleDelete(r.id)} okText="Yes" okButtonProps={{ danger: true }}>
+              <Tooltip title="Delete">
+                <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
+              </Tooltip>
+            </Popconfirm>
+          )}
           <AuditHistoryButton entityType="EXPENSE" entityId={r.id} title={`Audit — ${r.categoryName}`} />
         </Space>
       ),
@@ -208,12 +213,16 @@ const ExpensesPage: React.FC = () => {
         countLabel="entries"
         action={
           <Space>
-            <Button icon={<AppstoreAddOutlined />} onClick={() => setCatModalOpen(true)}>
-              Manage Categories
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-              Add Expense
-            </Button>
+            {hasPermission('EXPENSES_CREATE') && (
+              <Button icon={<AppstoreAddOutlined />} onClick={() => setCatModalOpen(true)}>
+                Manage Categories
+              </Button>
+            )}
+            {hasPermission('EXPENSES_CREATE') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+                Add Expense
+              </Button>
+            )}
           </Space>
         }
       />
@@ -348,14 +357,18 @@ const ExpensesPage: React.FC = () => {
                 display: 'flex',
                 gap: 8,
               }}>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ flex: 1 }}>
-                  Edit
-                </Button>
+                {hasPermission('EXPENSES_CREATE') && (
+                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} style={{ flex: 1 }}>
+                    Edit
+                  </Button>
+                )}
+                {hasPermission('EXPENSES_DELETE') && (
                 <Popconfirm title="Delete this expense?" onConfirm={() => handleDelete(r.id)} okText="Yes" okButtonProps={{ danger: true }}>
                   <Button size="small" icon={<DeleteOutlined />} danger style={{ flex: 1 }}>
                     Delete
                   </Button>
                 </Popconfirm>
+                )}
                 <AuditHistoryButton entityType="EXPENSE" entityId={r.id} title={`Audit — ${r.categoryName}`} />
               </div>
             </div>

@@ -14,5 +14,5 @@ public interface IncentiveSlabRepository extends JpaRepository<IncentiveSlab, UU
 
     List<IncentiveSlab> findByTenantIdAndBrandOrderByFromPctAsc(UUID tenantId, String brand);
 
-    void deleteByTenantIdAndBrand(UUID tenantId, String brand);
+    void deleteByTenantIdAndBrandMasterId(UUID tenantId, UUID brandMasterId);
 }

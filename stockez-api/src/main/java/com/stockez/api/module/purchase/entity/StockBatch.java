@@ -51,6 +51,10 @@ public class StockBatch {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal purchaseRate;
 
+    @Column(nullable = false, precision = 5, scale = 2)
+    @Builder.Default
+    private BigDecimal purchaseGstPercent = BigDecimal.ZERO;
+
     private LocalDate mfgDate;
 
     private LocalDate expiryDate;

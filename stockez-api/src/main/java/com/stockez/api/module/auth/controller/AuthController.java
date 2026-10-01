@@ -19,10 +19,11 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    @Operation(summary = "Login with phone, password and tenant subdomain")
+    @Operation(summary = "Login with phone + password. Tenant users must send X-Tenant-Slug header (subdomain). Super admin omits it.")
     public ResponseEntity<ApiResponse<AuthDtos.AuthResponse>> login(
-            @Valid @RequestBody AuthDtos.LoginRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(authService.login(request), "Login successful"));
+            @Valid @RequestBody AuthDtos.LoginRequest request,
+            @RequestHeader(value = "X-Tenant-Slug", required = false) String tenantSlug) {
+        return ResponseEntity.ok(ApiResponse.success(authService.login(request, tenantSlug), "Login successful"));
     }
 
     @PostMapping("/refresh")

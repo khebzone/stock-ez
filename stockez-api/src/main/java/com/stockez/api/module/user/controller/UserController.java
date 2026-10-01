@@ -37,8 +37,8 @@ public class UserController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List all users [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('GATE_PASS_CREATE','GATE_PASS_VIEW')")
+    @Operation(summary = "List all users [ADMIN, or Gate Pass staff to populate person pickers]")
     public ResponseEntity<ApiResponse<Page<UserDtos.UserResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
@@ -83,6 +83,14 @@ public class UserController {
             @PathVariable UUID id, @RequestHeader("X-Tenant-Id") UUID tenantId) {
         userService.reactivateUser(id, tenantId);
         return ResponseEntity.ok(ApiResponse.success(null, "User reactivated"));
+    }
+
+    @GetMapping("/quota")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get user quota for tenant [ADMIN]")
+    public ResponseEntity<ApiResponse<UserDtos.UserQuotaResponse>> quota(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUserQuota(tenantId)));
     }
 
     @PostMapping("/change-password")

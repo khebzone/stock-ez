@@ -2,7 +2,7 @@ package com.stockez.api.module.role.entity;
 
 public enum Permission {
     // Sales Orders
-    ORDERS_VIEW, ORDERS_CREATE, ORDERS_EDIT, ORDERS_CANCEL, ORDERS_DELETE,
+    ORDERS_VIEW, ORDERS_CREATE, ORDERS_EDIT, ORDERS_CANCEL,
     // Delivery
     DELIVERY_VIEW, DELIVERY_UPDATE,
     // Invoice Approval
@@ -25,6 +25,8 @@ public enum Permission {
     PURCHASES_VIEW, PURCHASES_CREATE, PURCHASES_EDIT,
     // Stock
     STOCK_VIEW,
+    // Stock Adjustment
+    STOCK_ADJUSTMENT_VIEW, STOCK_ADJUSTMENT_CREATE,
     // Goods Return
     RETURNS_VIEW, RETURNS_CREATE, RETURNS_APPROVE,
     // Gate Pass
@@ -41,8 +43,20 @@ public enum Permission {
     FIELD_MONITOR_VIEW,
     // Vehicles
     VEHICLES_VIEW, VEHICLES_CREATE, VEHICLES_EDIT,
-    // Reports
+    // Reports (granular)
     REPORTS_VIEW, REPORTS_EXPORT,
+    REPORTS_AGING_VIEW, REPORTS_SALES_VIEW, REPORTS_LEDGER_VIEW, REPORTS_DEADSTOCK_VIEW,
+    // Closing Stock
+    CLOSING_STOCK_VIEW,
+    // Finance screens
+    BANK_CLEARANCE_VIEW, BANK_CLEARANCE_UPDATE,
+    CUSTOMER_OUTSTANDING_VIEW,
+    // Opening Balance (import corrections)
+    OPENING_BALANCE_DELETE,
+    // Product Masters
+    MASTERS_MANAGE,
+    // Counter Sale
+    COUNTER_SALE_VIEW,
     // Import
     IMPORT_VIEW, IMPORT_EXECUTE
 }

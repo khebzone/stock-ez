@@ -18,6 +18,7 @@ import {
 import { useGetBatchesByProductQuery } from '../../store/api/purchaseApi';
 import { useGetMastersQuery } from '../../store/api/productMasterApi';
 import PageHeader from '../../components/PageHeader';
+import { hasPermission } from '../../utils/permissions';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
 import { applyApiErrorToForm } from '../../utils/formError';
 
@@ -144,10 +145,12 @@ const ProductCard: React.FC<{
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
         <Button size="small" icon={<HddOutlined />} onClick={() => onViewBatches(p.id)}>Batches</Button>
-        <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(p)}>Edit</Button>
-        <Popconfirm title="Remove this product?" onConfirm={() => onDelete(p.id)} okText="Remove" okButtonProps={{ danger: true }}>
-          <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
-        </Popconfirm>
+        {hasPermission('PRODUCTS_EDIT') && <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(p)}>Edit</Button>}
+        {hasPermission('PRODUCTS_DELETE') && (
+          <Popconfirm title="Remove this product?" onConfirm={() => onDelete(p.id)} okText="Remove" okButtonProps={{ danger: true }}>
+            <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+          </Popconfirm>
+        )}
       </div>
     </div>
   );
@@ -159,8 +162,10 @@ const ProductsPage: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [brandFilter, setBrandFilter] = useState<string | undefined>();
+  const [currentPage, setCurrentPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
@@ -169,7 +174,15 @@ const ProductsPage: React.FC = () => {
   const [batchProductId, setBatchProductId]     = useState<string | null>(null);
   const [form] = Form.useForm();
 
-  const { data, isLoading } = useGetProductsQuery({ search, category: categoryFilter });
+  const PAGE_SIZE = 20;
+  const { data, isLoading } = useGetProductsQuery({ page: currentPage - 1, size: PAGE_SIZE, search: debouncedSearch, categoryId: categoryFilter, brandId: brandFilter });
+
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  React.useEffect(() => { setCurrentPage(1); }, [debouncedSearch, categoryFilter, brandFilter]);
   const { data: batchData, isLoading: batchLoading } = useGetBatchesByProductQuery(batchProductId!, { skip: !batchProductId });
   const { data: brandsData } = useGetMastersQuery('BRAND');
   const { data: categoriesData } = useGetMastersQuery('CATEGORY');
@@ -190,8 +203,9 @@ const ProductsPage: React.FC = () => {
   const units = unitsData?.data || [];
   const taxRates = taxRatesData?.data || [];
 
-  let products = data?.data?.content || data?.data || [];
-  if (brandFilter) products = products.filter((p: any) => p.brand === brandFilter);
+  const pagedData = data?.data;
+  let products = pagedData?.content || (Array.isArray(pagedData) ? pagedData : []);
+  const totalProducts: number = pagedData?.totalElements ?? products.length;
 
   const checkDuplicate = (name: string) => {
     if (!name || name.trim().length < 2) { setDuplicateWarning(null); return; }
@@ -224,6 +238,10 @@ const ProductsPage: React.FC = () => {
     setDuplicateWarning(null);
     form.setFieldsValue({
       ...p,
+      brandId: p.brandId,
+      categoryId: p.categoryId,
+      subCategoryId: p.subCategoryId,
+      unitId: p.unitId,
       purchaseGstPercent: Number(p.purchaseGstPercent || 0),
       salesGstPercent: Number(p.salesGstPercent),
       mfgDate: p.mfgDate ? dayjs(p.mfgDate) : undefined,
@@ -378,10 +396,12 @@ const ProductsPage: React.FC = () => {
           <Tooltip title="View Batches">
             <Button icon={<HddOutlined />} size="small" type="text" onClick={() => setBatchProductId(r.id)} />
           </Tooltip>
-          <Button icon={<EditOutlined />} size="small" type="text" onClick={() => openEdit(r)} />
-          <Popconfirm title="Remove this product?" onConfirm={() => handleDelete(r.id)} okText="Remove" okButtonProps={{ danger: true }}>
-            <Button icon={<DeleteOutlined />} size="small" type="text" danger />
-          </Popconfirm>
+          {hasPermission('PRODUCTS_EDIT') && <Button icon={<EditOutlined />} size="small" type="text" onClick={() => openEdit(r)} />}
+          {hasPermission('PRODUCTS_DELETE') && (
+            <Popconfirm title="Remove this product?" onConfirm={() => handleDelete(r.id)} okText="Remove" okButtonProps={{ danger: true }}>
+              <Button icon={<DeleteOutlined />} size="small" type="text" danger />
+            </Popconfirm>
+          )}
           <AuditHistoryButton entityType="PRODUCT" entityId={r.id} title={`Audit — ${r.name}`} />
         </Space>
       ),
@@ -395,12 +415,14 @@ const ProductsPage: React.FC = () => {
       <PageHeader
         title="Products"
         subtitle="Manage your product catalogue"
-        count={products.length}
+        count={totalProducts}
         countLabel="products"
         action={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} size="middle">
-            Add Product
-          </Button>
+          hasPermission('PRODUCTS_CREATE') ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} size="middle">
+              Add Product
+            </Button>
+          ) : null
         }
       />
 
@@ -416,14 +438,20 @@ const ProductsPage: React.FC = () => {
             />
           </Col>
           <Col xs={12} md={6} lg={7}>
-            <Select placeholder="All categories" style={{ width: '100%' }} allowClear value={categoryFilter} onChange={setCategoryFilter}>
-              {categories.map((c: any) => <Option key={c.id} value={c.name}>{c.name}</Option>)}
-            </Select>
+            <Select
+              placeholder="All categories" style={{ width: '100%' }} allowClear value={categoryFilter} onChange={setCategoryFilter}
+              showSearch
+              filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
+            />
           </Col>
           <Col xs={12} md={6} lg={7}>
-            <Select placeholder="All brands" style={{ width: '100%' }} allowClear value={brandFilter} onChange={setBrandFilter}>
-              {brands.map((b: any) => <Option key={b.id} value={b.name}>{b.name}</Option>)}
-            </Select>
+            <Select
+              placeholder="All brands" style={{ width: '100%' }} allowClear value={brandFilter} onChange={setBrandFilter}
+              showSearch
+              filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              options={brands.map((b: any) => ({ value: b.id, label: b.name }))}
+            />
           </Col>
         </Row>
       </Card>
@@ -455,9 +483,16 @@ const ProductsPage: React.FC = () => {
             dataSource={products}
             rowKey="id"
             loading={isLoading}
-            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t: number) => `${t} products` }}
+            pagination={{
+              current: currentPage,
+              pageSize: PAGE_SIZE,
+              total: totalProducts,
+              onChange: (page) => setCurrentPage(page),
+              showSizeChanger: false,
+              showTotal: (t: number) => `${t} products`,
+            }}
             size="large"
-            scroll={{ x: 1400 }}
+            scroll={{ x: 1400, y: 550 }}
             rowClassName={() => 'product-row'}
             style={{ fontSize: 14 }}
           />
@@ -561,43 +596,44 @@ const ProductsPage: React.FC = () => {
             </Row>
             <Row gutter={16}>
               <Col xs={24} sm={8}>
-                <Form.Item name="brand" label="Brand" rules={[{ required: true, message: 'Required' }]}>
+                <Form.Item name="brandId" label="Brand" rules={[{ required: true, message: 'Required' }]}>
                   <Select placeholder="Select brand" size="large" showSearch>
-                    {brands.map((b: any) => <Option key={b.id} value={b.name}>{b.name}</Option>)}
+                    {brands.map((b: any) => <Option key={b.id} value={b.id}>{b.name}</Option>)}
                   </Select>
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="category" label="Category" rules={[{ required: true, message: 'Required' }]}>
+                <Form.Item name="categoryId" label="Category" rules={[{ required: true, message: 'Required' }]}>
                   <Select
                     placeholder="Select category" size="large" showSearch
                     onChange={(val: string) => {
-                      setSelectedCategory(val);
-                      form.setFieldValue('subCategory', undefined);
+                      const cat = categories.find((c: any) => c.id === val);
+                      setSelectedCategory(cat?.name || undefined);
+                      form.setFieldValue('subCategoryId', undefined);
                     }}
                   >
-                    {categories.map((c: any) => <Option key={c.id} value={c.name}>{c.name}</Option>)}
+                    {categories.map((c: any) => <Option key={c.id} value={c.id}>{c.name}</Option>)}
                   </Select>
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="subCategory" label="Sub Category" rules={[{ required: true, message: 'Required' }]}>
+                <Form.Item name="subCategoryId" label="Sub Category" rules={[{ required: true, message: 'Required' }]}>
                   <Select
                     placeholder={selectedCategory ? 'Select sub-category' : 'Select category first'}
                     size="large" showSearch allowClear
                     disabled={!selectedCategory}
                     notFoundContent={selectedCategory ? 'No sub-categories for this category' : 'Select a category first'}
                   >
-                    {subCategories.map((s: any) => <Option key={s.id} value={s.name}>{s.name}</Option>)}
+                    {subCategories.map((s: any) => <Option key={s.id} value={s.id}>{s.name}</Option>)}
                   </Select>
                 </Form.Item>
               </Col>
             </Row>
             <Row gutter={16}>
               <Col xs={24} sm={8}>
-                <Form.Item name="unit" label="Unit" rules={[{ required: true, message: 'Required' }]}>
+                <Form.Item name="unitId" label="Unit" rules={[{ required: true, message: 'Required' }]}>
                   <Select placeholder="Select unit" size="large">
-                    {units.map((u: any) => <Option key={u.id} value={u.name}>{u.name}</Option>)}
+                    {units.map((u: any) => <Option key={u.id} value={u.id}>{u.name}</Option>)}
                   </Select>
                 </Form.Item>
               </Col>

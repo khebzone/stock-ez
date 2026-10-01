@@ -24,9 +24,15 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
 
     boolean existsByTenantIdAndPhoneAndActiveTrue(UUID tenantId, String phone);
 
+    Optional<Supplier> findByTenantIdAndNameIgnoreCaseAndActiveTrue(UUID tenantId, String name);
+
+    Optional<Supplier> findByTenantIdAndPhoneAndActiveTrue(UUID tenantId, String phone);
+
+    List<Supplier> findByTenantIdAndActiveTrueOrderByNameAsc(UUID tenantId);
+
     boolean existsByTenantIdAndPhoneAndActiveTrueAndIdNot(UUID tenantId, String phone, UUID id);
 
     @Query("SELECT s FROM Supplier s WHERE s.tenant.id = :tenantId AND s.active = true " +
-           "AND (LOWER(s.name) LIKE LOWER(CONCAT('%', :q, '%')) OR s.phone LIKE CONCAT('%', :q, '%'))")
+           "AND (LOWER(s.name) LIKE :q OR s.phone LIKE :q)")
     Page<Supplier> search(@Param("tenantId") UUID tenantId, @Param("q") String q, Pageable pageable);
 }

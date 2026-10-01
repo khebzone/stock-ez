@@ -2,11 +2,16 @@ import { baseApi } from './baseApi';
 
 export const purchaseApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getPurchases: builder.query<any, { page?: number; size?: number; supplierName?: string; from?: string; to?: string }>({
+    getAllPurchases: builder.query<any, void>({
+      query: () => '/purchases/all',
+      providesTags: ['Purchase'],
+    }),
+    getPurchases: builder.query<any, { page?: number; size?: number; supplierName?: string; invoiceNumber?: string; from?: string; to?: string }>({
       query: (params = {}) => {
-        const { page = 0, size = 20, supplierName, from, to } = params;
+        const { page = 0, size = 20, supplierName, invoiceNumber, from, to } = params;
         const q = new URLSearchParams({ page: String(page), size: String(size) });
         if (supplierName) q.set('supplierName', supplierName);
+        if (invoiceNumber) q.set('invoiceNumber', invoiceNumber);
         if (from) q.set('from', from);
         if (to) q.set('to', to);
         return `/purchases?${q}`;
@@ -25,6 +30,10 @@ export const purchaseApi = baseApi.injectEndpoints({
       query: ({ id, body }) => ({ url: `/purchases/${id}`, method: 'PUT', body }),
       invalidatesTags: ['Purchase'],
     }),
+    voidPurchase: builder.mutation<any, string>({
+      query: (id) => ({ url: `/purchases/${id}/void`, method: 'POST' }),
+      invalidatesTags: ['Purchase', 'Product', 'SupplierPayment'],
+    }),
     getBatchesByProduct: builder.query<any, string>({
       query: (productId) => `/purchases/batches/product/${productId}`,
       providesTags: ['Purchase', 'Product'],
@@ -33,10 +42,18 @@ export const purchaseApi = baseApi.injectEndpoints({
       query: ({ days = 30 } = {}) => `/purchases/alerts/near-expiry?days=${days}`,
       providesTags: ['Purchase'],
     }),
-    getAllBatches: builder.query<any, { status?: string; page?: number; size?: number }>({
-      query: ({ status = 'active', page = 0, size = 50 } = {}) =>
-        `/purchases/batches?status=${status}&page=${page}&size=${size}`,
+    getAllBatches: builder.query<any, { status?: string; brand?: string; search?: string; page?: number; size?: number }>({
+      query: ({ status = 'active', brand, search, page = 0, size = 50 } = {}) => {
+        const q = new URLSearchParams({ status, page: String(page), size: String(size) });
+        if (brand) q.set('brand', brand);
+        if (search) q.set('search', search);
+        return `/purchases/batches?${q}`;
+      },
       providesTags: ['Purchase'],
+    }),
+    getUnpaidPurchaseEntries: builder.query<any, string>({
+      query: (supplierName) => `/supplier-payments/unpaid-entries?supplierName=${encodeURIComponent(supplierName)}`,
+      providesTags: ['SupplierPayment'],
     }),
     getSupplierPaymentSummaries: builder.query<any, void>({
       query: () => '/supplier-payments/summaries',
@@ -66,10 +83,13 @@ export const purchaseApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetUnpaidPurchaseEntriesQuery,
+  useGetAllPurchasesQuery,
   useGetPurchasesQuery,
   useGetPurchaseQuery,
   useCreatePurchaseMutation,
   useUpdatePurchaseMutation,
+  useVoidPurchaseMutation,
   useGetBatchesByProductQuery,
   useGetNearExpiryAlertsQuery,
   useGetAllBatchesQuery,

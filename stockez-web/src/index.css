@@ -183,6 +183,7 @@ input[type=number] { -moz-appearance: textfield; }
 .ant-select-dropdown { border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-lg) !important; }
 .ant-select-item { border-radius: var(--radius-sm) !important; font-size: 13px !important; }
 .ant-select-item-option-selected { font-weight: 600 !important; background: #ecfdf5 !important; }
+.ant-select-item-option-active:not(.ant-select-item-option-disabled) { background: #e0f2fe !important; }
 
 /* Tags */
 .ant-tag {
@@ -344,13 +345,18 @@ input[type=number] { -moz-appearance: textfield; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Invoice print ── */
+/* ── Invoice print ──
+   The invoice is portaled to a direct child of <body> (see InvoicePrint/PurchasePrint).
+   `visibility: hidden` on the rest of the app keeps its layout height (it doesn't
+   remove elements from flow), so the full-height SPA behind it was still forcing
+   extra blank pages. Use `display: none` on every OTHER direct child of <body>
+   instead — that removes them from flow entirely, so the printed page count is
+   driven only by the invoice's own height. */
 .print-invoice { display: none; }
 @media print {
-  @page { margin: 14mm; size: A4; }
-  body * { visibility: hidden !important; }
-  .print-invoice, .print-invoice * { visibility: visible !important; }
-  .print-invoice { display: block !important; position: fixed; top: 0; left: 0; width: 100%; background: white; color: black; z-index: 99999; font-family: Arial, sans-serif; }
+  @page { margin: 10mm; }
+  body > *:not(.print-invoice) { display: none !important; }
+  .print-invoice { display: block !important; position: static; width: 100%; background: white; color: black; font-family: Arial, sans-serif; padding: 0 !important; }
   .no-print { display: none !important; }
 }
 

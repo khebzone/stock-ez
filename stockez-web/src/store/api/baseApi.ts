@@ -20,7 +20,8 @@ const forceLogout = () => {
   localStorage.removeItem('tenantId');
   localStorage.removeItem('userId');
   localStorage.removeItem('user');
-  window.location.href = '/login';
+  const tenant = new URLSearchParams(window.location.search).get('tenant')?.split('/')[0].trim();
+  window.location.href = tenant ? `/login?tenant=${tenant}` : '/login';
 };
 
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
@@ -42,6 +43,12 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
         if (refreshData.data.refreshToken) {
           localStorage.setItem('refreshToken', refreshData.data.refreshToken);
         }
+        // /auth/refresh recomputes permissions fresh from the DB on every call — persist them
+        // so a role's permission changes take effect on the next token refresh instead of
+        // requiring the user to log out and back in.
+        if (refreshData.data.user) {
+          localStorage.setItem('user', JSON.stringify(refreshData.data.user));
+        }
         // Retry the original request with the new token
         result = await rawBaseQuery(args, api, extraOptions);
       } else {
@@ -58,8 +65,8 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
-  refetchOnFocus: true,
-  refetchOnReconnect: true,
-  tagTypes: ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive'],
+  refetchOnFocus: false,
+  refetchOnReconnect: false,
+  tagTypes: ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'PurchaseEntry', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive', 'StockAdjustment', 'Notification'],
   endpoints: () => ({}),
 });

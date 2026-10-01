@@ -68,11 +68,16 @@ public class PurchaseDtos {
     @Data
     public static class BatchItemUpdate {
         private UUID itemId;
+        private Integer quantity;
         private BigDecimal mrp;
         private LocalDate expiryDate;
         private LocalDate mfgDate;
         private BigDecimal minSaleRate;
         private BigDecimal maxSaleRate;
+        // Corrects a mistakenly-entered purchase price for this line (qty × rate, same convention
+        // as a new item's totalAmount). Only allowed while nothing from the batch has sold yet —
+        // see RATE_CHANGE_EXCEEDS_SOLD in PurchaseService.
+        private BigDecimal totalAmount;
     }
 
     @Data
@@ -93,6 +98,10 @@ public class PurchaseDtos {
         private String notes;
 
         private List<BatchItemUpdate> itemUpdates;
+        @Valid
+        private List<PurchaseItemRequest> newItems;
+        // Lines to remove entirely — only allowed while nothing from that line's batch has sold.
+        private List<UUID> removeItemIds;
     }
 
     // Responses
@@ -108,6 +117,8 @@ public class PurchaseDtos {
         private BigDecimal totalTaxable;
         private BigDecimal totalCgst;
         private BigDecimal totalSgst;
+        private BigDecimal paidAmount;
+        private String status;
         private String notes;
         private PersonInfo createdBy;
         private List<PurchaseItemResponse> items;
@@ -135,6 +146,7 @@ public class PurchaseDtos {
         private BigDecimal amount;
         private BigDecimal minSaleRate;
         private BigDecimal maxSaleRate;
+        private Integer quantityAvailable;
     }
 
     @Data

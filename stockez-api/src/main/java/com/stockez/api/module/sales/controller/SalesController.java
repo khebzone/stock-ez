@@ -34,6 +34,15 @@ public class SalesController {
         return ResponseEntity.ok(ApiResponse.success(salesService.getMyAllocation(salesPersonId, tenantId)));
     }
 
+    @GetMapping("/my-delivery-allocation")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DELIVERY_VIEW','DELIVERY_UPDATE')")
+    @Operation(summary = "Get today's route allocation for the calling delivery person")
+    public ResponseEntity<ApiResponse<SalesDtos.MyAllocationResponse>> getMyDeliveryAllocation(
+            @RequestHeader("X-User-Id") UUID deliveryPersonId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(salesService.getMyDeliveryAllocation(deliveryPersonId, tenantId)));
+    }
+
     @GetMapping("/my-customers")
     @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_VIEW','ORDERS_CREATE')")
     @Operation(summary = "Get today's customers for the calling sales person")

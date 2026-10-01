@@ -23,6 +23,9 @@ export const dashboardApi = baseApi.injectEndpoints({
     getBrandProfitReport: builder.query<any, { from: string; to: string }>({
       query: ({ from, to }) => `/reports/profit/brand?from=${from}&to=${to}`,
     }),
+    getShortageReport: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/reports/shortage?from=${from}&to=${to}`,
+    }),
   }),
 });
 
@@ -34,4 +37,5 @@ export const {
   useGetCollectionReportQuery,
   useGetProfitReportQuery,
   useGetBrandProfitReportQuery,
+  useGetShortageReportQuery,
 } = dashboardApi;

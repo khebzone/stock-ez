@@ -1,5 +1,6 @@
 package com.stockez.api.module.incentive.entity;
 
+import com.stockez.api.module.product.entity.ProductMaster;
 import com.stockez.api.module.tenant.entity.Tenant;
 import jakarta.persistence.*;
 import lombok.*;
@@ -13,7 +14,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "incentive_slabs",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "brand", "from_pct"}))
+    uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "brand_id", "from_pct"}))
 @EntityListeners(AuditingEntityListener.class)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class IncentiveSlab {
@@ -26,8 +27,12 @@ public class IncentiveSlab {
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "brand_id", nullable = false)
+    private ProductMaster brandMaster;
+
     @Column(nullable = false, length = 200)
-    private String brand;
+    private String brand; // snapshot of brandMaster.name
 
     @Column(name = "from_pct", nullable = false)
     private Integer fromPct;

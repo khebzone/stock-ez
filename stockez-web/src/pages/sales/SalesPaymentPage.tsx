@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Form, Input, InputNumber, Select, Modal, message, Divider, Spin, Grid, Skeleton,
+  Form, Input, InputNumber, Select, Modal, message, Divider, Spin, Grid, Skeleton, Button,
 } from 'antd';
 import {
   WalletOutlined, SendOutlined, InfoCircleOutlined,
-  ArrowLeftOutlined, EditOutlined, SearchOutlined,
+  ArrowLeftOutlined, EditOutlined, SearchOutlined, ShareAltOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -39,18 +39,53 @@ const SalesPaymentPage: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [collectModal, setCollectModal] = useState(false);
+  const [collectedReceipt, setCollectedReceipt] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [submitConfirm, setSubmitConfirm] = useState(false);
   const [search, setSearch] = useState('');
+  const [sharingReceiptId, setSharingReceiptId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
-  const { data: outstandingData, isLoading: outLoading, refetch: refetchOutstanding } = useGetOutstandingSummaryQuery();
-  const { data: dayData, isLoading: dayLoading, refetch: refetchDay } = useGetMyDayCollectionsQuery();
+  const shareReceipt = async (payment: any) => {
+    if (sharingReceiptId) return;
+    setSharingReceiptId(payment.id);
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${API_BASE}/api/public/payment-receipt/${payment.id}/pdf`);
+      if (!res.ok) {
+        let detail = `Error ${res.status}`;
+        try { const body = await res.json(); if (body?.message) detail = body.message; } catch { /* not JSON */ }
+        throw new Error(detail);
+      }
+      const blob = await res.blob();
+      const filename = `Receipt-${dayjs(payment.collectionDate).format('YYYY-MM-DD')}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ title: 'Payment Receipt', files: [file] });
+          return;
+        } catch (e: any) { if (e?.name === 'AbortError') return; }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      message.info('Receipt PDF downloaded');
+    } catch (err: any) {
+      message.error(err?.message || 'Could not generate receipt PDF');
+    } finally {
+      setSharingReceiptId(null);
+    }
+  };
+
+  const { data: outstandingData, isLoading: outLoading, refetch: refetchOutstanding } = useGetOutstandingSummaryQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: dayData, isLoading: dayLoading, refetch: refetchDay } = useGetMyDayCollectionsQuery(undefined, { refetchOnMountOrArgChange: true });
   const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = useGetCustomerOrdersQuery(
-    selectedCustomerId!, { skip: !selectedCustomerId }
+    selectedCustomerId!, { skip: !selectedCustomerId, refetchOnMountOrArgChange: true }
   );
   const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useGetCustomerPaymentHistoryQuery(
-    selectedCustomerId!, { skip: !selectedCustomerId }
+    selectedCustomerId!, { skip: !selectedCustomerId, refetchOnMountOrArgChange: true }
   );
   const { data: methodsData, isLoading: methodsLoading } = useGetPaymentMethodsQuery();
 
@@ -67,6 +102,12 @@ const SalesPaymentPage: React.FC = () => {
   const daySummary = dayData?.data;
   const selected = allCustomers.find(c => c.customerId === selectedCustomerId);
 
+  useEffect(() => {
+    if (!isMobile && !selectedCustomerId && allCustomers.length > 0) {
+      setSelectedCustomerId(allCustomers[0].customerId);
+    }
+  }, [isMobile, allCustomers.length]);
+
   const collectAmount = Form.useWatch('amount', form);
   const selectedMethodId = Form.useWatch('paymentMethodId', form);
   const selectedMethod = methods.find(m => m.id === selectedMethodId);
@@ -79,9 +120,15 @@ const SalesPaymentPage: React.FC = () => {
 
   const openCollect = (order: any) => {
     setSelectedOrder(order);
+    setCollectedReceipt(null);
     form.resetFields();
     form.setFieldsValue({ amount: order.balanceAmount });
     setCollectModal(true);
+  };
+
+  const closeCollectModal = () => {
+    setCollectModal(false);
+    setCollectedReceipt(null);
   };
 
   const handleCollect = async () => {
@@ -91,7 +138,7 @@ const SalesPaymentPage: React.FC = () => {
         message.error(`Amount cannot exceed balance of ${formatINR(selectedOrder?.balanceAmount)}`);
         return;
       }
-      await collectPayment({
+      const result = await collectPayment({
         orderId: selectedOrder.id,
         amount: values.amount,
         paymentMethodId: values.paymentMethodId,
@@ -99,7 +146,7 @@ const SalesPaymentPage: React.FC = () => {
         notes: values.notes || null,
       }).unwrap();
       message.success(isPartial ? 'Partial payment collected!' : 'Payment collected!');
-      setCollectModal(false);
+      setCollectedReceipt(result?.data || null);
       refetchDay();
       refetchOutstanding();
       refetchOrders();
@@ -237,15 +284,15 @@ const SalesPaymentPage: React.FC = () => {
       {historyLoading ? <Skeleton active paragraph={{ rows: 2 }} /> : (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 16px', minWidth: 450 }}>
-              {['Date', 'Amount', 'Method', 'Order', 'Status'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px 40px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 16px', minWidth: 490 }}>
+              {['Date', 'Amount', 'Method', 'Order', 'Status', ''].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
               ))}
             </div>
             {paymentHistory.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>No payments recorded</div>
             ) : paymentHistory.slice().reverse().map((p: any, i: number) => (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px', padding: '12px 16px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 450 }}>
+              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px 40px', padding: '12px 16px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 490 }}>
                 <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(p.collectionDate).format('DD MMM YYYY')}</div>
                 <div style={{ fontWeight: 800, color: '#059669', fontSize: 13 }}>{formatINR(p.amount)}</div>
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280', width: 'fit-content' }}>
@@ -255,6 +302,10 @@ const SalesPaymentPage: React.FC = () => {
                 <div style={{ fontSize: 10, color: p.cleared ? '#059669' : p.submitted ? '#0891b2' : '#d97706', fontWeight: 700 }}>
                   {p.cleared ? 'Cleared' : p.submitted ? 'Submitted' : 'Pending'}
                 </div>
+                <button onClick={() => shareReceipt(p)} disabled={sharingReceiptId === p.id}
+                  style={{ background: 'transparent', border: 'none', color: P, cursor: 'pointer', fontSize: 15, padding: 4 }}>
+                  <ShareAltOutlined />
+                </button>
               </div>
             ))}
           </div>
@@ -323,14 +374,18 @@ const SalesPaymentPage: React.FC = () => {
             <>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 6 }}>Payment History</div>
               {paymentHistory.slice().reverse().map((p: any) => (
-                <div key={p.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                  <div>
+                <div key={p.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 14, color: '#059669' }}>{formatINR(p.amount)}</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{dayjs(p.collectionDate).format('DD MMM YYYY')} · {p.order?.orderNumber}</div>
                   </div>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280', flexShrink: 0 }}>
                     {p.paymentMethodName || p.paymentMode}
                   </span>
+                  <button onClick={() => shareReceipt(p)} disabled={sharingReceiptId === p.id}
+                    style={{ background: PL, border: 'none', borderRadius: 10, color: P, cursor: 'pointer', fontSize: 15, padding: '8px 10px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    <ShareAltOutlined />
+                  </button>
                 </div>
               ))}
             </>
@@ -341,7 +396,7 @@ const SalesPaymentPage: React.FC = () => {
         <>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 0' }}>
-            <button onClick={() => navigate('/sales/dashboard')}
+            <button onClick={() => navigate('/field/dashboard')}
               style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, width: 44, height: 44, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 18, flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <ArrowLeftOutlined />
             </button>
@@ -423,7 +478,7 @@ const SalesPaymentPage: React.FC = () => {
           {isMobile ? (
             customerListPanel
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: screens.xl ? '420px 1fr' : '360px 1fr', gap: 16, alignItems: 'start' }}>
               {customerListPanel}
               {detailPanel}
             </div>
@@ -434,27 +489,56 @@ const SalesPaymentPage: React.FC = () => {
       {/* MODALS - Always in DOM */}
       <Modal
         title={
-          <div style={{ paddingBottom: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>Collect Payment</div>
-            {selectedOrder && (
-              <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500, marginTop: 4 }}>
-                Order #{selectedOrder.orderNumber} · {selected?.businessName}
-              </div>
-            )}
-          </div>
+          collectedReceipt ? null : (
+            <div style={{ paddingBottom: 8 }}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>Collect Payment</div>
+              {selectedOrder && (
+                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500, marginTop: 4 }}>
+                  Order #{selectedOrder.orderNumber} · {selected?.businessName}
+                </div>
+              )}
+            </div>
+          )
         }
         open={collectModal}
         onOk={handleCollect}
-        onCancel={() => setCollectModal(false)}
+        onCancel={closeCollectModal}
         confirmLoading={collecting}
         okText="Collect"
         okButtonProps={{ style: { background: P, borderColor: P, fontWeight: 800, height: 42, borderRadius: 10 } }}
         cancelButtonProps={{ style: { height: 42, borderRadius: 10, fontWeight: 600 } }}
+        footer={collectedReceipt ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Button block size="large" style={{ height: 42, borderRadius: 10, fontWeight: 600 }} onClick={closeCollectModal}>
+              Done
+            </Button>
+            <Button block type="primary" size="large" icon={<ShareAltOutlined />}
+              loading={sharingReceiptId === collectedReceipt.id}
+              style={{ background: P, borderColor: P, fontWeight: 800, height: 42, borderRadius: 10 }}
+              onClick={() => shareReceipt(collectedReceipt)}
+            >
+              Share Receipt
+            </Button>
+          </div>
+        ) : undefined}
         width={isMobile ? '92%' : 460}
         centered
         styles={{ body: { paddingTop: 12 } }}
       >
-        {selectedOrder && (
+        {collectedReceipt ? (
+          <div style={{ textAlign: 'center', padding: '20px 0 8px' }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: PL, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <CheckCircleOutlined style={{ color: P, fontSize: 32 }} />
+            </div>
+            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+              {collectedReceipt.amount < (selectedOrder?.balanceAmount ?? 0) ? 'Partial payment collected' : 'Payment collected'}
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{formatINR(collectedReceipt.amount)}</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
+              from {selected?.businessName || collectedReceipt.customerName}
+            </div>
+          </div>
+        ) : selectedOrder && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
               {[

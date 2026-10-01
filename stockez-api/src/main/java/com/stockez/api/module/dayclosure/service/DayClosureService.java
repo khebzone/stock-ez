@@ -8,6 +8,7 @@ import com.stockez.api.module.order.repository.PaymentRepository;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.repository.TenantRepository;
 import com.stockez.api.module.user.entity.User;
+import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.common.exception.BusinessException;
 import com.stockez.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class DayClosureService {
     private final DayClosureRepository dayClosureRepository;
     private final PaymentRepository paymentRepository;
     private final TenantRepository tenantRepository;
+    private final UserRepository userRepository;
 
     // ─── 1. Get Today's Counter ───────────────────────────────────────────────
 
@@ -77,7 +79,7 @@ public class DayClosureService {
 
     @Transactional
     public DayClosureDtos.DayClosureResponse closeDay(UUID tenantId, DayClosureDtos.CloseDayRequest req,
-                                                       String closedByName) {
+                                                       UUID closedById) {
         LocalDate today = LocalDate.now();
 
         // Guard: prevent double-closure
@@ -87,6 +89,8 @@ public class DayClosureService {
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        User closedByUser = userRepository.findByIdAndTenantId(closedById, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", closedById.toString()));
 
         // Recompute totals from live payment data
         List<Payment> payments = paymentRepository.findByTenantIdAndCollectionDate(tenantId, today);
@@ -117,7 +121,7 @@ public class DayClosureService {
                 .difference(difference)
                 .status(DayClosure.Status.CLOSED)
                 .notes(req.getNotes())
-                .closedBy(closedByName)
+                .closedByUser(closedByUser)
                 .closedAt(Instant.now())
                 .build();
 
@@ -215,7 +219,7 @@ public class DayClosureService {
                 .difference(c.getDifference())
                 .status(c.getStatus() != null ? c.getStatus().name() : null)
                 .notes(c.getNotes())
-                .closedBy(c.getClosedBy())
+                .closedBy(c.getClosedByUser() != null ? c.getClosedByUser().getFullName() : null)
                 .closedAt(c.getClosedAt())
                 .createdAt(c.getCreatedAt())
                 .build();

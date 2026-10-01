@@ -15,6 +15,14 @@ export const importApi = baseApi.injectEndpoints({
       query: (formData) => ({ url: '/import/suppliers', method: 'POST', body: formData }),
       invalidatesTags: ['Supplier'],
     }),
+    importCustomerBalances: builder.mutation<any, FormData>({
+      query: (formData) => ({ url: '/import/customer-balances', method: 'POST', body: formData }),
+      invalidatesTags: ['Order'],
+    }),
+    importSupplierBalances: builder.mutation<any, FormData>({
+      query: (formData) => ({ url: '/import/supplier-balances', method: 'POST', body: formData }),
+      invalidatesTags: ['PurchaseEntry'],
+    }),
   }),
 });
 
@@ -22,4 +30,6 @@ export const {
   useImportProductsMutation,
   useImportCustomersMutation,
   useImportSuppliersMutation,
+  useImportCustomerBalancesMutation,
+  useImportSupplierBalancesMutation,
 } = importApi;

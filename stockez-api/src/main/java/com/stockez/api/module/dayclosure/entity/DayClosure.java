@@ -1,6 +1,7 @@
 package com.stockez.api.module.dayclosure.entity;
 
 import com.stockez.api.module.tenant.entity.Tenant;
+import com.stockez.api.module.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -75,8 +76,9 @@ public class DayClosure {
     @Column(length = 500)
     private String notes;
 
-    @Column(length = 200)
-    private String closedBy;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "closed_by_id")
+    private User closedByUser;
 
     private Instant closedAt;
 

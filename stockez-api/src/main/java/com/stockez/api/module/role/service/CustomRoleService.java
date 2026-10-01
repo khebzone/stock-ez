@@ -34,6 +34,7 @@ public class CustomRoleService {
         CustomRole role = CustomRole.builder()
                 .tenant(tenant)
                 .name(request.getName())
+                .fieldStaff(request.isFieldStaff())
                 .permissions(request.getPermissions())
                 .build();
 
@@ -64,6 +65,7 @@ public class CustomRoleService {
         }
 
         role.setName(request.getName());
+        role.setFieldStaff(request.isFieldStaff());
         role.setPermissions(request.getPermissions());
         return toResponse(roleRepository.save(role), tenantId);
     }
@@ -93,6 +95,7 @@ public class CustomRoleService {
         CustomRoleDtos.RoleResponse res = new CustomRoleDtos.RoleResponse();
         res.setId(role.getId());
         res.setName(role.getName());
+        res.setFieldStaff(role.isFieldStaff());
         res.setPermissions(role.getPermissions());
         res.setUserCount(userRepository.countByCustomRoleIdAndTenantId(role.getId(), tenantId));
         res.setCreatedAt(role.getCreatedAt());
@@ -103,6 +106,7 @@ public class CustomRoleService {
         CustomRoleDtos.RoleSummary s = new CustomRoleDtos.RoleSummary();
         s.setId(role.getId());
         s.setName(role.getName());
+        s.setFieldStaff(role.isFieldStaff());
         s.setPermissions(role.getPermissions());
         return s;
     }

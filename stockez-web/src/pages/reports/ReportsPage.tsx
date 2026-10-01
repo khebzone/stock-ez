@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Row, Col, Card, DatePicker, Button, Table, Tabs, Space } from 'antd';
-import { DollarOutlined, ShoppingOutlined, ReloadOutlined, FileExcelOutlined, RiseOutlined, TagsOutlined } from '@ant-design/icons';
+import React, { useState, useMemo } from 'react';
+import { Row, Col, Card, DatePicker, Button, Table, Tabs, Space, Select } from 'antd';
+import { DollarOutlined, ShoppingOutlined, ReloadOutlined, FileExcelOutlined, RiseOutlined, TagsOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useGetSalesReportQuery, useGetCollectionReportQuery, useGetProfitReportQuery, useGetBrandProfitReportQuery } from '../../store/api/dashboardApi';
+import { noFutureDates } from '../../utils/date';
+import { useGetSalesReportQuery, useGetCollectionReportQuery, useGetProfitReportQuery, useGetBrandProfitReportQuery, useGetShortageReportQuery } from '../../store/api/dashboardApi';
 import PageHeader from '../../components/PageHeader';
 import SalesTrendChart from '../../components/charts/SalesTrendChart';
 import CollectionBarChart from '../../components/charts/CollectionBarChart';
@@ -46,7 +47,7 @@ const SalesTab: React.FC = () => {
       {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <Space>
-          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
+          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" disabledDate={noFutureDates} style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
         <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(breakdown, exportCols, `sales-report-${range[0].format('YYYY-MM-DD')}`)}
@@ -126,7 +127,7 @@ const CollectionsTab: React.FC = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <Space>
-          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
+          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" disabledDate={noFutureDates} style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
         <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(breakdown, exportCols, `collection-report-${range[0].format('YYYY-MM-DD')}`)}
@@ -208,7 +209,7 @@ const ProfitTab: React.FC = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <Space>
-          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
+          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" disabledDate={noFutureDates} style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
         <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(rows, exportCols, `profit-report-${range[0].format('YYYY-MM-DD')}`)}
@@ -303,7 +304,7 @@ const BrandProfitTab: React.FC = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <Space>
-          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" style={{ borderRadius: 8 }} />
+          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" disabledDate={noFutureDates} style={{ borderRadius: 8 }} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
         </Space>
         <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(rows, exportCols, `brand-profit-${range[0].format('YYYY-MM-DD')}`)}
@@ -371,6 +372,123 @@ const BrandProfitTab: React.FC = () => {
   );
 };
 
+/* ── Shortage / Loss Tab ── */
+const ShortageTab: React.FC = () => {
+  const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().startOf('month'), dayjs()]);
+
+  const { data, isLoading, refetch } = useGetShortageReportQuery({
+    from: range[0].format('YYYY-MM-DD'), to: range[1].format('YYYY-MM-DD'),
+  });
+  const report = data?.data;
+  const rows: any[] = report?.rows || [];
+  const byRoute: any[] = report?.byRoute || [];
+  const byPerson: any[] = report?.byPerson || [];
+
+  const sourceLabel = (v: string) => v === 'SALES_RETURN' ? 'Sales Return' : 'Undelivered Order';
+
+  const exportCols = [
+    { title: 'Date',        key: 'shortageDate',    dataIndex: 'shortageDate' },
+    { title: 'Source',      key: 'sourceType',      dataIndex: 'sourceType' },
+    { title: 'Reference',   key: 'referenceNumber', dataIndex: 'referenceNumber' },
+    { title: 'Product',     key: 'productName',     dataIndex: 'productName' },
+    { title: 'Batch',       key: 'batchNumber',     dataIndex: 'batchNumber' },
+    { title: 'Qty Short',   key: 'quantityShort',   dataIndex: 'quantityShort' },
+    { title: 'Unit Rate',   key: 'unitRate',        dataIndex: 'unitRate' },
+    { title: 'Loss Value',  key: 'lossValue',       dataIndex: 'lossValue' },
+    { title: 'Route',       key: 'routeName',       dataIndex: 'routeName' },
+    { title: 'Responsible', key: 'responsiblePersonName', dataIndex: 'responsiblePersonName' },
+    { title: 'Verified By', key: 'verifiedByName',  dataIndex: 'verifiedByName' },
+  ];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <Space>
+          <RangePicker value={range} onChange={(v) => v && setRange(v as any)} format="DD MMM YYYY" disabledDate={noFutureDates} style={{ borderRadius: 8 }} />
+          <Button icon={<ReloadOutlined />} onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
+        </Space>
+        <Button icon={<FileExcelOutlined />} onClick={() => exportToXLSX(rows, exportCols, `shortage-report-${range[0].format('YYYY-MM-DD')}`)}
+          style={{ borderRadius: 8 }} disabled={!rows.length}>Export Excel</Button>
+      </div>
+
+      {report && (
+        <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+          <Col xs={12} md={8}><MetricTile label="Occurrences" value={String(report.totalOccurrences || 0)} color="#dc2626" bg="#fef2f2" /></Col>
+          <Col xs={12} md={8}><MetricTile label="Units Short" value={String(report.totalQuantityShort || 0)} color="#dc2626" bg="#fef2f2" /></Col>
+          <Col xs={24} md={8}><MetricTile label="Loss Value" value={fmt(report.totalLossValue)} color="#dc2626" bg="#fef2f2" /></Col>
+        </Row>
+      )}
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+        <Col xs={24} md={12}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 8 }}>By Route</div>
+          <Table
+            size="small" dataSource={byRoute} rowKey="name" loading={isLoading} pagination={false}
+            locale={{ emptyText: <div style={{ padding: '16px 0', color: '#9ca3af' }}>No shortages in this range</div> }}
+            columns={[
+              { title: 'Route', dataIndex: 'name', key: 'name' },
+              { title: 'Occ.', dataIndex: 'occurrences', key: 'occ', width: 60, align: 'right' as const },
+              { title: 'Qty', dataIndex: 'quantityShort', key: 'qty', width: 70, align: 'right' as const },
+              { title: 'Loss', dataIndex: 'lossValue', key: 'loss', align: 'right' as const,
+                render: (v: number) => <strong style={{ color: '#dc2626' }}>{fmt(v)}</strong> },
+            ]}
+          />
+        </Col>
+        <Col xs={24} md={12}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 8 }}>By Person</div>
+          <Table
+            size="small" dataSource={byPerson} rowKey="name" loading={isLoading} pagination={false}
+            locale={{ emptyText: <div style={{ padding: '16px 0', color: '#9ca3af' }}>No shortages in this range</div> }}
+            columns={[
+              { title: 'Person', dataIndex: 'name', key: 'name' },
+              { title: 'Occ.', dataIndex: 'occurrences', key: 'occ', width: 60, align: 'right' as const },
+              { title: 'Qty', dataIndex: 'quantityShort', key: 'qty', width: 70, align: 'right' as const },
+              { title: 'Loss', dataIndex: 'lossValue', key: 'loss', align: 'right' as const,
+                render: (v: number) => <strong style={{ color: '#dc2626' }}>{fmt(v)}</strong> },
+            ]}
+          />
+        </Col>
+      </Row>
+
+      <Table
+        size="small"
+        dataSource={rows}
+        rowKey={(r: any, i: any) => `${r.referenceNumber}-${r.productName}-${i}`}
+        loading={isLoading}
+        pagination={{ pageSize: 20, showTotal: (t) => `${t} occurrences` }}
+        locale={{ emptyText: <div style={{ padding: '24px 0', color: '#9ca3af' }}>No shortages recorded in the selected range</div> }}
+        columns={[
+          { title: 'Date', dataIndex: 'shortageDate', key: 'date', render: (d: string) => dayjs(d).format('DD MMM YYYY'),
+            sorter: (a: any, b: any) => a.shortageDate.localeCompare(b.shortageDate) },
+          { title: 'Source', dataIndex: 'sourceType', key: 'source', render: (v: string) => sourceLabel(v) },
+          { title: 'Reference', dataIndex: 'referenceNumber', key: 'ref' },
+          { title: 'Product', dataIndex: 'productName', key: 'product',
+            render: (v: string, r: any) => <div>{v}{r.brand && <div style={{ fontSize: 11, color: '#94a3b8' }}>{r.brand}</div>}</div> },
+          { title: 'Batch', dataIndex: 'batchNumber', key: 'batch', render: (v: string) => v || '—' },
+          { title: 'Qty Short', dataIndex: 'quantityShort', key: 'qty', align: 'right' as const,
+            sorter: (a: any, b: any) => a.quantityShort - b.quantityShort },
+          { title: 'Loss Value', dataIndex: 'lossValue', key: 'loss', align: 'right' as const,
+            sorter: (a: any, b: any) => a.lossValue - b.lossValue,
+            render: (v: number) => <strong style={{ color: '#dc2626' }}>{fmt(v)}</strong> },
+          { title: 'Route', dataIndex: 'routeName', key: 'route' },
+          { title: 'Responsible', dataIndex: 'responsiblePersonName', key: 'person' },
+          { title: 'Verified By', dataIndex: 'verifiedByName', key: 'verifier' },
+        ]}
+        summary={() => rows.length > 0 ? (
+          <Table.Summary.Row style={{ background: '#f8fafc', fontWeight: 700 }}>
+            <Table.Summary.Cell index={0} colSpan={5}>Total</Table.Summary.Cell>
+            <Table.Summary.Cell index={5} align="right">{rows.reduce((s: number, r: any) => s + r.quantityShort, 0)}</Table.Summary.Cell>
+            <Table.Summary.Cell index={6} align="right">
+              <span style={{ color: '#dc2626' }}>{fmt(rows.reduce((s: number, r: any) => s + Number(r.lossValue), 0))}</span>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={7} colSpan={3} />
+          </Table.Summary.Row>
+        ) : null}
+      />
+    </div>
+  );
+};
+
 /* ── Page ── */
 const ReportsPage: React.FC = () => (
   <div>
@@ -384,6 +502,7 @@ const ReportsPage: React.FC = () => (
           { key: 'collections',  label: <Space><DollarOutlined />Collections</Space>,        children: <CollectionsTab /> },
           { key: 'profit',       label: <Space><RiseOutlined />Profit by Route</Space>,      children: <ProfitTab /> },
           { key: 'brandprofit',  label: <Space><TagsOutlined />Brand Profit</Space>,         children: <BrandProfitTab /> },
+          { key: 'shortage',     label: <Space><WarningOutlined />Shortage / Loss</Space>,   children: <ShortageTab /> },
         ]}
       />
     </Card>

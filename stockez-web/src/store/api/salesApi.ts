@@ -6,6 +6,10 @@ export const salesApi = baseApi.injectEndpoints({
       query: () => '/sales/my-allocation',
       providesTags: ['Route'],
     }),
+    getMyDeliveryAllocation: builder.query<any, void>({
+      query: () => '/sales/my-delivery-allocation',
+      providesTags: ['Route'],
+    }),
     getMyCustomers: builder.query<any, void>({
       query: () => '/sales/my-customers',
       providesTags: ['Customer'],
@@ -17,4 +21,4 @@ export const salesApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetMyAllocationQuery, useGetMyCustomersQuery, useGetMyHistoryQuery } = salesApi;
+export const { useGetMyAllocationQuery, useGetMyDeliveryAllocationQuery, useGetMyCustomersQuery, useGetMyHistoryQuery } = salesApi;

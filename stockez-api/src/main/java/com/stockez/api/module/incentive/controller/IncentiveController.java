@@ -27,7 +27,7 @@ public class IncentiveController {
     @GetMapping("/brands")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
     @Operation(summary = "Get distinct product brands for the tenant")
-    public ResponseEntity<ApiResponse<List<String>>> getBrands(
+    public ResponseEntity<ApiResponse<List<IncentiveDtos.BrandOption>>> getBrands(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(incentiveService.getDistinctBrands(tenantId)));
     }

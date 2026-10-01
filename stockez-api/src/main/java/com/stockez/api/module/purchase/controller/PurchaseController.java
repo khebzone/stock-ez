@@ -45,6 +45,14 @@ public class PurchaseController {
                 .body(ApiResponse.success(purchaseService.createPurchaseEntry(request, userId, tenantId), "Purchase entry created"));
     }
 
+    @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
+    @Operation(summary = "Get all purchase entries without pagination")
+    public ResponseEntity<ApiResponse<List<PurchaseDtos.PurchaseEntryResponse>>> getAll(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.getAllPurchases(tenantId)));
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
     @Operation(summary = "List purchase entries with optional filters")
@@ -53,10 +61,11 @@ public class PurchaseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) String invoiceNumber,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Page<PurchaseDtos.PurchaseEntryResponse> result = purchaseService.listPurchases(
-                tenantId, supplierName, from, to, PageRequest.of(page, size));
+                tenantId, supplierName, invoiceNumber, from, to, PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.success(toPagedResponse(result)));
     }
 
@@ -80,6 +89,17 @@ public class PurchaseController {
         return ResponseEntity.ok(ApiResponse.success(purchaseService.updatePurchaseEntry(id, tenantId, userId, req), "Purchase updated"));
     }
 
+    @PostMapping("/{id}/void")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_EDIT')")
+    @Operation(summary = "Void a purchase entered by mistake — only when nothing on it has sold or been paid")
+    public ResponseEntity<ApiResponse<PurchaseDtos.PurchaseEntryResponse>> voidEntry(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.voidPurchaseEntry(id, tenantId, userId), "Purchase entry voided"));
+    }
+
     @GetMapping("/{id}/audit")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_VIEW')")
     @Operation(summary = "Get audit history for a purchase entry")
@@ -94,9 +114,11 @@ public class PurchaseController {
     public ResponseEntity<ApiResponse<PagedResponse<PurchaseDtos.StockBatchResponse>>> getAllBatches(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "active") String status,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        var result = purchaseService.getAllBatches(tenantId, status, PageRequest.of(page, size));
+        var result = purchaseService.getAllBatches(tenantId, status, brand, search, PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.success(toPagedResponse(result)));
     }
 

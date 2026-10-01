@@ -5,6 +5,7 @@ import {
 import {
   CalculatorOutlined, CheckCircleOutlined, TrophyOutlined, InfoCircleOutlined,
 } from '@ant-design/icons';
+import { hasPermission } from '../../utils/permissions';
 import dayjs from 'dayjs';
 import {
   useGetCreditsQuery,
@@ -137,7 +138,7 @@ const IncentiveCreditsPage: React.FC = () => {
       key: 'actions',
       width: 120,
       render: (_: any, r: any) =>
-        r.status === 'PENDING' && Number(r.incentiveAmount) > 0 ? (
+        r.status === 'PENDING' && Number(r.incentiveAmount) > 0 && hasPermission('INCENTIVES_MANAGE') ? (
           <Popconfirm
             title={`Mark ₹${Number(r.incentiveAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })} as credited to ${r.salesPersonName}?`}
             onConfirm={() => handleMarkCredited(r.id, r.salesPersonName, r.brand)}

@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -104,11 +106,14 @@ public class TargetService {
 
     private TargetDtos.TargetResponse toResponse(SalesTarget target) {
         // Compute achievement by fetching orders for this salesperson in the target month/year
+        YearMonth ym = YearMonth.of(target.getYear(), target.getMonth());
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
         List<Order> orders = orderRepository.findByTenantAndSalesPersonAndMonthYear(
                 target.getTenant().getId(),
                 target.getUser().getId(),
-                target.getMonth(),
-                target.getYear(),
+                from,
+                to,
                 Order.OrderStatus.CANCELLED);
 
         BigDecimal achievedAmount = orders.stream()

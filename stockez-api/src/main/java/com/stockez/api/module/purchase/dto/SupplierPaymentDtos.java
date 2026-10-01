@@ -55,8 +55,23 @@ public class SupplierPaymentDtos {
         private String supplierName;
         private BigDecimal totalPurchased;
         private BigDecimal totalPaid;
+        private BigDecimal returnCredit; // open purchase-return credit knocked off the payable
         private BigDecimal outstanding;
         private LocalDate lastPurchaseDate;
         private LocalDate lastPaymentDate;
+    }
+
+    @Data
+    @Builder
+    public static class UnpaidPurchaseEntry {
+        private UUID id;
+        private String entryNumber;
+        private LocalDate purchaseDate;
+        private BigDecimal totalAmount;
+        private BigDecimal paidAmount;
+        private BigDecimal returnCredit; // open return credit filed against this bill
+        private BigDecimal balanceAmount;
+        private String invoiceNumber;
+        private boolean openingBalance;
     }
 }

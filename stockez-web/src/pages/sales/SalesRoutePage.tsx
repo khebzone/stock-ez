@@ -8,8 +8,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetMyOrdersQuery } from '../../store/api/orderApi';
-import { useCreateCustomerMutation } from '../../store/api/customerApi';
+import { useCreateCustomerMutation, useUpdateCustomerMutation } from '../../store/api/customerApi';
 import { useGetRoutePlanQuery } from '../../store/api/routeApi';
+import { hasPermission } from '../../utils/permissions';
 
 const { useBreakpoint } = Grid;
 
@@ -26,10 +27,10 @@ const SalesRoutePage: React.FC = () => {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const isSmall  = !screens.sm;
-  const { data: allocData, isLoading, refetch } = useGetMyAllocationQuery();
-  const { data: ordersData } = useGetMyOrdersQuery();
+  const { data: allocData, isLoading, refetch } = useGetMyAllocationQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: ordersData } = useGetMyOrdersQuery(undefined, { refetchOnMountOrArgChange: true });
   const { data: planData } = useGetRoutePlanQuery(
-    allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId }
+    allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId, refetchOnMountOrArgChange: true }
   );
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
@@ -37,7 +38,10 @@ const SalesRoutePage: React.FC = () => {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [newCustomerForm] = Form.useForm();
+  const [editCustomerForm] = Form.useForm();
+  const [editCustomerOpen, setEditCustomerOpen] = useState(false);
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
+  const [updateCustomer, { isLoading: updatingCustomer }] = useUpdateCustomerMutation();
 
   const allocation = allocData?.data;
   const customers: any[] = allocation?.customers || [];
@@ -100,6 +104,30 @@ const SalesRoutePage: React.FC = () => {
     } catch (err: any) {
       if (err?.errorFields) return;
       message.error(err?.data?.message || 'Failed to add customer');
+    }
+  };
+
+  const openEditCustomer = () => {
+    editCustomerForm.setFieldsValue({
+      businessName: selectedCustomer?.businessName,
+      ownerName:    selectedCustomer?.ownerName,
+      phone:        selectedCustomer?.phone,
+      altPhone:     selectedCustomer?.altPhone,
+      address:      selectedCustomer?.address,
+    });
+    setEditCustomerOpen(true);
+  };
+
+  const handleUpdateCustomer = async () => {
+    try {
+      const values = await editCustomerForm.validateFields();
+      await updateCustomer({ id: selectedCustomer.id, data: { ...selectedCustomer, ...values } }).unwrap();
+      message.success('Customer updated');
+      setEditCustomerOpen(false);
+      refetch();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.data?.message || 'Failed to update customer');
     }
   };
 
@@ -432,6 +460,9 @@ const SalesRoutePage: React.FC = () => {
         }
         footer={
           <div style={{ display: 'flex', flexDirection: isSmall ? 'column' : 'row', gap: 8, justifyContent: 'flex-end' }}>
+            {hasPermission('CUSTOMERS_UPDATE') && (
+              <Button size={isSmall ? 'large' : 'middle'} block={isSmall} onClick={openEditCustomer}>Edit Customer</Button>
+            )}
             {!selectedOrder && (
               <Button type="primary" icon={<PlusOutlined />}
                 size={isSmall ? 'large' : 'middle'}
@@ -467,8 +498,8 @@ const SalesRoutePage: React.FC = () => {
               const balance = Number(selectedOrder.balanceAmount || 0);
               const sc = {
                 SUBMITTED:        '#f59e0b', PENDING_APPROVAL: '#f59e0b',
-                APPROVED:         P,         PREPARING:        '#f97316',
-                PREPARED:         '#06b6d4', DISPATCHED:       '#8b5cf6',
+                APPROVED:         P,         PACKING:          '#f97316',
+                PACKED:           '#06b6d4', DISPATCHED:       '#8b5cf6',
                 DELIVERED:        P,         CANCELLED:        '#ef4444',
               }[selectedOrder.status as string] || '#6b7280';
               return (
@@ -533,6 +564,37 @@ const SalesRoutePage: React.FC = () => {
         )}
       </Modal>
 
+      {/* Edit Customer Modal */}
+      <Modal
+        open={editCustomerOpen}
+        onCancel={() => setEditCustomerOpen(false)}
+        title={<span style={{ fontWeight: 700 }}>Edit Customer</span>}
+        onOk={handleUpdateCustomer}
+        confirmLoading={updatingCustomer}
+        okText="Save Changes"
+        okButtonProps={{ style: { background: P, borderColor: P } }}
+        width={isMobile ? '92%' : 480}
+        centered
+      >
+        <Form form={editCustomerForm} layout="vertical" requiredMark={false}>
+          <Form.Item name="businessName" label="Business / Shop Name *" rules={[{ required: true, message: 'Required' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="ownerName" label="Owner Name *" rules={[{ required: true, message: 'Required' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
+            <Input maxLength={10} />
+          </Form.Item>
+          <Form.Item name="altPhone" label="Alt Mobile" rules={[{ pattern: /^\d{10}$/, message: 'Enter a valid 10-digit number' }]}>
+            <Input maxLength={10} placeholder="Optional" />
+          </Form.Item>
+          <Form.Item name="address" label="Address" style={{ marginBottom: 0 }}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       {/* New Customer Modal */}
       <Modal
         open={newCustomerOpen}
@@ -574,16 +636,16 @@ const SalesRoutePage: React.FC = () => {
           <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
             <Input placeholder="10-digit mobile number" maxLength={10} />
           </Form.Item>
-          <Form.Item name="altPhone" label="Alt Mobile">
+          <Form.Item name="altPhone" label="Alt Mobile" rules={[{ pattern: /^\d{10}$/, message: 'Enter a valid 10-digit mobile number' }]}>
             <Input placeholder="Optional" maxLength={10} />
           </Form.Item>
           <Form.Item name="address" label="Address">
             <Input.TextArea rows={2} placeholder="Shop address (optional)" />
           </Form.Item>
-          <Form.Item name="gstin" label="GSTIN">
-            <Input placeholder="Optional" />
+          <Form.Item name="gstin" label="GSTIN" rules={[{ pattern: /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z]$/, message: 'Invalid GSTIN — e.g. 29AADCB2230M1ZV' }]}>
+            <Input placeholder="Optional" maxLength={15} />
           </Form.Item>
-          <Form.Item name="email" label="Email">
+          <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Enter a valid email (e.g. name@domain.com)' }]}>
             <Input type="email" placeholder="Optional" />
           </Form.Item>
 

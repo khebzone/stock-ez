@@ -137,6 +137,7 @@ const TenantsPage: React.FC = () => {
       plan: tenant.plan || 'TRIAL',
       billingCycle: tenant.billingCycle || 'MONTHLY',
       planEndDate: tenant.planEndDate ? dayjs(tenant.planEndDate) : null,
+      maxUsers: tenant.maxUsers,
       notes: tenant.notes,
     });
     setDrawerOpen(true);
@@ -253,13 +254,17 @@ const TenantsPage: React.FC = () => {
     },
     {
       title: 'Users',
-      dataIndex: 'maxUsers',
-      key: 'maxUsers',
-      render: (v: number) => (
-        <span style={{ fontSize: 12, color: '#64748b' }}>
-          {v >= 999 ? 'Unlimited' : `Max ${v}`}
-        </span>
-      ),
+      key: 'users',
+      render: (_: any, t: any) => {
+        const max = t.maxUsers;
+        const cur = t.currentUserCount ?? 0;
+        const atLimit = cur >= max && max < 999;
+        return (
+          <span style={{ fontSize: 12, color: atLimit ? '#dc2626' : '#64748b' }}>
+            {max >= 999 ? `${cur} / ∞` : `${cur} / ${max}`}
+          </span>
+        );
+      },
     },
     {
       title: 'Joined',
@@ -498,6 +503,13 @@ const TenantsPage: React.FC = () => {
                 />
               </Form.Item>
             </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="maxUsers" label="User Limit *"
+                rules={[{ required: true, message: 'Required' }, { type: 'number', min: 1, message: 'Min 1' }]}
+                extra="Max staff users (excludes admin account)">
+                <InputNumber min={1} max={9999} style={{ width: '100%' }} placeholder="e.g. 5" />
+              </Form.Item>
+            </Col>
             {editingTenant && (
               <Col xs={24} sm={12}>
                 <Form.Item name="status" label="Status *" rules={[{ required: true, message: 'Required' }]}>
@@ -548,11 +560,23 @@ const TenantsPage: React.FC = () => {
               </Col>
             )}
             {editingTenant && (
-              <Col xs={24}>
-                <Form.Item name="notes" label="Notes">
-                  <Input.TextArea rows={2} placeholder="Internal notes about this client..." />
-                </Form.Item>
-              </Col>
+              <>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="maxUsers"
+                    label="User Limit"
+                    extra="Max staff users allowed (excludes admin)"
+                    rules={[{ required: true, message: 'Required' }, { type: 'number', min: 1, message: 'Min 1' }]}
+                  >
+                    <InputNumber min={1} max={9999} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24}>
+                  <Form.Item name="notes" label="Notes">
+                    <Input.TextArea rows={2} placeholder="Internal notes about this client..." />
+                  </Form.Item>
+                </Col>
+              </>
             )}
           </Row>
         </Form>

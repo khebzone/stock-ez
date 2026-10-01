@@ -56,6 +56,10 @@ public class TenantSettings {
     @Column(nullable = false, length = 10)
     private DiscountType discountType = DiscountType.PERCENT;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean showPurchaseRateToSales = true;
+
     @LastModifiedDate
     private Instant updatedAt;
 

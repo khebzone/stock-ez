@@ -32,6 +32,10 @@ export const userApi = baseApi.injectEndpoints({
     changePassword: builder.mutation<any, { oldPassword: string; newPassword: string }>({
       query: (body) => ({ url: '/users/change-password', method: 'POST', body }),
     }),
+    getUserQuota: builder.query<any, void>({
+      query: () => '/users/quota',
+      providesTags: ['User'],
+    }),
   }),
 });
 
@@ -43,4 +47,5 @@ export const {
   useDeleteUserMutation,
   useReactivateUserMutation,
   useChangePasswordMutation,
+  useGetUserQuotaQuery,
 } = userApi;

@@ -25,8 +25,8 @@ public class TargetController {
     private final TargetService targetService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create or update a monthly sales target for a salesperson [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('INCENTIVES_MANAGE')")
+    @Operation(summary = "Create or update a monthly sales target for a salesperson")
     public ResponseEntity<ApiResponse<TargetDtos.TargetResponse>> upsertTarget(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @Valid @RequestBody TargetDtos.UpsertTargetRequest request) {
@@ -36,8 +36,8 @@ public class TargetController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List all sales targets with achievement for a given month/year [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('INCENTIVES_VIEW','INCENTIVES_MANAGE')")
+    @Operation(summary = "List all sales targets with achievement for a given month/year")
     public ResponseEntity<ApiResponse<TargetDtos.TargetListResponse>> listTargets(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam int month,

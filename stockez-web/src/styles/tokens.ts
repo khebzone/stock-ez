@@ -24,7 +24,7 @@ export const colors = {
   sidebarMuted:   'rgba(255,255,255,0.35)',
 
   // Layout
-  pageBg:     '#f0fdf4',
+  pageBg:     '#f8fafc',
   headerBg:   '#ffffff',
   cardBg:     '#ffffff',
 
@@ -41,7 +41,8 @@ export const colors = {
   statusBgs: {
     PENDING_APPROVAL: { bg: '#fffbeb', color: '#f59e0b' },
     APPROVED:         { bg: '#ecfdf5', color: '#059669' },
-    PREPARED:         { bg: '#ecfeff', color: '#06b6d4' },
+    PACKING:          { bg: '#fff7ed', color: '#f97316' },
+    PACKED:           { bg: '#ecfeff', color: '#06b6d4' },
     DISPATCHED:       { bg: '#f5f3ff', color: '#8b5cf6' },
     DELIVERED:        { bg: '#ecfdf5', color: '#10b981' },
     CANCELLED:        { bg: '#fef2f2', color: '#ef4444' },

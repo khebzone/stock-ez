@@ -14,19 +14,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final TenantRepository tenantRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
-    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request) {
-        // Resolve user: username (phone) > email > phone, all globally (no subdomain required)
+    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request, String tenantSlug) {
         String identifier = request.getUsername() != null ? request.getUsername()
                 : request.getPhone() != null ? request.getPhone()
                 : request.getEmail();
@@ -35,23 +35,28 @@ public class AuthService {
             throw new BusinessException("Username is required", "INVALID_CREDENTIALS");
         }
 
-        // Try phone first (username field maps to phone), then email
-        User user = userRepository.findByPhoneAndActiveTrue(identifier).orElse(null);
-        if (user == null) {
-            user = userRepository.findByEmailAndActiveTrue(identifier).orElse(null);
+        User user;
+        if (tenantSlug != null && !tenantSlug.isBlank()) {
+            // Tenant login — resolve tenant by subdomain slug
+            Tenant tenant = tenantRepository.findBySubdomain(tenantSlug)
+                    .orElseThrow(() -> new BusinessException("Company not found. Check your login URL.", "INVALID_SUBDOMAIN"));
+            user = userRepository.findByPhoneAndTenant_IdAndActiveTrue(identifier, tenant.getId())
+                    .or(() -> userRepository.findByEmailAndTenant_IdAndActiveTrue(identifier, tenant.getId()))
+                    .orElse(null);
+        } else {
+            // No slug — super admin login only (stockez.in)
+            user = userRepository.findByPhoneAndActiveTrue(identifier)
+                    .filter(u -> u.getRole() == User.UserRole.SUPER_ADMIN)
+                    .orElse(null);
+            if (user == null) {
+                user = userRepository.findByEmailAndActiveTrue(identifier)
+                        .filter(u -> u.getRole() == User.UserRole.SUPER_ADMIN)
+                        .orElse(null);
+            }
         }
 
         if (user == null) {
             throw new BusinessException("Invalid username or password", "INVALID_CREDENTIALS");
-        }
-
-        // If subdomain provided, still validate tenant matches
-        if (request.getSubdomain() != null && !request.getSubdomain().isBlank()) {
-            Tenant tenant = tenantRepository.findBySubdomain(request.getSubdomain())
-                    .orElseThrow(() -> new BusinessException("Invalid credentials", "INVALID_CREDENTIALS"));
-            if (!user.getTenant().getId().equals(tenant.getId())) {
-                throw new BusinessException("Invalid username or password", "INVALID_CREDENTIALS");
-            }
         }
 
         Tenant tenant = user.getTenant();
@@ -88,8 +93,9 @@ public class AuthService {
             throw new BusinessException("Invalid or expired refresh token", "INVALID_REFRESH_TOKEN");
         }
 
-        String phone = jwtService.extractPhone(token);
-        User user = userRepository.findByPhoneAndActiveTrue(phone)
+        String userId = jwtService.extractUserId(token);
+        User user = userRepository.findById(java.util.UUID.fromString(userId))
+                .filter(User::isActive)
                 .orElseThrow(() -> new BusinessException("User not found", "USER_NOT_FOUND"));
 
         String newAccessToken  = jwtService.generateAccessToken(user);
@@ -121,8 +127,10 @@ public class AuthService {
         if (user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN) {
             summary.setRoleName(user.getRole().name());
             summary.setPermissions(List.of("ALL"));
+            summary.setFieldStaff(false);
         } else if (user.getCustomRole() != null) {
             summary.setRoleName(user.getCustomRole().getName());
+            summary.setFieldStaff(user.getCustomRole().isFieldStaff());
             summary.setPermissions(user.getCustomRole().getPermissions().stream()
                     .map(Permission::name)
                     .sorted()
@@ -130,6 +138,7 @@ public class AuthService {
         } else {
             summary.setRoleName("No Role");
             summary.setPermissions(List.of());
+            summary.setFieldStaff(false);
         }
 
         return summary;

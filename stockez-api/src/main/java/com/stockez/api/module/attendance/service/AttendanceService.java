@@ -5,6 +5,9 @@ import com.stockez.api.module.attendance.entity.Attendance;
 import com.stockez.api.module.attendance.entity.AttendanceSettings;
 import com.stockez.api.module.attendance.repository.AttendanceRepository;
 import com.stockez.api.module.attendance.repository.AttendanceSettingsRepository;
+import com.stockez.api.module.audit.service.AuditService;
+import com.stockez.api.module.route.entity.RouteAllocation;
+import com.stockez.api.module.route.repository.RouteAllocationRepository;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.repository.TenantRepository;
 import com.stockez.api.module.user.entity.User;
@@ -32,6 +35,8 @@ public class AttendanceService {
     private final AttendanceSettingsRepository settingsRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final RouteAllocationRepository routeAllocationRepository;
+    private final AuditService auditService;
 
     // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -131,7 +136,51 @@ public class AttendanceService {
         }
 
         attendance.setCheckOutTime(java.time.Instant.now());
-        return toResponse(attendanceRepository.save(attendance));
+        AttendanceDtos.AttendanceResponse response = toResponse(attendanceRepository.save(attendance));
+        autoCompleteGatePasses(tenantId, userId, today);
+        return response;
+    }
+
+    /**
+     * Safety net for staff who forget to click Complete on their Gate Pass — checking out
+     * of attendance auto-completes any of today's route allocations still open under them
+     * (sales/delivery/warehouse). Clicking Complete manually during the day still works as
+     * before and is unaffected; this only fills in whatever wasn't already closed.
+     */
+    private void autoCompleteGatePasses(UUID tenantId, UUID userId, LocalDate today) {
+        List<RouteAllocation> touched = new java.util.ArrayList<>();
+
+        for (RouteAllocation a : routeAllocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, today)) {
+            if (!a.isSalesCompleted()) {
+                a.setSalesCompleted(true);
+                touched.add(a);
+                auditService.record(tenantId, "ROUTE_ALLOCATION", a.getId(), "SALES_COMPLETED_AUTO_CHECKOUT",
+                        "Sales Gate Pass for " + a.getRoute().getName() + " on " + a.getAllocationDate()
+                                + " auto-completed — salesperson checked out for the day without clicking Complete");
+            }
+        }
+        for (RouteAllocation a : routeAllocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, today)) {
+            if (!a.isDeliveryCompleted()) {
+                a.setDeliveryCompleted(true);
+                touched.add(a);
+                auditService.record(tenantId, "ROUTE_ALLOCATION", a.getId(), "DELIVERY_COMPLETED_AUTO_CHECKOUT",
+                        "Delivery Gate Pass for " + a.getRoute().getName() + " on " + a.getAllocationDate()
+                                + " auto-completed — delivery person checked out for the day without clicking Complete");
+            }
+        }
+        for (RouteAllocation a : routeAllocationRepository.findByTenantIdAndWarehousePersonIdAndAllocationDate(tenantId, userId, today)) {
+            if (!a.isWarehouseCompleted()) {
+                a.setWarehouseCompleted(true);
+                touched.add(a);
+                auditService.record(tenantId, "ROUTE_ALLOCATION", a.getId(), "WAREHOUSE_COMPLETED_AUTO_CHECKOUT",
+                        "Warehouse Gate Pass for " + a.getRoute().getName() + " on " + a.getAllocationDate()
+                                + " auto-completed — warehouse person checked out for the day without clicking Complete");
+            }
+        }
+
+        if (!touched.isEmpty()) {
+            routeAllocationRepository.saveAll(touched);
+        }
     }
 
     // ── Today Status (for staff) ─────────────────────────────────────────────

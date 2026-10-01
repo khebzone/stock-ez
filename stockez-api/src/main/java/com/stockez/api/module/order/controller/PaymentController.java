@@ -32,9 +32,21 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> collect(
             @Valid @RequestBody OrderDtos.CreatePaymentRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId,
-            @RequestHeader("X-User-Id") UUID userId) {
+            @RequestHeader("X-User-Id") UUID userId,
+            org.springframework.security.core.Authentication authentication) {
+        // Only office staff (admin / customer-outstanding) may back-date a collection.
+        // Field staff collections are always stamped with today's date.
+        if (request.getCollectionDate() != null && !canBackdate(authentication)) {
+            request.setCollectionDate(null);
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(paymentService.collectPayment(request, userId, tenantId), "Payment recorded"));
+    }
+
+    private boolean canBackdate(org.springframework.security.core.Authentication auth) {
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN") || a.equals("CUSTOMER_OUTSTANDING_VIEW"));
     }
 
     @GetMapping("/daily")
@@ -65,6 +77,47 @@ public class PaymentController {
             @RequestHeader("X-User-Id") UUID userId) {
         paymentService.clearPayments(request, userId, tenantId);
         return ResponseEntity.ok(ApiResponse.success(null, "Payments cleared successfully"));
+    }
+
+    @GetMapping("/instruments")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_VIEW','BANK_CLEARANCE_VIEW')")
+    @Operation(summary = "Get all cheque / bank-transfer instruments for bank clearance")
+    public ResponseEntity<ApiResponse<List<OrderDtos.PaymentResponse>>> instruments(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getInstruments(tenantId)));
+    }
+
+    @PostMapping("/{paymentId}/deposit")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_CREATE','BANK_CLEARANCE_UPDATE')")
+    @Operation(summary = "Mark a cheque/transfer as deposited to bank")
+    public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> deposit(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody OrderDtos.DepositInstrumentRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.depositInstrument(paymentId, request, tenantId), "Marked as deposited"));
+    }
+
+    @PostMapping("/{paymentId}/realise")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_CREATE','BANK_CLEARANCE_UPDATE')")
+    @Operation(summary = "Mark a cheque/transfer as realised (cleared in bank)")
+    public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> realise(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody OrderDtos.RealiseInstrumentRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.realiseInstrument(paymentId, request, tenantId), "Marked as realised"));
+    }
+
+    @PostMapping("/{paymentId}/bounce")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_CREATE','BANK_CLEARANCE_UPDATE')")
+    @Operation(summary = "Mark a cheque/transfer as bounced/returned")
+    public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> bounce(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody OrderDtos.BounceInstrumentRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.bounceInstrument(paymentId, request, tenantId), "Marked as bounced"));
     }
 
     @GetMapping("/order/{orderId}")
@@ -104,12 +157,20 @@ public class PaymentController {
     }
 
     @GetMapping("/customer-outstanding")
-    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','DELIVERY_UPDATE','CUSTOMERS_VIEW')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','DELIVERY_UPDATE','CUSTOMERS_VIEW','CUSTOMER_OUTSTANDING_VIEW')")
     @Operation(summary = "Get all customers with outstanding balances")
     public ResponseEntity<ApiResponse<List<OrderDtos.CustomerOutstandingSummary>>> customerOutstanding(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-User-Id") UUID userId) {
         return ResponseEntity.ok(ApiResponse.success(paymentService.getCustomerOutstanding(tenantId, userId)));
+    }
+
+    @GetMapping("/route-outstanding")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','DELIVERY_UPDATE','CUSTOMERS_VIEW','CUSTOMER_OUTSTANDING_VIEW')")
+    @Operation(summary = "Get outstanding balances grouped by route")
+    public ResponseEntity<ApiResponse<List<OrderDtos.RouteOutstandingGroup>>> routeOutstanding(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getRouteOutstanding(tenantId)));
     }
 
     @GetMapping("/customer/{customerId}/orders")
@@ -128,5 +189,13 @@ public class PaymentController {
             @PathVariable UUID customerId,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(paymentService.getCustomerPaymentHistory(customerId, tenantId)));
+    }
+
+    @GetMapping("/salesman-outstanding")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','CUSTOMERS_VIEW')")
+    @Operation(summary = "Get all salesman credit outstanding — unpaid orders grouped by salesperson")
+    public ResponseEntity<ApiResponse<List<OrderDtos.SalesmanCreditSummary>>> salesmanOutstanding(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getSalesmanCreditOutstanding(tenantId)));
     }
 }

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Input, message, Spin, Button, InputNumber, Grid, Tooltip, Modal, Form, Select, Switch, Result } from 'antd';
+import React, { useState, useEffect, useMemo, useCallback, useTransition } from 'react';
+import { Input, message, Spin, Button, InputNumber, Grid, Tooltip, Modal, Form, Select, Switch, Result, Popover } from 'antd';
 import {
   SearchOutlined, PlusOutlined, MinusOutlined, CheckCircleOutlined,
   ShoppingCartOutlined, ArrowLeftOutlined, CloseOutlined,
@@ -8,8 +8,9 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useGetMyCustomersQuery, useGetMyAllocationQuery } from '../../store/api/salesApi';
-import { useGetProductsQuery } from '../../store/api/productApi';
-import { useCreateOrderMutation } from '../../store/api/orderApi';
+import { useGetAllProductsQuery } from '../../store/api/productApi';
+import { useCreateOrderMutation, useGetCustomerLastPricesQuery } from '../../store/api/orderApi';
+import { useGetNearExpiryAlertsQuery } from '../../store/api/purchaseApi';
 import { useGetCustomerOutstandingQuery, useCreateCustomerMutation } from '../../store/api/customerApi';
 import { useGetRoutePlanQuery } from '../../store/api/routeApi';
 import { useGetWorkflowSettingsQuery } from '../../store/api/supplierApi';
@@ -91,6 +92,133 @@ const StepBar: React.FC<{ step: number }> = ({ step }) => {
   );
 };
 
+// ── Module-level pure helpers (stable references, no state dependency) ────────
+
+const fmtShortDate = (d: string) => {
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+};
+
+// Identity for "the same real-world product" — catches duplicate product records
+// (same name/brand/unit under different IDs) so the salesman can't bill it twice.
+const sameProductKey = (p: any) =>
+  [p?.name, p?.brand, p?.unit].map(v => String(v ?? '').trim().toLowerCase()).join('|');
+
+const pricePopoverContent = (entries: { price: number; date: string }[]) => (
+  <div style={{ minWidth: 150 }}>
+    {entries.map((e, i) => (
+      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, padding: '3px 0', fontSize: 12, borderBottom: i < entries.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+        <span style={{ fontWeight: 600, color: '#0f172a' }}>₹{Number(e.price).toFixed(2)}</span>
+        <span style={{ color: '#64748b' }}>{fmtShortDate(e.date)}</span>
+      </div>
+    ))}
+  </div>
+);
+
+// ── Memoized product card — only re-renders when this product's qty changes ───
+
+interface ProductCardProps {
+  p: any;
+  qty: number;
+  daysLeft: number | undefined;
+  lastPrices: { price: number; date: string }[] | undefined;
+  setQty: (product: any, qty: number) => void;
+  onPreview: (url: string) => void;
+  isMobile: boolean;
+  isSmall: boolean;
+  showPurchaseRate: boolean;
+}
+
+const ProductCard = React.memo<ProductCardProps>(({ p, qty, daysLeft, lastPrices, setQty, onPreview, isMobile, isSmall, showPurchaseRate }) => {
+  const inCart    = qty > 0;
+  const isExpired = daysLeft != null && daysLeft <= 0;
+  const isNear    = daysLeft != null && daysLeft > 0;
+  return (
+    <div style={{
+      background: '#fff',
+      border: `1px solid ${inCart ? P : isExpired ? '#fca5a5' : isNear ? '#fde68a' : '#e2e8f0'}`,
+      borderRadius: 12, overflow: 'hidden',
+      transition: 'border-color 0.15s, box-shadow 0.15s',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Image — full pack on white (contain), never cropped */}
+      <div style={{ position: 'relative', background: '#fff', padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+        {p.imageUrl ? (
+          <img src={p.imageUrl} alt={p.name} onClick={() => onPreview(p.imageUrl)} style={{ width: '100%', height: 110, objectFit: 'contain', cursor: 'pointer', display: 'block' }} />
+        ) : (
+          <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ShoppingCartOutlined style={{ fontSize: 24, color: '#cbd5e1' }} />
+          </div>
+        )}
+        <span style={{
+          position: 'absolute', top: 6, right: 6, fontSize: 10, fontWeight: 700,
+          padding: '2px 7px', borderRadius: 12,
+          background: p.stockQuantity <= 10 ? '#fffbeb' : '#f0fdf4',
+          color: p.stockQuantity <= 10 ? '#d97706' : '#16a34a',
+          border: `1px solid ${p.stockQuantity <= 10 ? '#fde68a' : '#bbf7d0'}`,
+        }}>
+          {p.stockQuantity}
+        </span>
+      </div>
+
+      {/* Content — brand · name · price hierarchy */}
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        {p.brand && <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{p.brand}</div>}
+        <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13, lineHeight: 1.35 }}>{p.name}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {(p.fifoMrp ?? p.mrp) != null && (
+            <span style={{ fontSize: 11, color: '#64748b' }}>MRP ₹{Number(p.fifoMrp ?? p.mrp).toFixed(2)}</span>
+          )}
+          <span style={{ fontSize: 14, fontWeight: 700, color: P }}>
+            SR ₹{((p.fifoMaxSaleRate ?? p.maxSaleRate) || 0).toFixed(2)}
+            {p.salesGstPercent > 0 && <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}> +{p.salesGstPercent}%</span>}
+          </span>
+          {showPurchaseRate && (p.fifoPurchaseRate != null || p.purchaseRate != null) && (
+            <span style={{ fontSize: 11, color: '#64748b' }}>
+              PR ₹{p.fifoPurchaseRate != null
+                ? Number(p.fifoPurchaseRate).toFixed(2)
+                : Number(p.purchaseRate).toFixed(2)}
+            </span>
+          )}
+        </div>
+        {lastPrices && lastPrices.length > 0 && (
+          isMobile ? (
+            <div style={{ fontSize: 10, color: '#64748b' }}>
+              Last: {lastPrices.map((e, i) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)} <span style={{ color: '#94a3b8' }}>({fmtShortDate(e.date)})</span></span>)}
+            </div>
+          ) : (
+            <Popover trigger={["hover", "click"]} title={<span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Last Billed</span>} content={pricePopoverContent(lastPrices)}>
+              <div style={{ fontSize: 10, color: '#64748b', cursor: 'pointer' }}>
+                Last: {lastPrices.map((e, i) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)}</span>)}
+              </div>
+            </Popover>
+          )
+        )}
+        {qty === 0 ? (
+          <button
+            onClick={() => setQty(p, 1)}
+            style={{ marginTop: 'auto', width: '100%', height: 34, border: `1px solid ${P}`, borderRadius: 8, background: '#fff', color: P, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+          >
+            <PlusOutlined style={{ fontSize: 10 }} /> Add
+          </button>
+        ) : (
+          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: PL, borderRadius: 8, padding: '3px 4px' }}>
+            <button onClick={() => setQty(p, qty - 1)} style={{ width: 28, height: 28, border: 'none', background: '#fff', borderRadius: 6, cursor: 'pointer', color: P, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MinusOutlined style={{ fontSize: 9 }} />
+            </button>
+            <QtyInput qty={qty} product={p} setQty={setQty} style={{ width: 36, textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, color: P, fontSize: 14, outline: 'none' }} />
+            <button onClick={() => setQty(p, qty + 1)} style={{ width: 28, height: 28, border: 'none', background: P, borderRadius: 6, cursor: 'pointer', color: '#fff', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PlusOutlined style={{ fontSize: 9 }} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 const SalesOrderPage: React.FC = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -100,12 +228,15 @@ const SalesOrderPage: React.FC = () => {
   const isTablet  = screens.md && !screens.lg;
 
   const [step, setStep] = useState(0);
+  const [isPending, startTransition] = useTransition();
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch]     = useState('');
   const [filterStop, setFilterStop]             = useState<string>('ALL');
   const [productSearch, setProductSearch]       = useState('');
   const [selectedBrand, setSelectedBrand]       = useState<string>('ALL');
   const [brandSearch, setBrandSearch]           = useState('');
+  const [filterCategory, setFilterCategory]     = useState<string | undefined>();
+  const [filterSubCat, setFilterSubCat]         = useState<string | undefined>();
   const [cart, setCart]                         = useState<CartItem[]>([]);
 
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
@@ -114,27 +245,62 @@ const SalesOrderPage: React.FC = () => {
   const [newCustomerForm]                     = Form.useForm();
 
   const { data: customersData, isLoading: custLoading, refetch: refetchCustomers } = useGetMyCustomersQuery();
-  const { data: productsData,  isLoading: prodLoading  } = useGetProductsQuery({ size: 300 });
+  const { data: productsData,  isLoading: prodLoading  } = useGetAllProductsQuery();
   const [createOrder, { isLoading: creating }]           = useCreateOrderMutation();
   const [createCustomer, { isLoading: creatingCust }]    = useCreateCustomerMutation();
-  const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id });
+  const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id , refetchOnMountOrArgChange: true });
+  const { data: lastPricesData }  = useGetCustomerLastPricesQuery(selectedCustomer?.id ?? '', { skip: !selectedCustomer?.id , refetchOnMountOrArgChange: true });
+  const lastPrices: Record<string, { price: number; date: string }[]> = lastPricesData?.data || {};
+
+  const { data: nearExpiryData } = useGetNearExpiryAlertsQuery({ days: 30 }, { refetchOnMountOrArgChange: true });
+  const nearExpiryMap: Record<string, number> = useMemo(() => {
+    const map: Record<string, number> = {};
+    (nearExpiryData?.data || []).forEach((a: any) => {
+      const pid = a.product?.id;
+      if (!pid) return;
+      if (map[pid] == null || a.daysToExpiry < map[pid]) map[pid] = a.daysToExpiry;
+    });
+    return map;
+  }, [nearExpiryData]);
+
   const { data: allocData }         = useGetMyAllocationQuery();
-  const { data: workflowData }      = useGetWorkflowSettingsQuery();
+  const { data: workflowData }      = useGetWorkflowSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
   const discountType = workflowData?.data?.discountType ?? 'PERCENT';
   const { data: attendanceData }    = useGetTodayStatusQuery();
   const billingLocked = !!(workflowData?.data?.lockBillingAfterCheckout && attendanceData?.data?.checkedOut);
+  const showPurchaseRate = workflowData?.data?.showPurchaseRateToSales ?? true;
   const { data: planData }        = useGetRoutePlanQuery(
     allocData?.data?.routeId || '', { skip: !allocData?.data?.routeId }
   );
 
   const allocation    = allocData?.data;
   const routePlaces: any[] = planData?.data?.plan || [];
+  const newCustomerRouteId: string | undefined = allocation?.routeId;
 
   const customers: any[] = customersData?.data || [];
+
+  // Stops come from today's allocated route plan — no allocation means no stops.
+  const addCustomerStops = useMemo(() =>
+    routePlaces.map((p: any) => ({ id: p.id, name: p.name })).filter((p: any) => !!p.id),
+  [routePlaces]);
+
   const products: any[]  = productsData?.data?.content || productsData?.data || [];
   const outstanding  = outstandingData?.data;
   const creditEnforcement = workflowData?.data?.creditLimitEnforcement ?? 'HARD_BLOCK';
-  const isOverLimit  = creditEnforcement !== 'DISABLED' && outstanding?.overLimit === true;
+  const creditChecked = creditEnforcement !== 'DISABLED'
+    && outstanding?.creditAllowed === true && Number(outstanding?.creditLimit || 0) > 0;
+  const creditAvailable = Math.max(0,
+    Number(outstanding?.creditLimit || 0) - Number(outstanding?.totalOutstanding || 0));
+  const alreadyOverLimit = creditChecked && outstanding?.overLimit === true;
+
+  // O(1) qty lookup — rebuilt only when cart changes
+  const cartQtyMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    cart.forEach(i => { m[i.productId] = i.quantity; });
+    return m;
+  }, [cart]);
+
+  const getQty = (id: string) => cartQtyMap[id] || 0;
 
   useEffect(() => {
     const state = location.state as any;
@@ -146,21 +312,31 @@ const SalesOrderPage: React.FC = () => {
 
   const handleSelectCustomer = (c: any) => {
     setSelectedCustomer(c);
-    setSelectedBrand('ALL');
-    setProductSearch('');
-    setStep(1);
+    startTransition(() => {
+      setSelectedBrand('ALL');
+      setProductSearch('');
+      setFilterCategory(undefined);
+      setFilterSubCat(undefined);
+      setStep(1);
+    });
   };
 
   // Build ordered stop list from plan for filter chips
-  const stopList: { id: string; name: string }[] = (planData?.data?.plan || []).map((p: any) => ({ id: p.id, name: p.name }));
+  const stopList: { id: string; name: string }[] = useMemo(
+    () => (planData?.data?.plan || []).map((p: any) => ({ id: p.id, name: p.name })),
+    [planData],
+  );
 
   // Customer IDs per stop (from plan's embedded customer lists)
-  const stopCustomerIds: Record<string, Set<string>> = {};
-  (planData?.data?.plan || []).forEach((p: any) => {
-    stopCustomerIds[p.id] = new Set((p.customers || []).map((c: any) => c.id));
-  });
+  const stopCustomerIds: Record<string, Set<string>> = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    (planData?.data?.plan || []).forEach((p: any) => {
+      map[p.id] = new Set((p.customers || []).map((c: any) => c.id));
+    });
+    return map;
+  }, [planData]);
 
-  const filteredCustomers = customers.filter((c: any) => {
+  const filteredCustomers = useMemo(() => customers.filter((c: any) => {
     if (filterStop !== 'ALL' && !stopCustomerIds[filterStop]?.has(c.id)) return false;
     if (!customerSearch) return true;
     const q = customerSearch.toLowerCase();
@@ -169,24 +345,44 @@ const SalesOrderPage: React.FC = () => {
       c.ownerName?.toLowerCase().includes(q) ||
       c.phone?.includes(customerSearch)
     );
-  });
+  }), [customers, filterStop, customerSearch, stopCustomerIds]);
 
-  const brandList: string[] = [
+  const brandList: string[] = useMemo(() => [
     'ALL',
     ...Array.from(new Set(products.map((p: any) => p.brand).filter(Boolean))).sort() as string[],
-  ];
+  ], [products]);
 
-  const filteredProducts = products.filter((p: any) =>
-    (selectedBrand === 'ALL' || p.brand === selectedBrand) &&
-    (!productSearch ||
-      p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.brand?.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.code?.toLowerCase().includes(productSearch.toLowerCase()))
-  );
+  const uniqueCategories = useMemo(() =>
+    (Array.from(new Set(products.filter((p: any) => p.category).map((p: any) => p.category))).sort()) as string[],
+  [products]);
 
-  const getQty = (id: string) => cart.find(i => i.productId === id)?.quantity || 0;
+  const uniqueSubCategories = useMemo(() =>
+    (Array.from(new Set(
+      products
+        .filter((p: any) => p.subCategory && (!filterCategory || p.category === filterCategory))
+        .map((p: any) => p.subCategory)
+    )).sort()) as string[],
+  [products, filterCategory]);
 
-  const setQty = (product: any, qty: number) => {
+  const filteredProducts = useMemo(() => products.filter((p: any) => {
+    if (p.active === false) return false;
+    if (p.stockQuantity != null && p.stockQuantity === 0) return false;
+    if (selectedBrand !== 'ALL' && p.brand !== selectedBrand) return false;
+    if (filterCategory && p.category !== filterCategory) return false;
+    if (filterSubCat && p.subCategory !== filterSubCat) return false;
+    if (!productSearch) return true;
+    const q = productSearch.toLowerCase();
+    return p.name?.toLowerCase().includes(q);
+  }), [products, selectedBrand, filterCategory, filterSubCat, productSearch]);
+
+  const clearStockProducts = useMemo(() =>
+    filteredProducts.filter(
+      (p: any) => nearExpiryMap[p.id] != null && p.stockQuantity > (cartQtyMap[p.id] || 0)
+    ),
+  [filteredProducts, nearExpiryMap, cartQtyMap]);
+
+  // Stable callback — uses only functional setCart, so deps are empty
+  const setQty = useCallback((product: any, qty: number) => {
     if (qty < 0) return;
     if (qty === 0) {
       setCart(prev => prev.filter(i => i.productId !== product.id));
@@ -199,6 +395,11 @@ const SalesOrderPage: React.FC = () => {
       setCart(prev => {
         const exists = prev.find(i => i.productId === product.id);
         if (exists) return prev.map(i => i.productId === product.id ? { ...i, quantity: qty } : i);
+        const dup = prev.find(i => sameProductKey(i.product) === sameProductKey(product));
+        if (dup) {
+          queueMicrotask(() => message.warning(`"${product.name}" is already in this order — increase its quantity instead of adding it again`));
+          return prev;
+        }
         return [...prev, {
           productId: product.id, product, quantity: qty,
           unitPrice:       (() => { const r = getProductRates(product); return defaultUnitPrice(r.min, r.max); })(),
@@ -207,28 +408,66 @@ const SalesOrderPage: React.FC = () => {
         }];
       });
     }
-  };
+  }, []);
+
+  const handlePreview = useCallback((url: string) => setPreviewImage(url), []);
 
   const updatePrice = (productId: string, price: number) => {
     if (price <= 0) return;
     setCart(prev => prev.map(i => i.productId === productId ? { ...i, unitPrice: price } : i));
   };
 
-  const removeFromCart = (productId: string) => setCart(prev => prev.filter(i => i.productId !== productId));
+  const removeFromCart = useCallback((productId: string) =>
+    setCart(prev => prev.filter(i => i.productId !== productId)), []);
 
-  const lineGross    = (item: CartItem) => item.unitPrice * item.quantity;
-  const lineTotal    = (item: CartItem) => discountType === 'AMOUNT'
+  const [discountAmounts, setDiscountAmounts] = useState<Record<string, number>>({});
+  const [overallDiscValue, setOverallDiscValue] = useState<number | null>(null);
+  const [notes, setNotes] = useState('');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const lineGross = (item: CartItem) => item.unitPrice * item.quantity;
+  const lineTotal = (item: CartItem) => discountType === 'AMOUNT'
     ? Math.max(0, lineGross(item) - (discountAmounts[item.productId] ?? 0))
     : lineGross(item) * (1 - (item.discountPercent || 0) / 100);
-  const lineBase     = (item: CartItem) => lineTotal(item) * 100 / (100 + item.gstPercent);
-  const cartTotal    = () => cart.reduce((s, i) => s + lineTotal(i), 0);
-  const cartSubtotal = () => cart.reduce((s, i) => s + lineBase(i), 0);
-  const cartGst      = () => cart.reduce((s, i) => s + lineTotal(i) - lineBase(i), 0);
+  const lineBase  = (item: CartItem) => lineTotal(item) * 100 / (100 + item.gstPercent);
 
-  const priceErrors = cart.filter(item => {
+  // Bill-level (overall) discount, applied before GST — scales subtotal & GST down together
+  // and is pro-rata apportioned into the per-line amounts server-side.
+  const cartTotals = useMemo(() => {
+    let subTotal = 0, totalGst = 0, grossIncl = 0;
+    for (const item of cart) {
+      const lt = lineTotal(item);
+      subTotal += lineBase(item);
+      totalGst += lt - lineBase(item);
+      grossIncl += lt;
+    }
+    const dv = overallDiscValue || 0;
+    const discount = dv <= 0 || grossIncl <= 0 ? 0
+      : discountType === 'PERCENT'
+        ? Math.round(grossIncl * Math.min(dv, 100)) / 100
+        : Math.min(dv, grossIncl);
+    const factor = grossIncl > 0 ? (grossIncl - discount) / grossIncl : 1;
+    subTotal *= factor;
+    totalGst *= factor;
+    return {
+      subTotal: Math.round(subTotal * 100) / 100,
+      totalGst: Math.round(totalGst * 100) / 100,
+      discount: Math.round(discount * 100) / 100,
+      total: Math.round((subTotal + totalGst) * 100) / 100,
+    };
+  }, [cart, discountAmounts, discountType, overallDiscValue]);
+
+  // A sales order goes entirely on account, so the whole cart counts against the limit. Catching
+  // "this order would cross it" here — not just "already over" — matches the backend gate and lets
+  // the salesman trim the cart at the shop instead of being refused at submit.
+  const wouldExceedLimit = creditChecked && !alreadyOverLimit && cartTotals.total > creditAvailable;
+  const isOverLimit = alreadyOverLimit || wouldExceedLimit;
+  const creditShortfall = Math.max(0, Math.round((cartTotals.total - creditAvailable) * 100) / 100);
+
+  const priceErrors = useMemo(() => cart.filter(item => {
     const { min, max } = getProductRates(item.product);
     return isPriceOutOfRange(item.unitPrice, min, max);
-  });
+  }), [cart]);
 
   const openNewCustomer = () => {
     newCustomerForm.resetFields();
@@ -245,6 +484,10 @@ const SalesOrderPage: React.FC = () => {
   const handleCreateCustomer = async () => {
     try {
       const values = await newCustomerForm.validateFields();
+      if (!newCustomerRouteId) {
+        message.error('No route is assigned to you — contact your admin before adding customers');
+        return;
+      }
       const payload: any = {
         businessName:  values.businessName.trim(),
         ownerName:     values.ownerName.trim(),
@@ -253,7 +496,7 @@ const SalesOrderPage: React.FC = () => {
         email:         values.email?.trim()     || undefined,
         address:       values.address?.trim()   || undefined,
         gstin:         values.gstin?.trim()     || undefined,
-        routeId:       allocation?.routeId,
+        routeId:       newCustomerRouteId,
         routePlaceId:  values.routePlaceId,
         creditAllowed: values.creditAllowed || false,
         creditDays:    values.creditDays    || undefined,
@@ -272,13 +515,14 @@ const SalesOrderPage: React.FC = () => {
     }
   };
 
-  const [discountAmounts, setDiscountAmounts] = useState<Record<string, number>>({});
-  const [notes, setNotes] = useState('');
-
   const handleSubmit = async () => {
     if (!selectedCustomer) { message.error('No customer selected'); return; }
     if (cart.length === 0)  { message.error('Cart is empty'); return; }
-    if (isOverLimit) { message.error('Credit limit exceeded. Collect payment first.'); return; }
+    if (alreadyOverLimit) { message.error('Credit limit reached — collect payment before placing a new order.'); return; }
+    if (wouldExceedLimit) {
+      message.error(`Only ₹${creditAvailable.toFixed(2)} of credit left — remove ₹${creditShortfall.toFixed(2)} from the order or collect payment first.`);
+      return;
+    }
     if (priceErrors.length > 0) {
       message.error(`Fix price for: ${priceErrors.map(i => i.product?.name).join(', ')}`);
       return;
@@ -293,6 +537,8 @@ const SalesOrderPage: React.FC = () => {
           return { productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: discPct };
         }),
         notes: notes.trim() || undefined,
+        overallDiscountType: overallDiscValue && overallDiscValue > 0 ? discountType : null,
+        overallDiscountValue: overallDiscValue && overallDiscValue > 0 ? overallDiscValue : null,
       }).unwrap();
       message.success('Order placed successfully!');
       setNotes('');
@@ -380,6 +626,20 @@ const SalesOrderPage: React.FC = () => {
             />
           )}
 
+          {/* New Customer — top, so the salesman doesn't have to scroll the whole list */}
+          <button
+            onClick={openNewCustomer}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', padding: '12px',
+              background: P, border: 'none',
+              borderRadius: 10, cursor: 'pointer',
+              color: '#fff', fontSize: 14, fontWeight: 700,
+            }}
+          >
+            <PlusOutlined />New Customer
+          </button>
+
           {custLoading ? (
             <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
           ) : filteredCustomers.length === 0 ? (
@@ -418,7 +678,10 @@ const SalesOrderPage: React.FC = () => {
                     </div>
                     {c.placeName && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{c.placeName}</div>}
                   </div>
-                  <CheckCircleOutlined style={{ color: selectedCustomer?.id === c.id ? P : '#e2e8f0', fontSize: 16, flexShrink: 0 }} />
+                  {isPending && selectedCustomer?.id === c.id
+                    ? <LoadingOutlined style={{ color: P, fontSize: 16, flexShrink: 0 }} />
+                    : <CheckCircleOutlined style={{ color: selectedCustomer?.id === c.id ? P : '#e2e8f0', fontSize: 16, flexShrink: 0 }} />
+                  }
                 </div>
               ))}
             </div>
@@ -478,23 +741,27 @@ const SalesOrderPage: React.FC = () => {
           <Form.Item name="phone" label="Mobile Number *" rules={[{ required: true, message: 'Required' }, { pattern: /^\d{10}$/, message: '10-digit number' }]}>
             <Input placeholder="10-digit mobile number" maxLength={10} />
           </Form.Item>
-          <Form.Item name="altPhone" label="Alt Mobile">
+          <Form.Item name="altPhone" label="Alt Mobile" rules={[{ pattern: /^\d{10}$/, message: 'Enter a valid 10-digit mobile number' }]}>
             <Input placeholder="Optional" maxLength={10} />
           </Form.Item>
           <Form.Item name="address" label="Address">
             <Input.TextArea rows={2} placeholder="Shop address (optional)" />
           </Form.Item>
-          <Form.Item name="gstin" label="GSTIN">
-            <Input placeholder="Optional" />
+          <Form.Item name="gstin" label="GSTIN" rules={[{ pattern: /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z]$/, message: 'Invalid GSTIN — e.g. 29AADCB2230M1ZV' }]}>
+            <Input placeholder="Optional" maxLength={15} />
           </Form.Item>
-          <Form.Item name="email" label="Email">
+          <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Enter a valid email (e.g. name@domain.com)' }]}>
             <Input type="email" placeholder="Optional" />
           </Form.Item>
 
           <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, margin: '8px 0 12px' }}>Route Stop</div>
           <Form.Item name="routePlaceId" label="Stop / Place *" rules={[{ required: true, message: 'Select a stop' }]}>
-            <Select placeholder="Select stop on this route" size="large">
-              {routePlaces.map((p: any) => (
+            <Select
+              placeholder={addCustomerStops.length ? 'Select stop on this route' : 'No stops on your route — ask admin to add stops'}
+              size="large"
+              notFoundContent="No stops configured on your route"
+            >
+              {addCustomerStops.map((p: any) => (
                 <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
               ))}
             </Select>
@@ -540,32 +807,42 @@ const SalesOrderPage: React.FC = () => {
               </div>
               {outstanding.creditAllowed && outstanding.creditLimit > 0 && (
                 <div style={{ fontSize: 11, color: '#64748b' }}>
-                  Limit: ₹{Number(outstanding.creditLimit).toFixed(2)}
-                  {isOverLimit && <span style={{ color: '#dc2626', fontWeight: 700 }}> — New orders blocked</span>}
+                  Limit: ₹{Number(outstanding.creditLimit).toFixed(2)} · ₹{creditAvailable.toFixed(2)} left
+                  {alreadyOverLimit && <span style={{ color: '#dc2626', fontWeight: 700 }}> — New orders blocked</span>}
+                  {wouldExceedLimit && <span style={{ color: '#dc2626', fontWeight: 700 }}> — cart is ₹{creditShortfall.toFixed(2)} over</span>}
                 </div>
               )}
             </div>
           )}
 
-          {/* Brand filter */}
-          <Select
-            showSearch
-            allowClear
-            placeholder="Type to filter by brand..."
-            style={{ width: '100%' }}
-            value={selectedBrand === 'ALL' ? undefined : selectedBrand}
-            onChange={v => { setSelectedBrand(v ?? 'ALL'); setBrandSearch(''); }}
-            onClear={() => { setSelectedBrand('ALL'); setBrandSearch(''); }}
-            onSearch={v => setBrandSearch(v)}
-            filterOption={false}
-            notFoundContent={brandSearch ? 'No brands found' : null}
-            options={brandSearch
-              ? brandList
-                  .filter(b => b !== 'ALL' && b.toLowerCase().includes(brandSearch.toLowerCase()))
-                  .map(b => ({ value: b, label: b }))
-              : []
-            }
-          />
+          {/* Brand / Category / Sub Category filters */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Select
+              placeholder="Brand" allowClear showSearch
+              filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              size="small" style={{ flex: 1, minWidth: 110 }}
+              value={selectedBrand === 'ALL' ? undefined : selectedBrand}
+              onChange={v => { setSelectedBrand(v ?? 'ALL'); setBrandSearch(''); }}
+              options={brandList.filter(b => b !== 'ALL').map(b => ({ value: b, label: b }))}
+            />
+            <Select
+              placeholder="Category" allowClear showSearch
+              filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              size="small" style={{ flex: 1, minWidth: 110 }}
+              value={filterCategory}
+              onChange={v => { setFilterCategory(v); setFilterSubCat(undefined); }}
+              options={uniqueCategories.map(c => ({ value: c, label: c }))}
+            />
+            <Select
+              placeholder="Sub Category" allowClear showSearch
+              filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              size="small" style={{ flex: 1, minWidth: 120 }}
+              value={filterSubCat}
+              onChange={setFilterSubCat}
+              disabled={uniqueSubCategories.length === 0}
+              options={uniqueSubCategories.map(s => ({ value: s, label: s }))}
+            />
+          </div>
 
           <Input
             prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
@@ -582,9 +859,11 @@ const SalesOrderPage: React.FC = () => {
             <div style={{ background: isOverLimit ? '#dc2626' : P, borderRadius: 8, padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11 }}>
-                  {isOverLimit ? 'Credit limit exceeded — blocked' : `${cart.length} item${cart.length > 1 ? 's' : ''}`}
+                  {alreadyOverLimit ? 'Credit limit reached — collect payment'
+                    : wouldExceedLimit ? `₹${creditShortfall.toFixed(2)} over the credit limit`
+                    : `${cart.length} item${cart.length > 1 ? 's' : ''}`}
                 </div>
-                <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>₹{cartTotal().toFixed(2)}</div>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>₹{cartTotals.total.toFixed(2)}</div>
               </div>
               <Button size="small" onClick={() => !isOverLimit && setStep(2)} disabled={isOverLimit}
                 style={{ background: '#fff', color: isOverLimit ? '#94a3b8' : P, fontWeight: 700, border: 'none', borderRadius: 6, height: 32, padding: '0 14px' }}>
@@ -600,72 +879,120 @@ const SalesOrderPage: React.FC = () => {
               No products found
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: isSmall ? 8 : 8 }}>
-              {filteredProducts.map((p: any) => {
-                const qty = getQty(p.id);
-                const inCart = qty > 0;
-                const outOfStock = (p.stockQuantity !== null && p.stockQuantity !== undefined) && p.stockQuantity === 0;
-                return (
-                  <div key={p.id} style={{
-                    background: '#fff',
-                    border: `1px solid ${inCart ? P : '#e2e8f0'}`,
-                    borderRadius: 10, padding: '10px',
-                    opacity: outOfStock ? 0.5 : 1,
-                    transition: 'border-color 0.15s',
-                    display: 'flex', flexDirection: 'column', gap: 8,
-                  }}>
-                    <div style={{ position: 'relative' }}>
-                      {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: 64, objectFit: 'cover', borderRadius: 6 }} />
-                      ) : (
-                        <div style={{ height: 52, borderRadius: 6, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <ShoppingCartOutlined style={{ fontSize: 18, color: '#cbd5e1' }} />
-                        </div>
-                      )}
-                      <span style={{
-                        position: 'absolute', top: 3, right: 3, fontSize: 9, fontWeight: 700,
-                        padding: '1px 5px', borderRadius: 10,
-                        background: outOfStock ? '#fef2f2' : (p.stockQuantity <= 10 ? '#fffbeb' : '#f0fdf4'),
-                        color: outOfStock ? '#ef4444' : (p.stockQuantity <= 10 ? '#d97706' : '#16a34a'),
-                      }}>
-                        {outOfStock ? 'Out' : p.stockQuantity}
-                      </span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 12, lineHeight: 1.3 }}>{p.name}</div>
-                      {p.brand && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{p.brand}</div>}
-                    </div>
-                    <div style={{ fontWeight: 700, color: P, fontSize: 13 }}>
-                      ₹{(p.minSaleRate || 0).toFixed(2)}
-                      {p.salesGstPercent > 0 && <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}> +{p.salesGstPercent}%</span>}
-                    </div>
-                    {outOfStock ? (
-                      <div style={{ textAlign: 'center', fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Out of Stock</div>
-                    ) : qty === 0 ? (
-                      <button
-                        onClick={() => setQty(p, 1)}
-                        style={{ width: '100%', height: 32, border: `1px solid ${P}`, borderRadius: 6, background: '#fff', color: P, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-                      >
-                        <PlusOutlined style={{ fontSize: 10 }} /> Add
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: PL, borderRadius: 6, padding: '2px 4px' }}>
-                        <button onClick={() => setQty(p, qty - 1)} style={{ width: 26, height: 26, border: 'none', background: '#fff', borderRadius: 4, cursor: 'pointer', color: P, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <MinusOutlined style={{ fontSize: 9 }} />
-                        </button>
-                        <QtyInput qty={qty} product={p} setQty={setQty} style={{ width: 36, textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, color: P, fontSize: 14, outline: 'none' }} />
-                        <button onClick={() => setQty(p, qty + 1)} style={{ width: 26, height: 26, border: 'none', background: P, borderRadius: 4, cursor: 'pointer', color: '#fff', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <PlusOutlined style={{ fontSize: 9 }} />
-                        </button>
-                      </div>
-                    )}
+            <>
+              {/* Clear Stock section */}
+              {clearStockProducts.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 12px 8px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                    Clear Stock — {clearStockProducts.length} item{clearStockProducts.length > 1 ? 's' : ''} expiring
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {clearStockProducts.map((p: any) => {
+                      const qty = getQty(p.id);
+                      const daysLeft = nearExpiryMap[p.id];
+                      const isExpired = daysLeft <= 0;
+                      return (
+                        <div key={p.id} style={{ background: '#fff', border: `1px solid ${qty > 0 ? P : isExpired ? '#fca5a5' : '#fde68a'}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ position: 'relative', background: '#fff', padding: 8, borderBottom: '1px solid #f1f5f9' }}>
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.name} onClick={() => setPreviewImage(p.imageUrl)} style={{ width: '100%', height: 110, objectFit: 'contain', cursor: 'pointer', display: 'block' }} />
+                            ) : (
+                              <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <ShoppingCartOutlined style={{ fontSize: 24, color: '#cbd5e1' }} />
+                              </div>
+                            )}
+                            <span style={{ position: 'absolute', top: 6, right: 6, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 12, background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' }}>
+                              {p.stockQuantity - qty}
+                            </span>
+                          </div>
+                          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                            {p.brand && <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.3 }}>{p.brand}</div>}
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13, lineHeight: 1.35 }}>{p.name}</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              {(p.fifoMrp ?? p.mrp) != null && (
+                                <span style={{ fontSize: 11, color: '#64748b' }}>MRP ₹{Number(p.fifoMrp ?? p.mrp).toFixed(2)}</span>
+                              )}
+                              <span style={{ fontSize: 14, fontWeight: 700, color: P }}>
+                                SR ₹{((p.fifoMaxSaleRate ?? p.maxSaleRate) || 0).toFixed(2)}
+                                {p.salesGstPercent > 0 && <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}> +{p.salesGstPercent}%</span>}
+                              </span>
+                              {showPurchaseRate && (p.fifoPurchaseRate != null || p.purchaseRate != null) && (
+                                <span style={{ fontSize: 11, color: '#64748b' }}>
+                                  PR ₹{p.fifoPurchaseRate != null
+                                    ? Number(p.fifoPurchaseRate).toFixed(2)
+                                    : Number(p.purchaseRate).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                            {lastPrices[p.id]?.length > 0 && (
+                              <div style={{ fontSize: 10, color: '#64748b' }}>
+                                Last: {lastPrices[p.id].map((e: any, i: number) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)} <span style={{ color: '#94a3b8' }}>({fmtShortDate(e.date)})</span></span>)}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 11, fontWeight: 700, color: isExpired ? '#dc2626' : '#d97706' }}>
+                              {isExpired ? 'Expired' : `Exp in ${daysLeft}d`}
+                            </div>
+                            {qty === 0 ? (
+                              <button onClick={() => setQty(p, 1)} style={{ marginTop: 'auto', width: '100%', height: 34, border: `1px solid ${P}`, borderRadius: 8, background: '#fff', color: P, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                <PlusOutlined style={{ fontSize: 10 }} /> Add
+                              </button>
+                            ) : (
+                              <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: PL, borderRadius: 8, padding: '3px 4px' }}>
+                                <button onClick={() => setQty(p, qty - 1)} style={{ width: 28, height: 28, border: 'none', background: '#fff', borderRadius: 6, cursor: 'pointer', color: P, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <MinusOutlined style={{ fontSize: 9 }} />
+                                </button>
+                                <QtyInput qty={qty} product={p} setQty={setQty} style={{ width: 36, textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, color: P, fontSize: 14, outline: 'none' }} />
+                                <button onClick={() => setQty(p, qty + 1)} style={{ width: 28, height: 28, border: 'none', background: P, borderRadius: 6, cursor: 'pointer', color: '#fff', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <PlusOutlined style={{ fontSize: 9 }} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* All Products grid */}
+              {clearStockProducts.length > 0 && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>All Products</div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr 1fr' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                {filteredProducts.map((p: any) => (
+                  <ProductCard
+                    key={p.id}
+                    p={p}
+                    qty={cartQtyMap[p.id] || 0}
+                    daysLeft={nearExpiryMap[p.id]}
+                    lastPrices={lastPrices[p.id]}
+                    setQty={setQty}
+                    onPreview={handlePreview}
+                    isMobile={isMobile}
+                    isSmall={isSmall}
+                    showPurchaseRate={showPurchaseRate}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
+
+      {/* Image preview modal */}
+      <Modal
+        open={!!previewImage}
+        onCancel={() => setPreviewImage(null)}
+        footer={null}
+        centered
+        width="auto"
+        styles={{ body: { padding: 0, lineHeight: 0 } }}
+      >
+        {previewImage && (
+          <img src={previewImage} alt="Product" style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8, display: 'block' }} />
+        )}
+      </Modal>
 
       {/* ── Step 2: Review ── */}
       {step === 2 && (
@@ -788,6 +1115,11 @@ const SalesOrderPage: React.FC = () => {
                           </Tooltip>
                           <InputNumber size="small" min={0} precision={2} value={discountValue} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹', style: { width: 82, height: 30 }, placeholder: '₹ disc' } : { suffix: '%', max: 100, style: { width: 72, height: 30 }, placeholder: 'Disc%' })} />
                         </div>
+                        {lastPrices[item.productId]?.length > 0 && (
+                          <span style={{ fontSize: 10, color: '#64748b' }}>
+                            Last: {lastPrices[item.productId].map((e, i) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)} <span style={{ color: '#94a3b8' }}>({fmtShortDate(e.date)})</span></span>)}
+                          </span>
+                        )}
                         {hasError && (
                           <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
                             {belowMin ? `Below min ₹${Number(min).toFixed(2)}` : `Above max ₹${Number(max).toFixed(2)}`}
@@ -801,6 +1133,13 @@ const SalesOrderPage: React.FC = () => {
                       <div>
                         <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product?.name}</div>
                         {item.product?.brand && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{item.product.brand}</div>}
+                        {lastPrices[item.productId]?.length > 0 && (
+                          <Popover trigger={["hover", "click"]} title={<span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Last Billed</span>} content={pricePopoverContent(lastPrices[item.productId])}>
+                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 1, cursor: 'pointer' }}>
+                              Last: {lastPrices[item.productId].map((e, i) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)}</span>)}
+                            </div>
+                          </Popover>
+                        )}
                         {hasError && (
                           <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 600, marginTop: 2 }}>
                             {belowMin ? `Below min ₹${Number(min).toFixed(2)}` : `Above max ₹${Number(max).toFixed(2)}`}
@@ -831,9 +1170,26 @@ const SalesOrderPage: React.FC = () => {
             <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '10px 16px' }}>
               {isMobile ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}</span>
+                    <InputNumber
+                      size="small" min={0} precision={2}
+                      value={overallDiscValue ?? undefined}
+                      max={discountType === 'PERCENT' ? 100 : undefined}
+                      {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                      style={{ width: 90 }} placeholder="0"
+                      onChange={v => setOverallDiscValue(v as number)}
+                    />
+                  </div>
+                  {cartTotals.discount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 13, color: '#94a3b8' }}>Less: Discount</span>
+                      <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>−₹{cartTotals.discount.toFixed(2)}</span>
+                    </div>
+                  )}
                   {[
-                    { label: 'Subtotal', value: cartSubtotal().toFixed(2), color: '#475569', size: 13, weight: 500 },
-                    { label: 'GST',      value: cartGst().toFixed(2),      color: '#64748b', size: 13, weight: 500 },
+                    { label: 'Subtotal', value: cartTotals.subTotal.toFixed(2), color: '#475569', size: 13, weight: 500 },
+                    { label: 'GST',      value: cartTotals.totalGst.toFixed(2), color: '#64748b', size: 13, weight: 500 },
                   ].map(row => (
                     <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: row.size, color: '#94a3b8' }}>{row.label}</span>
@@ -843,14 +1199,33 @@ const SalesOrderPage: React.FC = () => {
                   <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Total</span>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotal().toFixed(2)}</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotals.total.toFixed(2)}</span>
                   </div>
                 </div>
               ) : (
                 <>
+                  <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 70px 60px 64px 58px 48px 72px 20px' : '1fr 80px 65px 72px 66px 56px 82px 22px', gap: '0 8px', padding: '2px 0', alignItems: 'center' }}>
+                    <div style={{ gridColumn: '1 / 7', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}</div>
+                    <InputNumber
+                      size="small" min={0} precision={2}
+                      value={overallDiscValue ?? undefined}
+                      max={discountType === 'PERCENT' ? 100 : undefined}
+                      {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                      style={{ width: '100%', height: isTablet ? 26 : 30 }} placeholder="0"
+                      onChange={v => setOverallDiscValue(v as number)}
+                    />
+                    <div />
+                  </div>
+                  {cartTotals.discount > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 70px 60px 64px 58px 48px 72px 20px' : '1fr 80px 65px 72px 66px 56px 82px 22px', gap: '0 8px', padding: '2px 0' }}>
+                      <div style={{ gridColumn: '1 / 7', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Less: Discount</div>
+                      <div style={{ textAlign: 'right', fontSize: 12, color: '#dc2626' }}>−₹{cartTotals.discount.toFixed(2)}</div>
+                      <div />
+                    </div>
+                  )}
                   {[
-                    { label: 'Subtotal', value: cartSubtotal().toFixed(2), color: '#0f172a' },
-                    { label: 'GST',      value: cartGst().toFixed(2),      color: '#64748b' },
+                    { label: 'Subtotal', value: cartTotals.subTotal.toFixed(2), color: '#0f172a' },
+                    { label: 'GST',      value: cartTotals.totalGst.toFixed(2), color: '#64748b' },
                   ].map(row => (
                     <div key={row.label} style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 70px 60px 64px 58px 48px 72px 20px' : '1fr 80px 65px 72px 66px 56px 82px 22px', gap: '0 8px', padding: '2px 0' }}>
                       <div style={{ gridColumn: '1 / 7', textAlign: 'right', fontSize: 12, color: '#64748b' }}>{row.label}</div>
@@ -861,7 +1236,7 @@ const SalesOrderPage: React.FC = () => {
                   <div style={{ height: 1, background: '#e2e8f0', margin: '6px 0 4px' }} />
                   <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 70px 60px 64px 58px 48px 72px 20px' : '1fr 80px 65px 72px 66px 56px 82px 22px', gap: '0 8px', padding: '2px 0' }}>
                     <div style={{ gridColumn: '1 / 7', textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Total</div>
-                    <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotal().toFixed(2)}</div>
+                    <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 800, color: P }}>₹{cartTotals.total.toFixed(2)}</div>
                     <div />
                   </div>
                 </>
@@ -886,9 +1261,23 @@ const SalesOrderPage: React.FC = () => {
           {/* Credit limit block */}
           {isOverLimit && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px' }}>
-              <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 13, marginBottom: 3 }}>Order Blocked — Credit Limit Exceeded</div>
+              <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 13, marginBottom: 3 }}>
+                {alreadyOverLimit ? 'Order Blocked — Credit Limit Reached' : 'Order Blocked — This Order Crosses the Limit'}
+              </div>
               <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
-                {selectedCustomer?.businessName} has ₹{Number(outstanding?.totalOutstanding || 0).toFixed(2)} outstanding against a limit of ₹{Number(outstanding?.creditLimit || 0).toFixed(2)}.
+                {alreadyOverLimit ? (
+                  <>
+                    {selectedCustomer?.businessName} has ₹{Number(outstanding?.totalOutstanding || 0).toFixed(2)} outstanding
+                    against a limit of ₹{Number(outstanding?.creditLimit || 0).toFixed(2)}. Collect payment before
+                    placing a new order.
+                  </>
+                ) : (
+                  <>
+                    {selectedCustomer?.businessName} has ₹{creditAvailable.toFixed(2)} of credit left, but this order
+                    is ₹{cartTotals.total.toFixed(2)}. Remove ₹{creditShortfall.toFixed(2)} from the order, or collect
+                    payment first.
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -906,7 +1295,7 @@ const SalesOrderPage: React.FC = () => {
             {creating ? 'Placing Order...'
               : isOverLimit ? 'Order Blocked'
               : priceErrors.length > 0 ? 'Fix Price Errors First'
-              : `Place Order · ₹${cartTotal().toFixed(2)}`}
+              : `Place Order · ₹${cartTotals.total.toFixed(2)}`}
           </Button>
         </div>
       )}

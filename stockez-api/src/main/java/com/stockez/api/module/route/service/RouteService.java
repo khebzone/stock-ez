@@ -9,6 +9,7 @@ import com.stockez.api.module.route.repository.RoutePlaceRepository;
 import com.stockez.api.module.route.repository.RouteRepository;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.repository.TenantRepository;
+import com.stockez.api.module.role.entity.Permission;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.common.exception.BusinessException;
@@ -32,6 +33,7 @@ public class RouteService {
     private final CustomerRepository customerRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final com.stockez.api.module.route.repository.RouteAllocationRepository allocationRepository;
 
     public RouteDtos.RouteResponse createRoute(RouteDtos.CreateRouteRequest req, UUID tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -39,7 +41,7 @@ public class RouteService {
 
         Route route = Route.builder()
                 .tenant(tenant)
-                .name(req.getName())
+                .name(req.getName().trim())
                 .description(req.getDescription())
                 .build();
 
@@ -49,7 +51,7 @@ public class RouteService {
     public RouteDtos.RouteResponse updateRoute(UUID routeId, RouteDtos.UpdateRouteRequest req, UUID tenantId) {
         Route route = routeRepository.findByIdAndTenantId(routeId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route", routeId.toString()));
-        route.setName(req.getName());
+        route.setName(req.getName().trim());
         if (req.getDescription() != null) route.setDescription(req.getDescription());
         return toResponse(routeRepository.save(route));
     }
@@ -59,7 +61,14 @@ public class RouteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Route", routeId.toString()));
         RoutePlace place = routePlaceRepository.findByIdAndRouteId(placeId, routeId)
                 .orElseThrow(() -> new ResourceNotFoundException("RoutePlace", placeId.toString()));
-        place.setName(req.getName());
+
+        routePlaceRepository.findFirstByRouteIdAndNameIgnoreCaseAndActiveTrue(routeId, req.getName().trim())
+                .ifPresent(existing -> {
+                    if (!existing.getId().equals(placeId))
+                        throw new BusinessException("Stop '" + req.getName().trim() + "' already exists on this route", "DUPLICATE_STOP");
+                });
+
+        place.setName(req.getName().trim());
         if (req.getDescription() != null) place.setDescription(req.getDescription());
         return toPlaceResponse(routePlaceRepository.save(place));
     }
@@ -68,13 +77,16 @@ public class RouteService {
         Route route = routeRepository.findByIdAndTenantId(routeId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route", routeId.toString()));
 
+        routePlaceRepository.findFirstByRouteIdAndNameIgnoreCaseAndActiveTrue(routeId, req.getName().trim())
+                .ifPresent(p -> { throw new BusinessException("Stop '" + req.getName().trim() + "' already exists on this route", "DUPLICATE_STOP"); });
+
         // Auto-assign next sort_order
         Integer maxOrder = routePlaceRepository.findMaxSortOrderByRouteId(routeId);
         int nextOrder = (maxOrder == null ? -1 : maxOrder) + 1;
 
         RoutePlace place = RoutePlace.builder()
                 .route(route)
-                .name(req.getName())
+                .name(req.getName().trim())
                 .description(req.getDescription())
                 .sortOrder(nextOrder)
                 .build();
@@ -106,8 +118,10 @@ public class RouteService {
         User salesPerson = userRepository.findByIdAndTenantId(req.getSalesPersonId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", req.getSalesPersonId().toString()));
 
-        if (salesPerson.getRole() != User.UserRole.SALES) {
-            throw new BusinessException("User is not a SALES person", "INVALID_ROLE");
+        boolean canCreateOrders = salesPerson.getCustomRole() != null &&
+                salesPerson.getCustomRole().getPermissions().contains(Permission.ORDERS_CREATE);
+        if (!canCreateOrders) {
+            throw new BusinessException("User does not have order creation permission", "INVALID_ROLE");
         }
 
         route.setAssignedSalesPerson(salesPerson);
@@ -148,8 +162,14 @@ public class RouteService {
 
     @Transactional(readOnly = true)
     public RouteDtos.RouteResponse getSalesPersonRoute(UUID salesPersonId, UUID tenantId) {
+        // Prefer the route this salesperson is permanently assigned to;
+        // otherwise fall back to their most recent route allocation so adding
+        // a customer works even on days/users without a standing assignment.
         Route route = routeRepository.findByTenantIdAndAssignedSalesPersonId(tenantId, salesPersonId)
-                .orElseThrow(() -> new BusinessException("No route assigned to this sales person", "NO_ROUTE_ASSIGNED"));
+                .orElseGet(() -> allocationRepository
+                        .findFirstByTenantIdAndSalesPersonIdOrderByAllocationDateDesc(tenantId, salesPersonId)
+                        .map(com.stockez.api.module.route.entity.RouteAllocation::getRoute)
+                        .orElseThrow(() -> new BusinessException("No route assigned to this sales person", "NO_ROUTE_ASSIGNED")));
         return toResponse(route);
     }
 

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Input, Button, Card, Row, Col, message, Spin, Divider, Switch, Select, InputNumber, Typography } from 'antd';
-import { SaveOutlined, ShopOutlined, SettingOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Card, Row, Col, message, Spin, Divider, Switch, Select, InputNumber, Typography, Upload } from 'antd';
+import { SaveOutlined, ShopOutlined, SettingOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import {
   useGetCompanyProfileQuery, useUpdateCompanyProfileMutation,
   useGetWorkflowSettingsQuery, useUpdateWorkflowSettingsMutation,
+  useUploadCompanyLogoMutation,
 } from '../../store/api/supplierApi';
 import PageHeader from '../../components/PageHeader';
 
@@ -16,6 +17,39 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
     </div>
     {children}
   </div>
+);
+
+const ImageField: React.FC<{
+  label: string;
+  hint: string;
+  url: string | null;
+  uploading: boolean;
+  onUpload: (file: File) => Promise<boolean>;
+  onRemove: () => void;
+}> = ({ label, hint, url, uploading, onUpload, onRemove }) => (
+  <>
+    <div style={{ marginBottom: 4, fontSize: 14, color: 'rgba(0,0,0,0.88)' }}>{label}</div>
+    {url ? (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <img
+          src={url}
+          alt={label}
+          style={{ height: 64, maxWidth: 220, objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', background: '#fff' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Upload accept="image/*" showUploadList={false} beforeUpload={onUpload}>
+            <Button size="small" icon={<UploadOutlined />} loading={uploading}>Change</Button>
+          </Upload>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={onRemove}>Remove</Button>
+        </div>
+      </div>
+    ) : (
+      <Upload accept="image/*" showUploadList={false} beforeUpload={onUpload}>
+        <Button icon={<UploadOutlined />} loading={uploading}>Upload</Button>
+      </Upload>
+    )}
+    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>{hint}</div>
+  </>
 );
 
 const SettingRow: React.FC<{ label: string; description: string; control: React.ReactNode }> = ({ label, description, control }) => (
@@ -32,6 +66,10 @@ const CompanySettingsPage: React.FC = () => {
   const [form] = Form.useForm();
   const { data, isLoading } = useGetCompanyProfileQuery();
   const [updateProfile, { isLoading: saving }] = useUpdateCompanyProfileMutation();
+  const [uploadLogo, { isLoading: uploadingLogo }] = useUploadCompanyLogoMutation();
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [extraImageUrl, setExtraImageUrl] = useState<string | null>(null);
+  const [paymentQrImageUrl, setPaymentQrImageUrl] = useState<string | null>(null);
   const { data: settingsData, isLoading: settingsLoading } = useGetWorkflowSettingsQuery();
   const [updateWorkflowSettings, { isLoading: savingSettings }] = useUpdateWorkflowSettingsMutation();
 
@@ -42,8 +80,8 @@ const CompanySettingsPage: React.FC = () => {
     creditLimitEnforcement: 'HARD_BLOCK',
     maxDiscountPercent: null as number | null,
     lockBillingAfterCheckout: false,
-    separateDeliveryAllocation: false,
     discountType: 'PERCENT' as 'PERCENT' | 'AMOUNT',
+    showPurchaseRateToSales: true,
   });
 
   useEffect(() => {
@@ -56,8 +94,8 @@ const CompanySettingsPage: React.FC = () => {
         creditLimitEnforcement: s.creditLimitEnforcement ?? 'HARD_BLOCK',
         maxDiscountPercent: s.maxDiscountPercent ?? null,
         lockBillingAfterCheckout: s.lockBillingAfterCheckout ?? false,
-        separateDeliveryAllocation: s.separateDeliveryAllocation ?? false,
         discountType: s.discountType ?? 'PERCENT',
+        showPurchaseRateToSales: s.showPurchaseRateToSales ?? true,
       });
     }
   }, [settingsData]);
@@ -82,6 +120,7 @@ const CompanySettingsPage: React.FC = () => {
   const wGstin     = Form.useWatch('gstin', form);
   const wFssai     = Form.useWatch('fssaiNumber', form);
   const wPan       = Form.useWatch('panNumber', form);
+  const wTerms     = Form.useWatch('invoiceTerms', form);
 
   useEffect(() => {
     if (data?.data) {
@@ -90,15 +129,38 @@ const CompanySettingsPage: React.FC = () => {
         name: p.name, ownerName: p.ownerName, phone: p.phone, email: p.email,
         address: p.address, city: p.city, state: p.state, pinCode: p.pinCode,
         gstin: p.gstin, fssaiNumber: p.fssaiNumber, panNumber: p.panNumber,
-        logoUrl: p.logoUrl,
+        invoiceTerms: p.invoiceTerms, stateCode: p.stateCode,
+        bankName: p.bankName, bankAccountName: p.bankAccountName,
+        bankAccountNumber: p.bankAccountNumber, bankBranch: p.bankBranch,
+        bankIfsc: p.bankIfsc, invoiceFooterNote: p.invoiceFooterNote,
       });
+      setLogoUrl(p.logoUrl || null);
+      setExtraImageUrl(p.extraImageUrl || null);
+      setPaymentQrImageUrl(p.paymentQrImageUrl || null);
     }
   }, [data, form]);
+
+  const uploadImage = (setter: (url: string) => void, label: string) => async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const result = await uploadLogo(formData).unwrap();
+      setter(result.data.url);
+      message.success(`${label} uploaded`);
+    } catch {
+      message.error(`Failed to upload ${label.toLowerCase()}`);
+    }
+    return false;
+  };
+
+  const handleLogoUpload = uploadImage((u) => setLogoUrl(u), 'Logo');
+  const handleExtraUpload = uploadImage((u) => setExtraImageUrl(u), 'Image');
+  const handleQrUpload = uploadImage((u) => setPaymentQrImageUrl(u), 'QR code');
 
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      await updateProfile(values).unwrap();
+      await updateProfile({ ...values, logoUrl, extraImageUrl, paymentQrImageUrl }).unwrap();
       message.success('Company profile updated');
     } catch (err: any) {
       if (err?.errorFields) {
@@ -133,25 +195,31 @@ const CompanySettingsPage: React.FC = () => {
                 <Row gutter={16}>
                   <Col span={24}>
                     <Form.Item name="name" label="Company / Business Name"
-                      rules={[{ required: true, message: 'Required' }]}>
+                      rules={[{ required: true, message: 'Company name is required' }]}>
                       <Input size="large" placeholder="e.g. Sri Murugan Distributors" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
                     <Form.Item name="ownerName" label="Owner / Proprietor Name"
-                      rules={[{ required: true, message: 'Required' }]}>
+                      rules={[{ required: true, message: 'Owner name is required' }]}>
                       <Input size="large" placeholder="e.g. K. Murugan" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
                     <Form.Item name="phone" label="Phone"
-                      rules={[{ required: true }, { pattern: /^[6-9]\d{9}$/, message: '10-digit mobile' }]}>
+                      rules={[
+                        { required: true, message: 'Phone number is required' },
+                        { pattern: /^[6-9]\d{9}$/, message: 'Enter a valid 10-digit mobile number starting with 6–9' },
+                      ]}>
                       <Input size="large" placeholder="9876543210" maxLength={10} />
                     </Form.Item>
                   </Col>
                   <Col span={24}>
                     <Form.Item name="email" label="Email"
-                      rules={[{ required: true }, { type: 'email', message: 'Valid email required' }]}>
+                      rules={[
+                        { required: true, message: 'Email address is required' },
+                        { type: 'email', message: 'Enter a valid email address (e.g. info@company.com)' },
+                      ]}>
                       <Input size="large" placeholder="info@company.com" />
                     </Form.Item>
                   </Col>
@@ -162,26 +230,33 @@ const CompanySettingsPage: React.FC = () => {
 
               <Section title="Address">
                 <Form.Item name="address" label="Street Address"
-                  rules={[{ required: true, message: 'Required' }]}>
+                  rules={[{ required: true, message: 'Street address is required' }]}>
                   <Input.TextArea rows={2} placeholder="Door No, Street, Area" />
                 </Form.Item>
                 <Row gutter={16}>
                   <Col xs={24} sm={8}>
                     <Form.Item name="city" label="City"
-                      rules={[{ required: true, message: 'Required' }]}>
+                      rules={[{ required: true, message: 'City is required' }]}>
                       <Input placeholder="e.g. Coimbatore" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={8}>
                     <Form.Item name="state" label="State"
-                      rules={[{ required: true, message: 'Required' }]}>
+                      rules={[{ required: true, message: 'State is required' }]}>
                       <Input placeholder="e.g. Tamil Nadu" />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={8}>
                     <Form.Item name="pinCode" label="PIN Code"
-                      rules={[{ required: true, message: 'Required' }, { pattern: /^\d{6}$/, message: '6-digit PIN' }]}>
+                      rules={[
+                        { required: true, message: 'PIN code is required' },
+                        { pattern: /^[1-9]\d{5}$/, message: 'Enter a valid 6-digit PIN code (e.g. 641001)' },
+                      ]}>
                       <Input placeholder="641001" maxLength={6} />
+                    </Form.Item>
+                    <Form.Item name="stateCode" label="GST State Code"
+                      rules={[{ pattern: /^$|^[0-9]{2}$/, message: 'Two digits, e.g. 33 for Tamil Nadu' }]}>
+                      <Input placeholder="33" maxLength={2} />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -193,20 +268,29 @@ const CompanySettingsPage: React.FC = () => {
                 <Row gutter={16}>
                   <Col xs={24} sm={12}>
                     <Form.Item name="gstin" label="GSTIN"
-                      rules={[{ required: true, message: 'Required' }, { pattern: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, message: 'Invalid GSTIN format' }]}>
-                      <Input placeholder="22AAAAA0000A1Z5" maxLength={15} style={{ textTransform: 'uppercase' }}
+                      rules={[
+                        { required: true, message: 'GSTIN is required' },
+                        { pattern: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, message: 'Invalid GSTIN — must be 15 characters like 33ABCDE1234F1Z5' },
+                      ]}>
+                      <Input placeholder="33ABCDE1234F1Z5" maxLength={15} style={{ textTransform: 'uppercase' }}
                         onChange={e => form.setFieldValue('gstin', e.target.value.toUpperCase())} />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
                     <Form.Item name="fssaiNumber" label="FSSAI License No."
-                      rules={[{ required: true, message: 'Required' }]}>
-                      <Input placeholder="10012345678901" maxLength={20} />
+                      rules={[
+                        { required: true, message: 'FSSAI license number is required' },
+                        { pattern: /^\d{14}$/, message: 'Must be exactly 14 digits (e.g. 10012345678901)' },
+                      ]}>
+                      <Input placeholder="10012345678901" maxLength={14} />
                     </Form.Item>
                   </Col>
                   <Col xs={24} sm={12}>
                     <Form.Item name="panNumber" label="PAN Number"
-                      rules={[{ required: true, message: 'Required' }, { pattern: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, message: 'Invalid PAN format' }]}>
+                      rules={[
+                        { required: true, message: 'PAN number is required' },
+                        { pattern: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, message: 'Invalid PAN — must be 10 characters like ABCDE1234F (5 letters, 4 digits, 1 letter)' },
+                      ]}>
                       <Input placeholder="ABCDE1234F" maxLength={10} style={{ textTransform: 'uppercase' }}
                         onChange={e => form.setFieldValue('panNumber', e.target.value.toUpperCase())} />
                     </Form.Item>
@@ -217,10 +301,112 @@ const CompanySettingsPage: React.FC = () => {
               <Divider style={{ margin: '8px 0 20px' }} />
 
               <Section title="Branding">
-                <Form.Item name="logoUrl" label="Logo URL"
-                  extra="Paste a publicly accessible image URL. Shown on printed invoices.">
-                  <Input placeholder="https://..." />
+                <div style={{ marginBottom: 4, fontSize: 14, color: 'rgba(0,0,0,0.88)' }}>Company Logo</div>
+                {logoUrl ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <img
+                      src={logoUrl}
+                      alt="Company logo"
+                      style={{ height: 64, maxWidth: 220, objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', background: '#fff' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <Upload accept="image/*" showUploadList={false} beforeUpload={handleLogoUpload}>
+                        <Button size="small" icon={<UploadOutlined />} loading={uploadingLogo}>Change</Button>
+                      </Upload>
+                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogoUrl(null)}>Remove</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Upload accept="image/*" showUploadList={false} beforeUpload={handleLogoUpload}>
+                    <Button icon={<UploadOutlined />} loading={uploadingLogo}>Upload Logo</Button>
+                  </Upload>
+                )}
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+                  Shown on printed invoices. JPG, PNG or WebP, max 5 MB.
+                </div>
+
+                <Divider style={{ margin: '20px 0' }} />
+
+                <ImageField
+                  label="Additional Image"
+                  hint="Optional second image on the invoice header — a deity, founder portrait or emblem."
+                  url={extraImageUrl}
+                  onUpload={handleExtraUpload}
+                  onRemove={() => setExtraImageUrl(null)}
+                  uploading={uploadingLogo}
+                />
+
+                <Divider style={{ margin: '20px 0' }} />
+
+                <ImageField
+                  label="Payment QR Code"
+                  hint="GPay / PhonePe / UPI QR, printed beside the bank details so customers can pay from the bill."
+                  url={paymentQrImageUrl}
+                  onUpload={handleQrUpload}
+                  onRemove={() => setPaymentQrImageUrl(null)}
+                  uploading={uploadingLogo}
+                />
+              </Section>
+
+              <Divider style={{ margin: '8px 0 20px' }} />
+
+              <Section title="Bank Details">
+                <Row gutter={16}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item name="bankName" label="Bank Name">
+                      <Input placeholder="e.g. Tamilnadu Mercantile Bank" maxLength={120} />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item name="bankAccountName" label="Account Name">
+                      <Input placeholder="Name on the account" maxLength={120} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col xs={24} sm={8}>
+                    <Form.Item name="bankAccountNumber" label="Account Number">
+                      <Input placeholder="Account number" maxLength={40} />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Form.Item name="bankBranch" label="Branch">
+                      <Input placeholder="Branch name" maxLength={120} />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Form.Item name="bankIfsc" label="IFSC Code"
+                      rules={[{ pattern: /^$|^[A-Z]{4}0[A-Z0-9]{6}$/, message: 'Invalid IFSC code' }]}>
+                      <Input placeholder="e.g. TMBL0000037" maxLength={11} style={{ textTransform: 'uppercase' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                  Printed on every invoice. Leave blank to omit the bank panel entirely.
+                </div>
+              </Section>
+
+              <Divider style={{ margin: '8px 0 20px' }} />
+
+              <Section title="Invoice Terms & Conditions">
+                <Form.Item name="invoiceTerms" label="Terms & Conditions" style={{ marginBottom: 4 }}>
+                  <Input.TextArea rows={4} placeholder={'e.g. Goods once sold will not be taken back.\nPayment due within 30 days.\nSubject to local jurisdiction.'} maxLength={2000} showCount />
                 </Form.Item>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+                  Printed on every invoice. Leave blank to show the default payment note instead.
+                </div>
+              </Section>
+
+              <Divider style={{ margin: '8px 0 20px' }} />
+
+              <Section title="Invoice Footer Note">
+                <Form.Item name="invoiceFooterNote" label="Closing Line" style={{ marginBottom: 4 }}>
+                  <Input.TextArea rows={2} maxLength={500} showCount
+                    placeholder="A closing quote or message, centred at the foot of the bill" />
+                </Form.Item>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+                  Tamil and other Indian scripts are supported.
+                </div>
               </Section>
 
             </Form>
@@ -250,6 +436,14 @@ const CompanySettingsPage: React.FC = () => {
               {wGstin   && <div>GSTIN: {wGstin}</div>}
               {wFssai   && <div>FSSAI: {wFssai}</div>}
               {wPan     && <div>PAN: {wPan}</div>}
+              {wTerms && (
+                <>
+                  <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 8, paddingTop: 8, fontWeight: 700, fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                    Terms & Conditions
+                  </div>
+                  <div style={{ whiteSpace: 'pre-line', marginTop: 4 }}>{wTerms}</div>
+                </>
+              )}
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: '#94a3b8' }}>
               This header appears on every printed invoice.
@@ -378,12 +572,12 @@ const CompanySettingsPage: React.FC = () => {
                 }
               />
               <SettingRow
-                label="Separate Delivery Allocation"
-                description="When ON, delivery is assigned to a route on a different date from sales. The route allocation form will show separate sales and delivery date fields."
+                label="Show Purchase Rate to Sales Staff"
+                description="When ON, the PR (purchase rate) is shown on product cards in Sales Order and Counter Sale. Turn OFF to hide product cost from salesmen."
                 control={
                   <Switch
-                    checked={ws.separateDeliveryAllocation}
-                    onChange={v => setWs(prev => ({ ...prev, separateDeliveryAllocation: v }))}
+                    checked={ws.showPurchaseRateToSales}
+                    onChange={v => setWs(prev => ({ ...prev, showPurchaseRateToSales: v }))}
                   />
                 }
               />
@@ -427,7 +621,7 @@ const CompanySettingsPage: React.FC = () => {
                   Billing lock: <strong>{ws.lockBillingAfterCheckout ? 'Locked after checkout' : 'Always open'}</strong>
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: 11 }}>
-                  Delivery allocation: <strong>{ws.separateDeliveryAllocation ? 'Separate date from sales' : 'Same day'}</strong>
+                  Purchase rate to sales: <strong>{ws.showPurchaseRateToSales ? 'Visible on product cards' : 'Hidden'}</strong>
                 </div>
               </div>
             </Card>

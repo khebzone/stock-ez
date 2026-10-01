@@ -43,7 +43,7 @@ public class RouteController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW','ORDERS_CREATE')")
     @Operation(summary = "List all routes")
     public ResponseEntity<ApiResponse<List<RouteDtos.RouteResponse>>> list(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -80,8 +80,8 @@ public class RouteController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Delete (deactivate) a route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Delete (deactivate) a route")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -111,8 +111,8 @@ public class RouteController {
     }
 
     @PostMapping("/{id}/assign")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Assign sales person to route [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_EDIT')")
+    @Operation(summary = "Assign sales person to route")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> assign(
             @PathVariable UUID id,
             @Valid @RequestBody RouteDtos.AssignSalesPersonRequest request,
@@ -121,7 +121,7 @@ public class RouteController {
     }
 
     @GetMapping("/{id}/plan")
-    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','DELIVERY_VIEW','ORDERS_CREATE')")
     @Operation(summary = "Get beat plan for route — places and customers in visit order")
     public ResponseEntity<ApiResponse<RouteDtos.RoutePlanResponse>> getPlan(
             @PathVariable UUID id,
@@ -159,7 +159,7 @@ public class RouteController {
     }
 
     @GetMapping("/my-route")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROUTES_VIEW')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ROUTES_VIEW','ORDERS_CREATE')")
     @Operation(summary = "Get assigned route for current sales person")
     public ResponseEntity<ApiResponse<RouteDtos.RouteResponse>> myRoute(
             @RequestHeader("X-Tenant-Id") UUID tenantId,

@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { Input, Skeleton, Button, Grid } from 'antd';
+import { Input, Skeleton, Button, Grid, DatePicker, Select } from 'antd';
 import { SearchOutlined, WarningOutlined, ExclamationCircleOutlined, FileExcelOutlined } from '@ant-design/icons';
 import { exportToXLSX } from '../../components/TableToolbar';
 import { useGetAgingReportQuery } from '../../store/api/reportApi';
+import dayjs, { Dayjs } from 'dayjs';
 
 const fmt = (v: number) => v > 0 ? `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—';
 
 const BUCKETS = [
-  { key: 'bucket0to30',  label: '0–30 Days',  color: '#059669', bg: '#ecfdf5' },
-  { key: 'bucket31to60', label: '31–60 Days', color: '#d97706', bg: '#fffbeb' },
-  { key: 'bucket61to90', label: '61–90 Days', color: '#ea580c', bg: '#fff7ed' },
-  { key: 'bucket90plus', label: '>90 Days',   color: '#dc2626', bg: '#fef2f2' },
+  { key: 'bucket0to7',   label: '0–7 Days',   color: '#059669', bg: '#ecfdf5' },
+  { key: 'bucket8to15',  label: '8–15 Days',  color: '#16a34a', bg: '#f0fdf4' },
+  { key: 'bucket16to30', label: '16–30 Days', color: '#ca8a04', bg: '#fefce8' },
+  { key: 'bucket31to45', label: '31–45 Days', color: '#d97706', bg: '#fffbeb' },
+  { key: 'bucket46to60', label: '46–60 Days', color: '#ea580c', bg: '#fff7ed' },
+  { key: 'bucket60plus', label: '>60 Days',   color: '#dc2626', bg: '#fef2f2' },
 ];
 
 const AgingReportPage: React.FC = () => {
@@ -18,13 +21,16 @@ const AgingReportPage: React.FC = () => {
   const isMobile = !screens.md;
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'totalOutstanding', dir: 'desc' });
+  const [asOfDate, setAsOfDate] = useState<Dayjs>(dayjs());
+  const [bucketFilter, setBucketFilter] = useState<string | null>(null);
 
-  const { data, isLoading } = useGetAgingReportQuery();
+  const { data, isLoading } = useGetAgingReportQuery(asOfDate.format('YYYY-MM-DD'));
   const rows: any[] = data?.data?.rows || [];
   const summary: any = data?.data?.summary || {};
 
   const filtered = rows
     .filter(r => !search || r.businessName?.toLowerCase().includes(search.toLowerCase()) || r.phone?.includes(search))
+    .filter(r => !bucketFilter || Number(r[bucketFilter] || 0) > 0)
     .sort((a, b) => {
       const va = Number(a[sort.key] || 0), vb = Number(b[sort.key] || 0);
       return sort.dir === 'desc' ? vb - va : va - vb;
@@ -39,12 +45,14 @@ const AgingReportPage: React.FC = () => {
       {/* Header */}
       <div>
         <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: -0.5 }}>Aging Report</div>
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Outstanding balances bucketed by overdue period</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+          Outstanding balances bucketed by overdue period &nbsp;·&nbsp; As of {asOfDate.format('DD MMM YYYY')}
+        </div>
       </div>
 
       {/* Summary cards */}
       {isLoading ? <Skeleton active paragraph={{ rows: 2 }} /> : (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(7, 1fr)', gap: 12 }}>
           <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8 }}>Total Outstanding</div>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginTop: 6 }}>₹{Number(summary.totalOutstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
@@ -63,37 +71,69 @@ const AgingReportPage: React.FC = () => {
       )}
 
       {/* Search + Export */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <Input
           prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
           placeholder="Search customer name or phone..."
           value={search} onChange={e => setSearch(e.target.value)}
           allowClear style={{ borderRadius: 10, maxWidth: 380 }}
         />
+        <DatePicker
+          value={asOfDate}
+          onChange={(d) => d && setAsOfDate(d)}
+          format="DD MMM YYYY"
+          allowClear={false}
+          style={{ borderRadius: 8 }}
+          disabledDate={(d) => d.isAfter(dayjs())}
+        />
+        <Select
+          value={bucketFilter}
+          onChange={setBucketFilter}
+          allowClear
+          placeholder="All ranges"
+          style={{ width: 160, borderRadius: 8 }}
+          options={[
+            { label: '0–7 Days',   value: 'bucket0to7' },
+            { label: '8–15 Days',  value: 'bucket8to15' },
+            { label: '16–30 Days', value: 'bucket16to30' },
+            { label: '31–45 Days', value: 'bucket31to45' },
+            { label: '46–60 Days', value: 'bucket46to60' },
+            { label: '>60 Days',   value: 'bucket60plus' },
+          ]}
+        />
         <Button
           icon={<FileExcelOutlined />}
           disabled={filtered.length === 0}
-          onClick={() => exportToXLSX(
-            filtered.map((r: any) => ({
-              customer: r.businessName,
-              phone: r.phone,
-              total: r.totalOutstanding,
-              d0_30:  r.bucket0to30,
-              d31_60: r.bucket31to60,
-              d61_90: r.bucket61to90,
-              d90p:   r.bucket90plus,
-            })),
-            [
-              { title: 'Customer',    key: 'customer', dataIndex: 'customer' },
-              { title: 'Phone',       key: 'phone',    dataIndex: 'phone' },
-              { title: 'Total',       key: 'total',    dataIndex: 'total' },
-              { title: '0-30 Days',   key: 'd0_30',    dataIndex: 'd0_30' },
-              { title: '31-60 Days',  key: 'd31_60',   dataIndex: 'd31_60' },
-              { title: '61-90 Days',  key: 'd61_90',   dataIndex: 'd61_90' },
-              { title: '>90 Days',    key: 'd90p',     dataIndex: 'd90p' },
-            ],
-            `aging-report-${new Date().toISOString().split('T')[0]}`
-          )}
+          onClick={() => {
+            const activeBucket = BUCKETS.find(b => b.key === bucketFilter);
+            const bucketCols = activeBucket
+              ? [{ title: activeBucket.label, key: 'bucketAmt', dataIndex: 'bucketAmt' }]
+              : [
+                  { title: '0-7 Days',   key: 'd0_7',   dataIndex: 'd0_7' },
+                  { title: '8-15 Days',  key: 'd8_15',  dataIndex: 'd8_15' },
+                  { title: '16-30 Days', key: 'd16_30', dataIndex: 'd16_30' },
+                  { title: '31-45 Days', key: 'd31_45', dataIndex: 'd31_45' },
+                  { title: '46-60 Days', key: 'd46_60', dataIndex: 'd46_60' },
+                  { title: '>60 Days',   key: 'd60p',   dataIndex: 'd60p' },
+                ];
+            exportToXLSX(
+              filtered.map((r: any) => ({
+                customer:  r.businessName,
+                phone:     r.phone,
+                total:     r.totalOutstanding,
+                ...(activeBucket
+                  ? { bucketAmt: r[activeBucket.key] }
+                  : { d0_7: r.bucket0to7, d8_15: r.bucket8to15, d16_30: r.bucket16to30, d31_45: r.bucket31to45, d46_60: r.bucket46to60, d60p: r.bucket60plus }),
+              })),
+              [
+                { title: 'Customer', key: 'customer', dataIndex: 'customer' },
+                { title: 'Phone',    key: 'phone',    dataIndex: 'phone' },
+                { title: 'Total',    key: 'total',    dataIndex: 'total' },
+                ...bucketCols,
+              ],
+              `aging-report-${activeBucket ? activeBucket.label.replace(/[^a-z0-9]/gi, '-').toLowerCase() : 'all'}-${asOfDate.format('YYYY-MM-DD')}`
+            );
+          }}
           style={{ borderRadius: 8 }}
         >
           Export Excel
@@ -104,14 +144,16 @@ const AgingReportPage: React.FC = () => {
       {isLoading ? <Skeleton active paragraph={{ rows: 6 }} /> : (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflowX: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           {/* Table header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 20px', minWidth: 560 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 20px', minWidth: 820 }}>
             {[
               { label: 'Customer', key: 'businessName' },
               { label: 'Total Outstanding', key: 'totalOutstanding' },
-              { label: '0–30 Days', key: 'bucket0to30' },
-              { label: '31–60 Days', key: 'bucket31to60' },
-              { label: '61–90 Days', key: 'bucket61to90' },
-              { label: '>90 Days', key: 'bucket90plus' },
+              { label: '0–7 Days', key: 'bucket0to7' },
+              { label: '8–15 Days', key: 'bucket8to15' },
+              { label: '16–30 Days', key: 'bucket16to30' },
+              { label: '31–45 Days', key: 'bucket31to45' },
+              { label: '46–60 Days', key: 'bucket46to60' },
+              { label: '>60 Days', key: 'bucket60plus' },
             ].map(col => (
               <div key={col.key} onClick={() => toggleSort(col.key)} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8, cursor: 'pointer', userSelect: 'none' }}>
                 {col.label}<SortIcon k={col.key} />
@@ -125,12 +167,12 @@ const AgingReportPage: React.FC = () => {
             </div>
           ) : (
             filtered.map((row: any, i: number) => {
-              const isHighRisk = Number(row.bucket90plus || 0) > 0;
-              const isMedRisk  = !isHighRisk && Number(row.bucket61to90 || 0) > 0;
+              const isHighRisk = Number(row.bucket60plus || 0) > 0;
+              const isMedRisk  = !isHighRisk && Number(row.bucket46to60 || 0) > 0;
               return (
                 <div key={row.customerId} style={{
-                  display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr',
-                  padding: '14px 20px', alignItems: 'center', minWidth: 560,
+                  display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr',
+                  padding: '14px 20px', alignItems: 'center', minWidth: 820,
                   borderBottom: i < filtered.length - 1 ? '1px solid #f1f5f9' : 'none',
                   background: isHighRisk ? '#fff5f5' : isMedRisk ? '#fffbf0' : '#fff',
                   transition: 'background 0.15s',
@@ -158,7 +200,7 @@ const AgingReportPage: React.FC = () => {
 
           {/* Footer totals */}
           {filtered.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', padding: '14px 20px', borderTop: '2px solid #e2e8f0', background: '#f8fafc', minWidth: 560 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr', padding: '14px 20px', borderTop: '2px solid #e2e8f0', background: '#f8fafc', minWidth: 820 }}>
               <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>Total ({filtered.length} customers)</div>
               <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 15 }}>
                 ₹{filtered.reduce((s, r) => s + Number(r.totalOutstanding || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}

@@ -7,8 +7,9 @@ import {
   SettingOutlined, ReloadOutlined, EnvironmentOutlined,
   CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, DownloadOutlined,
 } from '@ant-design/icons';
-import * as XLSX from 'xlsx';
+import { exportSheetsToXLSX } from '../../components/TableToolbar';
 import dayjs from 'dayjs';
+import { noFutureDates } from '../../utils/date';
 import {
   useGetAttendanceSettingsQuery,
   useSaveAttendanceSettingsMutation,
@@ -18,6 +19,8 @@ import {
   useLazyGetAttendanceByUserQuery,
 } from '../../store/api/attendanceApi';
 import { useGetUsersQuery } from '../../store/api/userApi';
+import { getUser, hasPermission } from '../../utils/permissions';
+import AttendanceSelfCheckIn from '../../components/AttendanceSelfCheckIn';
 
 const { Option } = Select;
 const { useBreakpoint } = Grid;
@@ -39,20 +42,25 @@ const AttendancePage: React.FC = () => {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
-  const { data: settingsData, isLoading: settingsLoading } = useGetAttendanceSettingsQuery();
+  const currentUser = getUser();
+  const hasViewPermission = hasPermission('ATTENDANCE_VIEW');
+  const showSelfCheckIn = currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPER_ADMIN'
+    && hasPermission('ATTENDANCE_CHECKIN');
+
+  const { data: settingsData, isLoading: settingsLoading } = useGetAttendanceSettingsQuery(undefined, { skip: !hasViewPermission });
   const settings = settingsData?.data;
 
-  const { data: usersData } = useGetUsersQuery();
+  const { data: usersData } = useGetUsersQuery(undefined, { skip: !hasViewPermission });
   const users = (usersData?.data?.content || usersData?.data || []).filter((u: any) => u.active && u.roleName !== 'SUPER_ADMIN' && u.roleName !== 'ADMIN');
 
   const { data: attendanceData, isLoading: attendanceLoading, refetch } = useGetAttendanceByDateQuery(
     fmtDate(selectedDate),
-    { skip: !!filterUserId }
+    { skip: !!filterUserId || !hasViewPermission }
   );
 
   const { data: userAttData, isLoading: userAttLoading } = useGetAttendanceByUserQuery(
     { userId: filterUserId!, from: fmtDate(selectedDate.startOf('month')), to: fmtDate(selectedDate.endOf('month')) },
-    { skip: !filterUserId }
+    { skip: !filterUserId || !hasViewPermission }
   );
 
   const [saveSettings, { isLoading: saving }] = useSaveAttendanceSettingsMutation();
@@ -169,17 +177,35 @@ const AttendancePage: React.FC = () => {
           'Check Out': r.checkOutTime ? dayjs(r.checkOutTime).format('hh:mm A') : '—',
         }));
 
-      const wb = XLSX.utils.book_new();
-
-      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-      wsSummary['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 24 }, { wch: 10 }, { wch: 20 }, { wch: 50 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-      const wsDetail = XLSX.utils.json_to_sheet(detailRows);
-      wsDetail['!cols'] = [{ wch: 16 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsDetail, 'Day-wise Records');
-
-      XLSX.writeFile(wb, `Attendance_${monthLabel}.xlsx`);
+      await exportSheetsToXLSX([
+        {
+          sheetName: 'Summary',
+          data: summaryRows,
+          columns: [
+            { title: 'Name', key: 'Name' },
+            { title: 'Role', key: 'Role' },
+            { title: 'Present', key: 'Present', type: 'number' },
+            { title: 'Late (counted as present)', key: 'Late (counted as present)', type: 'number' },
+            { title: 'Absent', key: 'Absent', type: 'number' },
+            { title: 'Total Tracked Days', key: 'Total Tracked Days', type: 'number' },
+            { title: 'Absent Dates', key: 'Absent Dates' },
+          ],
+          options: { title: 'Attendance Summary', subtitle: `${monthLabel} · ${summaryRows.length} staff` },
+        },
+        {
+          sheetName: 'Day-wise Records',
+          data: detailRows,
+          columns: [
+            { title: 'Date', key: 'Date' },
+            { title: 'Name', key: 'Name' },
+            { title: 'Role', key: 'Role' },
+            { title: 'Status', key: 'Status' },
+            { title: 'Check In', key: 'Check In' },
+            { title: 'Check Out', key: 'Check Out' },
+          ],
+          options: { title: 'Day-wise Records', subtitle: `${monthLabel} · ${detailRows.length} records` },
+        },
+      ], `Attendance_${monthLabel}`);
       message.success(`Attendance_${monthLabel}.xlsx downloaded`);
     } catch {
       message.error('Failed to export. Please try again.');
@@ -217,6 +243,20 @@ const AttendancePage: React.FC = () => {
     checkOutCol,
   ];
 
+  // Staff who can only check themselves in (no permission to view everyone's attendance)
+  // get a minimal page — the full report/settings below would 403 for them.
+  if (!hasViewPermission) {
+    return (
+      <div style={{ maxWidth: 440, margin: '0 auto' }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Attendance</div>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{dayjs().format('DD MMM YYYY')}</div>
+        </div>
+        <AttendanceSelfCheckIn />
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Header */}
@@ -246,6 +286,14 @@ const AttendancePage: React.FC = () => {
           </Button>
         </Space>
       </div>
+
+      {/* Self check-in (staff who can also view the report) */}
+      {showSelfCheckIn && (
+        <Card title="My Attendance" size="small" style={{ marginBottom: 20, maxWidth: 380 }}
+          styles={{ body: { padding: isMobile ? 12 : 16 } }}>
+          <AttendanceSelfCheckIn compact />
+        </Card>
+      )}
 
       {/* Settings not configured warning */}
       {!settingsLoading && settings && !settings.configured && (
@@ -320,6 +368,7 @@ const AttendancePage: React.FC = () => {
           format="DD MMM YYYY"
           picker={filterUserId ? 'month' : 'date'}
           allowClear={false}
+          disabledDate={noFutureDates}
           style={{ width: isMobile ? '100%' : 180 }}
         />
         <Select

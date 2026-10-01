@@ -4,7 +4,7 @@ import {
   TruckOutlined, CheckCircleOutlined, WalletOutlined, EnvironmentOutlined,
   PhoneOutlined, ShoppingOutlined, CompassOutlined,
 } from '@ant-design/icons';
-import { useGetMyDeliveriesQuery, useMarkDeliveredMutation, useDispatchOrderMutation } from '../../store/api/orderApi';
+import { useGetMyDeliveriesQuery, useMarkDeliveredMutation, useDispatchOrderMutation, useReturnToWarehouseMutation, useMarkShopClosedMutation } from '../../store/api/orderApi';
 import { useCollectPaymentMutation } from '../../store/api/paymentApi';
 import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
 
@@ -19,9 +19,10 @@ const MODE_COLOR: Record<string, string> = {
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const cfg: Record<string, { color: string; bg: string; label: string }> = {
-    PREPARED:   { color: '#d97706', bg: '#fef3c7', label: '📦 PREPARED'   },
-    DISPATCHED: { color: P,         bg: PL,         label: '🚚 DISPATCHED' },
-    DELIVERED:  { color: '#059669', bg: '#ecfdf5', label: '✓ DELIVERED'   },
+    PACKED:                { color: '#d97706', bg: '#fef3c7', label: '📦 PACKED'              },
+    DISPATCHED:            { color: P,         bg: PL,         label: '🚚 DISPATCHED'          },
+    DELIVERED:             { color: '#059669', bg: '#ecfdf5', label: '✓ DELIVERED'            },
+    RETURN_TO_WAREHOUSE:   { color: '#dc2626', bg: '#fef2f2', label: '↩ RETURN TO WAREHOUSE'  },
   };
   const s = cfg[status] || { color: '#64748b', bg: '#f3f4f6', label: status };
   return (
@@ -52,12 +53,15 @@ const DeliveryOrdersPage: React.FC = () => {
   const [payModal, setPayModal]                 = useState(false);
   const [selectedOrder, setSelectedOrder]       = useState<any>(null);
   const [deliverConfirmId, setDeliverConfirmId] = useState<string | null>(null);
+  const [returnConfirmId,  setReturnConfirmId]  = useState<string | null>(null);
   const [form] = Form.useForm();
 
-  const { data: deliveriesData, isLoading, refetch } = useGetMyDeliveriesQuery();
+  const { data: deliveriesData, isLoading, refetch } = useGetMyDeliveriesQuery(undefined, { refetchOnMountOrArgChange: true });
   const { data: methodsData }                        = useGetPaymentMethodsQuery();
-  const [dispatchOrder, { isLoading: dispatching }]  = useDispatchOrderMutation();
-  const [markDelivered, { isLoading: delivering }]   = useMarkDeliveredMutation();
+  const [dispatchOrder, { isLoading: dispatching }]      = useDispatchOrderMutation();
+  const [markDelivered, { isLoading: delivering }]       = useMarkDeliveredMutation();
+  const [returnToWarehouse, { isLoading: returning }]    = useReturnToWarehouseMutation();
+  const [markShopClosed, { isLoading: markingClosed }]   = useMarkShopClosedMutation();
   const [collectPayment, { isLoading: collecting }]  = useCollectPaymentMutation();
 
   const orders: any[] = deliveriesData?.data || [];
@@ -85,6 +89,27 @@ const DeliveryOrdersPage: React.FC = () => {
       refetch();
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to mark delivered');
+    }
+  };
+
+  const handleReturnToWarehouse = async (id: string) => {
+    try {
+      await returnToWarehouse(id).unwrap();
+      message.success('Order returned to warehouse');
+      setReturnConfirmId(null);
+      refetch();
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to return');
+    }
+  };
+
+  const handleShopClosed = async (id: string) => {
+    try {
+      await markShopClosed(id).unwrap();
+      message.success('Marked shop closed — retry this stop anytime today');
+      refetch();
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to update');
     }
   };
 
@@ -156,7 +181,7 @@ const DeliveryOrdersPage: React.FC = () => {
       ) : (
         [...pending, ...done].map((order: any) => {
           const isDelivered  = order.status === 'DELIVERED';
-          const isPrepared   = order.status === 'PREPARED';
+          const isPacked     = order.status === 'PACKED';
           const isDispatched = order.status === 'DISPATCHED';
           const hasBalance   = (order.balanceAmount || 0) > 0;
 
@@ -267,7 +292,7 @@ const DeliveryOrdersPage: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                {isPrepared && (
+                {isPacked && (
                   <button
                     onClick={() => handleDispatch(order.id)}
                     disabled={dispatching}
@@ -286,31 +311,58 @@ const DeliveryOrdersPage: React.FC = () => {
                 )}
 
                 {isDispatched && (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {hasBalance && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      {hasBalance && (
+                        <button
+                          onClick={() => openPay(order)}
+                          style={{
+                            flex: 1, height: 44, border: `1.5px solid ${P}`, borderRadius: 10,
+                            background: '#fff', color: P, fontWeight: 700, fontSize: 13,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          }}
+                        >
+                          <WalletOutlined />Collect
+                        </button>
+                      )}
                       <button
-                        onClick={() => openPay(order)}
+                        onClick={() => setDeliverConfirmId(order.id)}
                         style={{
-                          flex: 1, height: 44, border: `1.5px solid ${P}`, borderRadius: 10,
-                          background: '#fff', color: P, fontWeight: 700, fontSize: 13,
+                          flex: 1, height: 44, border: 'none', borderRadius: 10,
+                          background: 'linear-gradient(135deg, #059669, #047857)',
+                          color: '#fff', fontWeight: 700, fontSize: 13,
                           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          boxShadow: '0 3px 10px rgba(5,150,105,0.3)',
                         }}
                       >
-                        <WalletOutlined />Collect
+                        <CheckCircleOutlined />Mark Delivered
                       </button>
-                    )}
-                    <button
-                      onClick={() => setDeliverConfirmId(order.id)}
-                      style={{
-                        flex: 1, height: 44, border: 'none', borderRadius: 10,
-                        background: 'linear-gradient(135deg, #059669, #047857)',
-                        color: '#fff', fontWeight: 700, fontSize: 13,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        boxShadow: '0 3px 10px rgba(5,150,105,0.3)',
-                      }}
-                    >
-                      <CheckCircleOutlined />Mark Delivered
-                    </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => handleShopClosed(order.id)}
+                        disabled={markingClosed}
+                        style={{
+                          flex: 1, height: 38, border: '1.5px solid #e2e8f0', borderRadius: 10,
+                          background: '#fff', color: '#64748b', fontWeight: 600, fontSize: 12,
+                          cursor: markingClosed ? 'not-allowed' : 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        }}
+                      >
+                        <ShoppingOutlined />Shop Closed
+                      </button>
+                      <button
+                        onClick={() => setReturnConfirmId(order.id)}
+                        style={{
+                          flex: 1, height: 38, border: '1.5px solid #fecaca', borderRadius: 10,
+                          background: '#fff', color: '#dc2626', fontWeight: 600, fontSize: 12,
+                          cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        }}
+                      >
+                        <ShoppingOutlined />Return to Warehouse
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -359,6 +411,31 @@ const DeliveryOrdersPage: React.FC = () => {
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Confirm successful delivery?</div>
             <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>
               This marks the order as delivered to the customer and cannot be undone.
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm Return to Warehouse Modal */}
+      <Modal
+        title="Return to Warehouse?"
+        open={!!returnConfirmId}
+        onOk={() => returnConfirmId && handleReturnToWarehouse(returnConfirmId)}
+        onCancel={() => setReturnConfirmId(null)}
+        confirmLoading={returning}
+        okText="Yes, Return to Warehouse"
+        okButtonProps={{ danger: true, style: { fontWeight: 700 } }}
+      >
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '8px 0' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ShoppingOutlined style={{ color: '#dc2626', fontSize: 20 }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>This removes it from your list</div>
+            <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>
+              Only use this if you're done for the day and physically handing the goods back —
+              the warehouse will need to verify and re-dispatch it before it can be delivered again.
+              If you'll try this stop again later today, use "Shop Closed" instead.
             </div>
           </div>
         </div>

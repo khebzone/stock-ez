@@ -1,34 +1,38 @@
 import React, { useState } from 'react';
+import dayjs, { Dayjs } from 'dayjs';
+import { noFutureDates } from '../../utils/date';
 import {
-  Card, Table, Button, Drawer, Descriptions, message, Space, Input, Modal,
-  Form, Select, InputNumber, Grid, Spin, Radio,
+  Card, Table, Button, message, Space, Input, Modal,
+  Form, Select, InputNumber, Grid, Spin, DatePicker, Alert, Tooltip, Popconfirm,
 } from 'antd';
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined, EditOutlined,
-  PlusOutlined, RollbackOutlined, SearchOutlined, MinusOutlined,
+  PlusOutlined, SearchOutlined, MinusOutlined,
 } from '@ant-design/icons';
 import {
-  useGetOrdersQuery, useApproveOrderMutation, useCancelOrderMutation, useUpdateOrderMutation,
+  useGetAllOrdersQuery, useApproveOrderMutation, useApproveOrdersBatchMutation, useCancelOrderMutation, useUpdateOrderMutation,
   useCreateOrderMutation,
 } from '../../store/api/orderApi';
-import { useGetProductsQuery } from '../../store/api/productApi';
+import { useGetAllProductsQuery } from '../../store/api/productApi';
 import { useGetCustomersQuery } from '../../store/api/customerApi';
-import { useCollectPaymentMutation } from '../../store/api/paymentApi';
-import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
+import { useGetWorkflowSettingsQuery } from '../../store/api/supplierApi';
 import PageHeader from '../../components/PageHeader';
-import ReturnFromOrderModal from '../../components/ReturnFromOrderModal';
+import { hasPermission } from '../../utils/permissions';
 
 const { Option } = Select;
 
-const RETURNABLE_STATUSES = new Set(['DELIVERED']);
+// Identity for "the same real-world product" — catches duplicate product records
+// (same name/brand/unit under different IDs) so it can't be added to an order twice.
+const sameProductKey = (p: any) =>
+  [p?.name, p?.brand, p?.unit].map(v => String(v ?? '').trim().toLowerCase()).join('|');
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
   DRAFT:            { color: '#6b7280', bg: '#f3f4f6',  label: 'Draft' },
   SUBMITTED:        { color: '#f59e0b', bg: '#fffbeb',  label: 'Submitted' },
   PENDING_APPROVAL: { color: '#f59e0b', bg: '#fffbeb',  label: 'Pending Approval' },
   APPROVED:         { color: '#059669', bg: '#ecfdf5',  label: 'Approved' },
-  PREPARING:        { color: '#06b6d4', bg: '#ecfeff',  label: 'Preparing' },
-  PREPARED:         { color: '#06b6d4', bg: '#ecfeff',  label: 'Prepared' },
+  PACKING:          { color: '#06b6d4', bg: '#ecfeff',  label: 'Packing' },
+  PACKED:           { color: '#06b6d4', bg: '#ecfeff',  label: 'Packed' },
   DISPATCHED:       { color: '#8b5cf6', bg: '#f5f3ff',  label: 'Dispatched' },
   DELIVERED:        { color: '#10b981', bg: '#ecfdf5',  label: 'Delivered' },
   CANCELLED:        { color: '#ef4444', bg: '#fef2f2',  label: 'Cancelled' },
@@ -50,7 +54,6 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
 const InvoiceApproverPage: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
-  const drawerWidth = isMobile ? '100%' : 520;
   const editModalWidth = isMobile ? '100vw' : 780;
 
   const [drawerOpen,   setDrawerOpen]   = useState(false);
@@ -60,44 +63,41 @@ const InvoiceApproverPage: React.FC = () => {
   const [rejectingId,  setRejectingId]  = useState<string | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [bulkApproving, setBulkApproving]     = useState(false);
+  const [dateFilter,    setDateFilter]        = useState<Dayjs | null>(dayjs());
+  const [statusFilter,  setStatusFilter]      = useState<string | null>(null);
+  const [search,        setSearch]            = useState('');
+  const [approvingAll,  setApprovingAll]      = useState(false);
 
   // Edit order state
   const [editOpen,  setEditOpen]  = useState(false);
   const [editOrder, setEditOrder] = useState<any>(null);
   const [editItems, setEditItems] = useState<any[]>([]);
-
-  // Return modal state
-  const [returnOpen,  setReturnOpen]  = useState(false);
-  const [returnOrder, setReturnOrder] = useState<any>(null);
+  const [editOverallDisc, setEditOverallDisc] = useState<number | null>(null);
 
   // Create order state
   const [createOpen, setCreateOpen]               = useState(false);
-  const [isWalkIn, setIsWalkIn]                   = useState(false);
   const [createCustomerId, setCreateCustomerId]   = useState<string | undefined>();
-  const [walkInName, setWalkInName]               = useState('');
-  const [walkInPhone, setWalkInPhone]             = useState('');
   const [createItems, setCreateItems]             = useState<any[]>([]);
   const [createProductSearch, setCreateProductSearch] = useState('');
+  const [createOverallDisc, setCreateOverallDisc] = useState<number | null>(null);
 
-  // Collect payment state
-  const [payModal, setPayModal]   = useState(false);
-  const [payForm]                 = Form.useForm();
+  const { data: workflowData } = useGetWorkflowSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const discountType = workflowData?.data?.discountType ?? 'PERCENT';
+
   const [salesPersonFilter, setSalesPersonFilter] = useState<string | null>(null);
+  const [routeFilter, setRouteFilter] = useState<string | null>(null);
 
-  const { data: ordersData, isLoading, refetch } = useGetOrdersQuery({ size: 500 });
-  const { data: productsData } = useGetProductsQuery({ size: 500 });
-  const { data: customersData, isLoading: customersLoading } = useGetCustomersQuery({});
-  const { data: methodsData } = useGetPaymentMethodsQuery();
+  const { data: ordersData, isLoading, refetch } = useGetAllOrdersQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: productsData } = useGetAllProductsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: customersData, isLoading: customersLoading } = useGetCustomersQuery(undefined, { refetchOnMountOrArgChange: true });
   const [approveOrder, { isLoading: approving }] = useApproveOrderMutation();
+  const [approveOrdersBatch] = useApproveOrdersBatchMutation();
   const [cancelOrder,  { isLoading: cancelling }] = useCancelOrderMutation();
   const [updateOrder,  { isLoading: updating }]  = useUpdateOrderMutation();
   const [createOrder,  { isLoading: creating }]  = useCreateOrderMutation();
-  const [collectPayment, { isLoading: collecting }] = useCollectPaymentMutation();
-
   const orders:    any[] = ordersData?.data?.content || ordersData?.data || [];
   const products:  any[] = productsData?.data?.content || productsData?.data || [];
   const customers: any[] = customersData?.data?.content || customersData?.data || [];
-  const methods:   any[] = methodsData?.data || [];
 
   const salesPersonOptions = Array.from(
     new Map(
@@ -107,44 +107,31 @@ const InvoiceApproverPage: React.FC = () => {
     ).entries()
   ).sort((a, b) => a[1].localeCompare(b[1]));
 
-  const filteredOrders = salesPersonFilter
-    ? orders.filter((o: any) => o.salesPerson?.id === salesPersonFilter)
-    : orders;
+  const routeOptions = Array.from(
+    new Set(
+      orders
+        .filter((o: any) => o.customer?.routeName && (!salesPersonFilter || o.salesPerson?.id === salesPersonFilter))
+        .map((o: any) => o.customer.routeName as string)
+    )
+  ).sort();
 
-  const REQUIRES_REFERENCE = ['UPI', 'CHEQUE', 'NEFT', 'RTGS'];
-  const selectedMethodId = Form.useWatch('paymentMethodId', payForm);
-  const selectedMethod   = methods.find((m: any) => m.id === selectedMethodId);
-  const needsRef         = selectedMethod && REQUIRES_REFERENCE.includes(selectedMethod.mode);
-
-  const openPayModal = () => {
-    payForm.resetFields();
-    payForm.setFieldsValue({ amount: selectedOrder?.balanceAmount });
-    setPayModal(true);
-  };
-
-  const handleCollect = async () => {
-    try {
-      const values = await payForm.validateFields();
-      if (values.amount > selectedOrder?.balanceAmount) {
-        message.error(`Amount cannot exceed balance of ₹${Number(selectedOrder?.balanceAmount).toFixed(2)}`);
-        return;
-      }
-      await collectPayment({
-        orderId: selectedOrder.id,
-        amount: values.amount,
-        paymentMethodId: values.paymentMethodId,
-        referenceNumber: values.referenceNumber || null,
-        notes: values.notes || null,
-      }).unwrap();
-      message.success('Payment collected');
-      setPayModal(false);
-      setSelectedOrder(null);
-      refetch();
-    } catch (err: any) {
-      if (err?.errorFields) return;
-      message.error(err?.data?.message || 'Failed to collect payment');
+  const APPROVER_STATUSES = ['SUBMITTED', 'APPROVED', 'CANCELLED'];
+  const filteredOrders = orders.filter((o: any) => {
+    if (salesPersonFilter && o.salesPerson?.id !== salesPersonFilter) return false;
+    if (routeFilter && o.customer?.routeName !== routeFilter) return false;
+    if (statusFilter ? o.status !== statusFilter : !APPROVER_STATUSES.includes(o.status)) return false;
+    if (dateFilter && !dayjs(o.orderDate).isSame(dateFilter, 'day')) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const haystack = `${o.orderNumber || ''} ${o.customer?.businessName || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
     }
-  };
+    return true;
+  });
+
+  const oldPendingCount = dateFilter
+    ? orders.filter((o: any) => o.status === 'SUBMITTED' && !dayjs(o.orderDate).isSame(dateFilter, 'day')).length
+    : 0;
 
   const filteredCreateProducts = createProductSearch
     ? products.filter((p: any) => {
@@ -168,14 +155,42 @@ const InvoiceApproverPage: React.FC = () => {
   const handleApproveSelected = async () => {
     if (!selectedRowKeys.length) return;
     setBulkApproving(true);
-    let ok = 0;
-    for (const id of selectedRowKeys) {
-      try { await approveOrder(id).unwrap(); ok++; } catch { /* skip */ }
+    try {
+      const res = await approveOrdersBatch(selectedRowKeys).unwrap();
+      reportBulkApproveResult(res?.data);
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to approve orders');
     }
     setBulkApproving(false);
     setSelectedRowKeys([]);
-    message.success(`${ok} order(s) approved`);
     refetch();
+  };
+
+  const handleApproveAll = async () => {
+    const ids = filteredOrders.filter((o: any) => o.status === 'SUBMITTED').map((o: any) => o.id);
+    if (!ids.length) return;
+    setApprovingAll(true);
+    try {
+      const res = await approveOrdersBatch(ids).unwrap();
+      reportBulkApproveResult(res?.data);
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to approve orders');
+    }
+    setApprovingAll(false);
+    refetch();
+  };
+
+  const reportBulkApproveResult = (data: any) => {
+    const approvedCount = data?.approvedCount || 0;
+    const failures: any[] = data?.failures || [];
+    if (failures.length === 0) {
+      message.success(`${approvedCount} order(s) approved`);
+    } else {
+      message.warning(
+        `${approvedCount} order(s) approved, ${failures.length} failed: ` +
+        failures.map(f => `${f.orderNumber || f.orderId} (${f.reason})`).join('; ')
+      );
+    }
   };
 
   // ── Reject ───────────────────────────────────────────────────────────────
@@ -207,6 +222,7 @@ const InvoiceApproverPage: React.FC = () => {
       _name:  item.product?.name,
       _brand: item.product?.brand,
     })));
+    setEditOverallDisc(order.overallDiscountValue != null ? Number(order.overallDiscountValue) : null);
     setEditOpen(true);
   };
 
@@ -216,6 +232,19 @@ const InvoiceApproverPage: React.FC = () => {
   const removeEditItem = (i: number) => setEditItems(prev => prev.filter((_, idx) => idx !== i));
 
   const updateEditItem = (i: number, field: string, value: any) => {
+    if (field === 'productId' && value) {
+      const picked = products.find((p: any) => p.id === value);
+      const key = picked && sameProductKey(picked);
+      const dup = key && editItems.some((it, idx) => {
+        if (idx === i || !it.productId) return false;
+        const ip = products.find((x: any) => x.id === it.productId);
+        return ip && sameProductKey(ip) === key;
+      });
+      if (dup) {
+        message.warning(`"${picked.name}" is already added — increase its quantity instead of adding it again`);
+        return;
+      }
+    }
     setEditItems(prev => {
       const next = [...prev];
       next[i] = { ...next[i], [field]: value };
@@ -238,6 +267,16 @@ const InvoiceApproverPage: React.FC = () => {
     return gross - disc;
   };
 
+  // Bill-level discount — shown as an approximation here; the server pro-rata apportions
+  // it into the per-line amounts (same math as the other order-entry screens).
+  const calcOverallDiscount = (grossTotal: number, discValue: number | null) => {
+    const dv = discValue || 0;
+    if (dv <= 0 || grossTotal <= 0) return 0;
+    return discountType === 'PERCENT'
+      ? Math.round(grossTotal * Math.min(dv, 100)) / 100
+      : Math.min(dv, grossTotal);
+  };
+
   const handleSaveEdit = async () => {
     if (!editItems.length || editItems.some(i => !i.productId || !i.quantity || !i.unitPrice)) {
       message.error('Every item needs a product, quantity, and price');
@@ -248,6 +287,8 @@ const InvoiceApproverPage: React.FC = () => {
         id: editOrder.id,
         items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: i.discountPercent || 0 })),
         notes: editOrder.notes,
+        overallDiscountType: editOverallDisc && editOverallDisc > 0 ? discountType : null,
+        overallDiscountValue: editOverallDisc && editOverallDisc > 0 ? editOverallDisc : null,
       }).unwrap();
       message.success('Order updated');
       setEditOpen(false);
@@ -260,12 +301,10 @@ const InvoiceApproverPage: React.FC = () => {
 
   // ── Create order ──────────────────────────────────────────────────────────
   const openCreate = () => {
-    setIsWalkIn(false);
     setCreateCustomerId(undefined);
-    setWalkInName('');
-    setWalkInPhone('');
     setCreateItems(isMobile ? [] : [{ productId: undefined, quantity: 1, unitPrice: 0, discountPercent: 0, gstPercent: 0 }]);
     setCreateProductSearch('');
+    setCreateOverallDisc(null);
     setCreateOpen(true);
   };
 
@@ -279,6 +318,15 @@ const InvoiceApproverPage: React.FC = () => {
     if (idx >= 0) {
       setCreateItems(prev => prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
+      const key = sameProductKey(product);
+      const dupIdx = createItems.findIndex(i => {
+        const ip = products.find((x: any) => x.id === i.productId);
+        return ip && sameProductKey(ip) === key;
+      });
+      if (dupIdx >= 0) {
+        message.warning(`"${product.name}" is already added — increase its quantity instead of adding it again`);
+        return;
+      }
       setCreateItems(prev => [...prev, {
         productId:       product.id,
         quantity:        1,
@@ -290,6 +338,19 @@ const InvoiceApproverPage: React.FC = () => {
   };
 
   const updateCreateItem = (i: number, field: string, value: any) => {
+    if (field === 'productId' && value) {
+      const picked = products.find((p: any) => p.id === value);
+      const key = picked && sameProductKey(picked);
+      const dup = key && createItems.some((it, idx) => {
+        if (idx === i || !it.productId) return false;
+        const ip = products.find((x: any) => x.id === it.productId);
+        return ip && sameProductKey(ip) === key;
+      });
+      if (dup) {
+        message.warning(`"${picked.name}" is already added — increase its quantity instead of adding it again`);
+        return;
+      }
+    }
     setCreateItems(prev => {
       const next = [...prev];
       next[i] = { ...next[i], [field]: value };
@@ -305,28 +366,21 @@ const InvoiceApproverPage: React.FC = () => {
   };
 
   const handleCreateOrder = async () => {
-    if (isWalkIn) {
-      if (!walkInName.trim()) { message.error('Please enter the customer name'); return; }
-    } else {
-      if (!createCustomerId) { message.error('Please select a customer'); return; }
-    }
+    if (!createCustomerId) { message.error('Please select a customer'); return; }
     if (!createItems.length || createItems.some(i => !i.productId || !i.quantity || !i.unitPrice)) {
       message.error('Every item needs a product, quantity, and price');
       return;
     }
     try {
-      const result = await createOrder(isWalkIn
-        ? { walkInName: walkInName.trim(), walkInPhone: walkInPhone.trim() || undefined, items: createItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: i.discountPercent || 0 })) }
-        : { customerId: createCustomerId, items: createItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: i.discountPercent || 0 })) }
-      ).unwrap();
+      await createOrder({
+        customerId: createCustomerId,
+        items: createItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discountPercent: i.discountPercent || 0 })),
+        overallDiscountType: createOverallDisc && createOverallDisc > 0 ? discountType : null,
+        overallDiscountValue: createOverallDisc && createOverallDisc > 0 ? createOverallDisc : null,
+      }).unwrap();
       setCreateOpen(false);
       refetch();
-      if (isWalkIn && result?.data) {
-        setSelectedOrder(result.data);
-        openPayModal();
-      } else {
-        message.success('Order created');
-      }
+      message.success('Order created');
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to create order');
     }
@@ -340,7 +394,7 @@ const InvoiceApproverPage: React.FC = () => {
         <div>
           <div style={{ fontWeight: 700, color: '#1a1d2e' }}>#{r.orderNumber}</div>
           <div style={{ fontSize: 12, color: '#9ca3af' }}>
-            {r.orderDate ? new Date(r.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+            {r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
           </div>
         </div>
       ),
@@ -349,13 +403,8 @@ const InvoiceApproverPage: React.FC = () => {
       title: 'Customer', key: 'customer',
       render: (_: any, r: any) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#1a1d2e' }}>
-            {r.customer?.businessName || r.walkInName}
-            {!r.customer && r.walkInName && (
-              <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 10 }}>Walk-in</span>
-            )}
-          </div>
-          <div style={{ fontSize: 12, color: '#9ca3af' }}>{r.customer?.phone || r.walkInPhone}</div>
+          <div style={{ fontWeight: 600, color: '#1a1d2e' }}>{r.customer?.businessName}</div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>{r.customer?.phone}</div>
         </div>
       ),
     },
@@ -366,6 +415,12 @@ const InvoiceApproverPage: React.FC = () => {
           <div style={{ fontWeight: 600, color: '#1a1d2e' }}>{r.salesPerson?.fullName || '—'}</div>
           <div style={{ fontSize: 12, color: '#9ca3af' }}>{r.salesPerson?.phone}</div>
         </div>
+      ),
+    },
+    {
+      title: 'Route', key: 'route', hide: isMobile,
+      render: (_: any, r: any) => (
+        <span style={{ color: '#374151' }}>{r.customer?.routeName || '—'}</span>
       ),
     },
     {
@@ -387,34 +442,28 @@ const InvoiceApproverPage: React.FC = () => {
       render: (s: string) => <StatusPill status={s} />,
     },
     {
-      title: '', key: 'actions', width: isMobile ? 120 : 240,
+      title: '', key: 'actions', width: isMobile ? 120 : 200,
       render: (_: any, record: any) => (
-        <Space size={4} split={isMobile ? null : <span style={{ color: '#e8ecf0' }}>|</span>}>
-          <Button type="link" size="small" icon={<EyeOutlined />}
-            onClick={() => { setSelectedOrder(record); setDrawerOpen(true); }}>
-            {!isMobile && 'View'}
-          </Button>
-          {record.status === 'SUBMITTED' && (
+        <Space size={2} split={isMobile ? null : <span style={{ color: '#e8ecf0' }}>|</span>}>
+          <Tooltip title="View">
+            <Button type="text" size="small" icon={<EyeOutlined />}
+              onClick={() => { setSelectedOrder(record); setDrawerOpen(true); }} />
+          </Tooltip>
+          {record.status === 'SUBMITTED' && hasPermission('INVOICE_APPROVE') && (
             <>
-              <Button type="link" size="small" icon={<EditOutlined />} style={{ color: '#2563eb' }}
-                onClick={() => openEdit(record)}>
-                {!isMobile && 'Edit'}
-              </Button>
-              <Button type="link" size="small" icon={<CheckCircleOutlined />} style={{ color: '#059669' }}
-                loading={approving} onClick={() => handleApprove(record.id)}>
-                {!isMobile && 'Approve'}
-              </Button>
-              <Button type="link" size="small" danger icon={<CloseCircleOutlined />}
-                onClick={() => openRejectModal(record.id)}>
-                {!isMobile && 'Reject'}
-              </Button>
+              <Tooltip title="Edit">
+                <Button type="text" size="small" icon={<EditOutlined />} style={{ color: '#2563eb' }}
+                  onClick={() => openEdit(record)} />
+              </Tooltip>
+              <Tooltip title="Approve">
+                <Button type="text" size="small" icon={<CheckCircleOutlined />} style={{ color: '#059669' }}
+                  loading={approving} onClick={() => handleApprove(record.id)} />
+              </Tooltip>
+              <Tooltip title="Reject">
+                <Button type="text" size="small" danger icon={<CloseCircleOutlined />}
+                  onClick={() => openRejectModal(record.id)} />
+              </Tooltip>
             </>
-          )}
-          {RETURNABLE_STATUSES.has(record.status) && (
-            <Button type="link" size="small" danger icon={<RollbackOutlined />}
-              onClick={() => { setReturnOrder(record); setReturnOpen(true); }}>
-              {!isMobile && 'Return'}
-            </Button>
           )}
         </Space>
       ),
@@ -431,14 +480,53 @@ const InvoiceApproverPage: React.FC = () => {
         countLabel="pending"
         action={
           <Space wrap>
+            <Input
+              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+              placeholder="Search order # or customer..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+              style={{ width: 220 }}
+            />
+            <DatePicker
+              value={dateFilter}
+              onChange={(date) => { setDateFilter(date); setSelectedRowKeys([]); }}
+              format="DD MMM YYYY"
+              allowClear
+              placeholder="All dates"
+              disabledDate={noFutureDates}
+              style={{ width: 150 }}
+            />
+            <Select
+              allowClear
+              placeholder="All statuses"
+              value={statusFilter}
+              onChange={(v) => { setStatusFilter(v ?? null); setSelectedRowKeys([]); }}
+              style={{ width: 160 }}
+              options={[
+                { value: 'SUBMITTED',        label: 'Pending Approval' },
+                { value: 'APPROVED',         label: 'Approved' },
+                { value: 'CANCELLED',        label: 'Cancelled' },
+              ]}
+            />
             {salesPersonOptions.length > 0 && (
               <Select
                 allowClear
                 placeholder="All salespersons"
                 value={salesPersonFilter}
-                onChange={(v) => { setSalesPersonFilter(v ?? null); setSelectedRowKeys([]); }}
+                onChange={(v) => { setSalesPersonFilter(v ?? null); setRouteFilter(null); setSelectedRowKeys([]); }}
                 style={{ width: 180 }}
                 options={salesPersonOptions.map(([id, name]) => ({ value: id, label: name }))}
+              />
+            )}
+            {routeOptions.length > 0 && (
+              <Select
+                allowClear
+                placeholder="All routes"
+                value={routeFilter}
+                onChange={(v) => { setRouteFilter(v ?? null); setSelectedRowKeys([]); }}
+                style={{ width: 160 }}
+                options={routeOptions.map(r => ({ value: r, label: r }))}
               />
             )}
             {!isMobile && selectedRowKeys.length > 0 && (
@@ -448,6 +536,22 @@ const InvoiceApproverPage: React.FC = () => {
                 Approve Selected ({selectedRowKeys.length})
               </Button>
             )}
+            {(() => {
+              const pendingCount = filteredOrders.filter((o: any) => o.status === 'SUBMITTED').length;
+              return pendingCount > 0 && (
+                <Popconfirm
+                  title={`Approve all ${pendingCount} pending order(s)?`}
+                  description="This matches your current filters and cannot be undone."
+                  onConfirm={handleApproveAll}
+                  okText="Approve All"
+                >
+                  <Button type="primary" icon={<CheckCircleOutlined />} loading={approvingAll}
+                    style={{ background: '#059669', border: 'none', fontWeight: 700, borderRadius: 8 }}>
+                    Approve All ({pendingCount})
+                  </Button>
+                </Popconfirm>
+              );
+            })()}
             <Button onClick={refetch} style={{ borderRadius: 8 }}>Refresh</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}
               style={{ borderRadius: 8 }}>
@@ -456,6 +560,20 @@ const InvoiceApproverPage: React.FC = () => {
           </Space>
         }
       />
+
+      {oldPendingCount > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12, margin: isMobile ? '0 12px 12px' : '0 24px 12px' }}
+          message={`${oldPendingCount} order${oldPendingCount > 1 ? 's' : ''} pending approval from other dates`}
+          action={
+            <Button size="small" onClick={() => { setDateFilter(null); setStatusFilter('SUBMITTED'); setSelectedRowKeys([]); }}>
+              View All
+            </Button>
+          }
+        />
+      )}
 
       {isMobile ? (
         <Spin spinning={isLoading}>
@@ -490,16 +608,16 @@ const InvoiceApproverPage: React.FC = () => {
 
                 {/* Card body */}
                 <div style={{ padding: '14px 16px' }}>
-                  <div style={{ fontWeight: 700, color: '#1a1d2e', fontSize: 15, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {record.customer?.businessName || record.walkInName}
-                    {!record.customer && record.walkInName && (
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 10 }}>Walk-in</span>
-                    )}
+                  <div style={{ fontWeight: 700, color: '#1a1d2e', fontSize: 15, marginBottom: 3 }}>
+                    {record.customer?.businessName}
                   </div>
                   <div style={{ color: '#64748b', fontSize: 13, marginBottom: 10 }}>
-                    {record.customer?.phone || record.walkInPhone}
+                    {record.customer?.phone}
                     {record.salesPerson?.fullName && (
                       <span style={{ color: '#9ca3af' }}> · {record.salesPerson.fullName}</span>
+                    )}
+                    {record.customer?.routeName && (
+                      <span style={{ color: '#9ca3af' }}> · {record.customer.routeName}</span>
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -549,13 +667,6 @@ const InvoiceApproverPage: React.FC = () => {
                       </Button>
                     </>
                   )}
-                  {RETURNABLE_STATUSES.has(record.status) && (
-                    <Button size="small" danger icon={<RollbackOutlined />}
-                      onClick={() => { setReturnOrder(record); setReturnOpen(true); }}
-                      style={{ flex: 1, minWidth: 70 }}>
-                      Return
-                    </Button>
-                  )}
                 </div>
               </div>
             ))}
@@ -577,169 +688,134 @@ const InvoiceApproverPage: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Order Detail Drawer ───────────────────────────────────────────── */}
-      <Drawer
-        title={
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 16 }}>Order #{selectedOrder?.orderNumber}</div>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 2 }}>
-              {selectedOrder?.customer?.businessName || selectedOrder?.walkInName}
-              {!selectedOrder?.customer && selectedOrder?.walkInName && (
-                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 10 }}>Walk-in</span>
-              )}
-            </div>
-          </div>
-        }
+      {/* ── Order Detail Modal ───────────────────────────────────────────── */}
+      <Modal
+        title={selectedOrder ? `${selectedOrder.orderNumber} — ${selectedOrder.customer?.businessName}` : ''}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        width={drawerWidth}
-        footer={
-          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            {selectedOrder?.balanceAmount > 0 && (
-              <Button icon={<CheckCircleOutlined />} onClick={openPayModal}
-                style={{ background: '#2563eb', borderColor: '#2563eb', color: '#fff' }}>
-                Collect Payment
-              </Button>
-            )}
-            {selectedOrder?.status === 'SUBMITTED' && (
-              <>
-                <Button icon={<EditOutlined />} onClick={() => { openEdit(selectedOrder); setDrawerOpen(false); }}>
-                  Edit Order
-                </Button>
-                <Button danger icon={<CloseCircleOutlined />} onClick={() => openRejectModal(selectedOrder.id)}>
-                  Reject
-                </Button>
-                <Button type="primary" icon={<CheckCircleOutlined />} loading={approving}
-                  onClick={() => handleApprove(selectedOrder.id)}
-                  style={{ background: '#059669', border: 'none' }}>
-                  Approve Order
-                </Button>
-              </>
-            )}
-            {RETURNABLE_STATUSES.has(selectedOrder?.status) && (
-              <Button danger icon={<RollbackOutlined />}
-                onClick={() => { setReturnOrder(selectedOrder); setReturnOpen(true); }}>
-                Return Items
-              </Button>
-            )}
-          </Space>
-        }
+        onCancel={() => { setDrawerOpen(false); setSelectedOrder(null); }}
+        footer={[
+          selectedOrder?.status === 'SUBMITTED' && (
+            <Button key="edit" icon={<EditOutlined />}
+              onClick={() => { openEdit(selectedOrder); setDrawerOpen(false); }}>
+              Edit Order
+            </Button>
+          ),
+          selectedOrder?.status === 'SUBMITTED' && (
+            <Button key="reject" danger icon={<CloseCircleOutlined />}
+              onClick={() => openRejectModal(selectedOrder.id)}>
+              Reject
+            </Button>
+          ),
+          selectedOrder?.status === 'SUBMITTED' && (
+            <Button key="approve" type="primary" icon={<CheckCircleOutlined />} loading={approving}
+              onClick={() => handleApprove(selectedOrder.id)}
+              style={{ background: '#059669', border: 'none' }}>
+              Approve Order
+            </Button>
+          ),
+          <Button key="close" onClick={() => { setDrawerOpen(false); setSelectedOrder(null); }}>Close</Button>,
+        ].filter(Boolean)}
+        width={isMobile ? '98vw' : 900}
       >
         {selectedOrder && (
-          <>
-            <Descriptions bordered size="small" column={isMobile ? 1 : 2} style={{ marginBottom: 20 }}>
-              <Descriptions.Item label="Order #">{selectedOrder.orderNumber}</Descriptions.Item>
-              <Descriptions.Item label="Date">
-                {new Date(selectedOrder.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </Descriptions.Item>
-              <Descriptions.Item label="Customer">
-                {selectedOrder.customer?.businessName || selectedOrder.walkInName}
-                {!selectedOrder.customer && selectedOrder.walkInName && (
-                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 10 }}>Walk-in</span>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="Phone">{selectedOrder.customer?.phone || selectedOrder.walkInPhone || '—'}</Descriptions.Item>
-              <Descriptions.Item label="Sales Person">{selectedOrder.salesPerson?.fullName || '—'}</Descriptions.Item>
-              <Descriptions.Item label="Status"><StatusPill status={selectedOrder.status} /></Descriptions.Item>
-              <Descriptions.Item label="Subtotal">₹{selectedOrder.subTotal?.toFixed(2)}</Descriptions.Item>
-              <Descriptions.Item label="GST">₹{selectedOrder.totalGst?.toFixed(2)}</Descriptions.Item>
-              <Descriptions.Item label="Total" span={2}>
-                <strong style={{ color: '#059669', fontSize: 16 }}>₹{selectedOrder.totalAmount?.toFixed(2)}</strong>
-              </Descriptions.Item>
-              {selectedOrder.notes && (
-                <Descriptions.Item label="Notes" span={2}>{selectedOrder.notes}</Descriptions.Item>
-              )}
-            </Descriptions>
-
-            <div style={{ fontWeight: 700, color: '#1a1d2e', marginBottom: 12, fontSize: 14 }}>
-              Order Items ({selectedOrder.items?.length || 0})
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Summary grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12, background: '#f8fafc', borderRadius: 10, padding: '12px 16px' }}>
+              {[
+                { label: 'Order #',      value: selectedOrder.orderNumber },
+                { label: 'Date',         value: new Date(selectedOrder.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                { label: 'Customer',     value: selectedOrder.customer?.businessName },
+                { label: 'Phone',        value: selectedOrder.customer?.phone || '—' },
+                { label: 'Sales Person', value: selectedOrder.salesPerson?.fullName || '—' },
+                { label: 'Route',        value: selectedOrder.customer?.routeName || '—' },
+                { label: 'Status',       value: <StatusPill status={selectedOrder.status} /> },
+                { label: 'Outstanding',  value: <span style={{ color: Number(selectedOrder.balanceAmount) > 0 ? '#dc2626' : '#059669', fontWeight: 700 }}>₹{Number(selectedOrder.balanceAmount).toFixed(2)}</span> },
+              ].map((row, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{row.label}</div>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 13, marginTop: 2 }}>{row.value}</div>
+                </div>
+              ))}
             </div>
+
+            {selectedOrder.notes && (
+              <div style={{ fontSize: 13, color: '#64748b', background: '#fffbeb', borderRadius: 8, padding: '8px 12px' }}>{selectedOrder.notes}</div>
+            )}
+
+            {Number(selectedOrder.overallDiscountAmount) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, background: '#fef2f2', borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ color: '#64748b' }}>
+                  Overall Discount
+                  {selectedOrder.overallDiscountType === 'PERCENT' && selectedOrder.overallDiscountValue
+                    ? ` (${Number(selectedOrder.overallDiscountValue)}%)` : ''}
+                </span>
+                <span style={{ color: '#dc2626', fontWeight: 700 }}>−₹{Number(selectedOrder.overallDiscountAmount).toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Items table */}
             <Table
-              size="small" dataSource={selectedOrder.items || []} rowKey="id" pagination={false}
-              scroll={isMobile ? { x: true } : undefined}
+              size="small"
+              dataSource={[
+                ...(selectedOrder.items || []),
+                {
+                  id: '__total__',
+                  __isTotal: true,
+                  quantity: (selectedOrder.items || []).reduce((s: number, i: any) => s + (i.quantity || 0), 0),
+                  lineTotal: selectedOrder.totalAmount,
+                  gstAmount: selectedOrder.totalGst,
+                },
+              ]}
+              rowKey="id"
+              pagination={false}
+              scroll={{ x: isMobile ? 600 : undefined }}
+              onRow={(row: any) => row.__isTotal ? { style: { background: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' } } : {}}
               columns={[
                 {
-                  title: 'Product', key: 'product',
-                  render: (_: any, r: any) => (
+                  title: '#', width: 36,
+                  render: (_: any, row: any, i: number) => row.__isTotal
+                    ? <span style={{ fontWeight: 700 }}>Total</span>
+                    : <span style={{ color: '#94a3b8' }}>{i + 1}</span>,
+                },
+                {
+                  title: 'Product', key: 'product', width: 200,
+                  render: (_: any, row: any) => row.__isTotal ? null : (
                     <div>
-                      <div style={{ fontWeight: 600 }}>{r.product?.name}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{r.product?.brand}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{row.product?.name}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{row.product?.brand}</div>
                     </div>
                   ),
                 },
-                { title: 'Qty', dataIndex: 'quantity', key: 'qty', width: 50 },
-                ...(!isMobile ? [
-                  { title: 'Rate', dataIndex: 'unitPrice', key: 'rate', width: 75, render: (v: number) => `₹${Number(v)?.toFixed(2)}` },
-                  { title: 'Disc %', dataIndex: 'discountPercent', key: 'disc', width: 60, render: (v: number) => Number(v) > 0 ? `${Number(v).toFixed(2)}%` : '—' },
-                  { title: 'GST', dataIndex: 'gstAmount', key: 'gst', width: 70, render: (v: number) => `₹${Number(v)?.toFixed(2)}` },
-                ] : []),
-                { title: 'Total', dataIndex: 'lineTotal', key: 'total', width: 80, render: (v: number) => <strong style={{ color: '#059669' }}>₹{Number(v)?.toFixed(2)}</strong> },
+                {
+                  title: 'Qty', dataIndex: 'quantity', align: 'right' as const, width: 55,
+                  render: (v: number) => <span style={{ fontWeight: 600 }}>{v}</span>,
+                },
+                {
+                  title: 'Rate', dataIndex: 'unitPrice', align: 'right' as const, width: 80,
+                  render: (v: any, row: any) => row.__isTotal ? null : `₹${Number(v).toFixed(2)}`,
+                },
+                {
+                  title: 'Disc %', dataIndex: 'discountPercent', align: 'right' as const, width: 65,
+                  render: (v: any, row: any) => row.__isTotal ? null : (Number(v) > 0 ? `${Number(v).toFixed(2)}%` : '—'),
+                },
+                {
+                  title: 'GST', dataIndex: 'gstAmount', align: 'right' as const, width: 85,
+                  render: (v: any, row: any) => row.__isTotal ? `₹${Number(v).toFixed(2)}` : (
+                    <div>
+                      <div>₹{Number(v).toFixed(2)}</div>
+                      <div style={{ fontSize: 10, color: '#94a3b8' }}>{row.gstPercent || 0}%</div>
+                    </div>
+                  ),
+                },
+                {
+                  title: 'Total', dataIndex: 'lineTotal', align: 'right' as const, width: 90,
+                  render: (v: any) => <span style={{ fontWeight: 700, color: '#059669' }}>₹{Number(v).toFixed(2)}</span>,
+                },
               ]}
             />
-
-            {/* ── GST Split-up ── */}
-            {(() => {
-              const items = selectedOrder.items || [];
-              const groups: Record<string, { taxable: number; gstAmt: number }> = {};
-              items.forEach((r: any) => {
-                const key = String(Number(r.gstPercent));
-                if (!groups[key]) groups[key] = { taxable: 0, gstAmt: 0 };
-                groups[key].taxable += Number(r.lineTotal) - Number(r.gstAmount);
-                groups[key].gstAmt  += Number(r.gstAmount);
-              });
-              const rows = Object.entries(groups).sort(([a], [b]) => Number(a) - Number(b));
-              const totalSgst = rows.reduce((s, [, g]) => s + g.gstAmt / 2, 0);
-              return (
-                <div style={{ marginTop: 16, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', fontSize: 12 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        {['Tax %', 'Taxable', 'GST', 'SGST', 'CGST'].map(h => (
-                          <th key={h} style={{ padding: '6px 10px', textAlign: h === 'Tax %' ? 'left' : 'right', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(([gstPct, g]) => (
-                        <tr key={gstPct} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                          <td style={{ padding: '5px 10px', fontWeight: 600 }}>{gstPct}%</td>
-                          <td style={{ padding: '5px 10px', textAlign: 'right' }}>₹{g.taxable.toFixed(2)}</td>
-                          <td style={{ padding: '5px 10px', textAlign: 'right' }}>₹{g.gstAmt.toFixed(2)}</td>
-                          <td style={{ padding: '5px 10px', textAlign: 'right' }}>₹{(g.gstAmt / 2).toFixed(3)}</td>
-                          <td style={{ padding: '5px 10px', textAlign: 'right' }}>₹{(g.gstAmt / 2).toFixed(3)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div style={{ padding: '8px 12px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {[
-                      { label: 'GROSS (Taxable)', value: (Number(selectedOrder.totalAmount) - Number(selectedOrder.totalGst)).toFixed(2), color: '#374151' },
-                      { label: 'SGST Amount',     value: totalSgst.toFixed(2),                color: '#374151' },
-                      { label: 'CGST Amount',     value: totalSgst.toFixed(2),                color: '#374151' },
-                    ].map(row => (
-                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>{row.label}</span>
-                        <span style={{ fontWeight: 600, color: row.color }}>₹{row.value}</span>
-                      </div>
-                    ))}
-                    <div style={{ height: 1, background: '#e2e8f0', margin: '2px 0' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontWeight: 700, color: '#1a1d2e' }}>NET AMOUNT</span>
-                      <span style={{ fontWeight: 800, color: '#059669', fontSize: 14 }}>₹{Number(selectedOrder.totalAmount).toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748b' }}>OUTSTANDING</span>
-                      <span style={{ fontWeight: 600, color: Number(selectedOrder.balanceAmount) > 0 ? '#dc2626' : '#059669' }}>
-                        ₹{Number(selectedOrder.balanceAmount).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </>
+          </div>
         )}
-      </Drawer>
+      </Modal>
 
       {/* ── Edit Order Modal ──────────────────────────────────────────────── */}
       <Modal
@@ -836,12 +912,34 @@ const InvoiceApproverPage: React.FC = () => {
           Add Item
         </Button>
 
-        {editItems.length > 0 && (
-          <div style={{ marginTop: 12, background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
-            <span>{editItems.length} item(s)</span>
-            <span>Total ≈ ₹{editItems.reduce((s, i) => s + calcEditLine(i), 0).toFixed(2)}</span>
-          </div>
-        )}
+        {editItems.length > 0 && (() => {
+          const gross = editItems.reduce((s, i) => s + calcEditLine(i), 0);
+          const disc  = calcOverallDiscount(gross, editOverallDisc);
+          return (
+            <>
+              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}
+                </span>
+                <InputNumber min={0} precision={2} size="small" style={{ width: 130 }} placeholder="0"
+                  max={discountType === 'PERCENT' ? 100 : undefined}
+                  {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                  value={editOverallDisc ?? undefined}
+                  onChange={(v) => setEditOverallDisc(v as number)} />
+              </div>
+              {disc > 0 && (
+                <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#dc2626' }}>
+                  <span>Less: Discount</span>
+                  <span>−₹{disc.toFixed(2)}</span>
+                </div>
+              )}
+              <div style={{ marginTop: 8, background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
+                <span>{editItems.length} item(s)</span>
+                <span>Total ≈ ₹{(gross - disc).toFixed(2)}</span>
+              </div>
+            </>
+          );
+        })()}
       </Modal>
 
       {/* ── Create Order Modal ───────────────────────────────────────────── */}
@@ -860,49 +958,21 @@ const InvoiceApproverPage: React.FC = () => {
           <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
             Customer <span style={{ color: '#ef4444' }}>*</span>
           </div>
-          <Radio.Group
-            value={isWalkIn ? 'walkin' : 'registered'}
-            onChange={e => { setIsWalkIn(e.target.value === 'walkin'); setCreateCustomerId(undefined); setWalkInName(''); setWalkInPhone(''); }}
-            optionType="button"
-            buttonStyle="solid"
-            style={{ marginBottom: 10, width: '100%', display: 'flex' }}
+          <Select
+            showSearch placeholder="Search customer..."
+            value={createCustomerId}
+            onChange={setCreateCustomerId}
+            optionFilterProp="children"
+            style={{ width: '100%' }}
+            loading={customersLoading}
+            notFoundContent={customersLoading ? 'Loading customers…' : 'No customers found'}
           >
-            <Radio.Button value="registered" style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>Registered</Radio.Button>
-            <Radio.Button value="walkin" style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>Walk-in / Cash</Radio.Button>
-          </Radio.Group>
-          {isWalkIn ? (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Input
-                placeholder="Customer name *"
-                value={walkInName}
-                onChange={e => setWalkInName(e.target.value)}
-                style={{ flex: 2 }}
-              />
-              <Input
-                placeholder="Phone (optional)"
-                value={walkInPhone}
-                onChange={e => setWalkInPhone(e.target.value)}
-                style={{ flex: 1 }}
-                maxLength={15}
-              />
-            </div>
-          ) : (
-            <Select
-              showSearch placeholder="Search customer..."
-              value={createCustomerId}
-              onChange={setCreateCustomerId}
-              optionFilterProp="children"
-              style={{ width: '100%' }}
-              loading={customersLoading}
-              notFoundContent={customersLoading ? 'Loading customers…' : 'No customers found'}
-            >
-              {customers.map((c: any) => (
-                <Option key={c.id} value={c.id}>
-                  {c.businessName}{c.phone ? ` — ${c.phone}` : ''}
-                </Option>
-              ))}
-            </Select>
-          )}
+            {customers.map((c: any) => (
+              <Option key={c.id} value={c.id}>
+                {c.businessName}
+              </Option>
+            ))}
+          </Select>
         </div>
 
         {/* Items */}
@@ -1006,10 +1076,34 @@ const InvoiceApproverPage: React.FC = () => {
                     </div>
                   );
                 })}
-                <div style={{ background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
-                  <span>{createItems.length} item(s)</span>
-                  <span>Total ≈ ₹{createItems.reduce((s, i) => s + calcEditLine(i), 0).toFixed(2)}</span>
-                </div>
+                {(() => {
+                  const gross = createItems.reduce((s, i) => s + calcEditLine(i), 0);
+                  const disc  = calcOverallDiscount(gross, createOverallDisc);
+                  return (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                          Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}
+                        </span>
+                        <InputNumber min={0} precision={2} size="small" style={{ width: 110 }} placeholder="0"
+                          max={discountType === 'PERCENT' ? 100 : undefined}
+                          {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                          value={createOverallDisc ?? undefined}
+                          onChange={(v) => setCreateOverallDisc(v as number)} />
+                      </div>
+                      {disc > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#dc2626', marginBottom: 6 }}>
+                          <span>Less: Discount</span>
+                          <span>−₹{disc.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
+                        <span>{createItems.length} item(s)</span>
+                        <span>Total ≈ ₹{(gross - disc).toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
           </>
@@ -1043,12 +1137,34 @@ const InvoiceApproverPage: React.FC = () => {
               style={{ borderStyle: 'dashed', borderRadius: 8, marginTop: 10, color: '#2563eb', borderColor: '#2563eb' }}>
               Add Item
             </Button>
-            {createItems.length > 0 && (
-              <div style={{ marginTop: 12, background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
-                <span>{createItems.length} item(s)</span>
-                <span>Total ≈ ₹{createItems.reduce((s, i) => s + calcEditLine(i), 0).toFixed(2)}</span>
-              </div>
-            )}
+            {createItems.length > 0 && (() => {
+              const gross = createItems.reduce((s, i) => s + calcEditLine(i), 0);
+              const disc  = calcOverallDiscount(gross, createOverallDisc);
+              return (
+                <>
+                  <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                      Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}
+                    </span>
+                    <InputNumber min={0} precision={2} size="small" style={{ width: 130 }} placeholder="0"
+                      max={discountType === 'PERCENT' ? 100 : undefined}
+                      {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                      value={createOverallDisc ?? undefined}
+                      onChange={(v) => setCreateOverallDisc(v as number)} />
+                  </div>
+                  {disc > 0 && (
+                    <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#dc2626' }}>
+                      <span>Less: Discount</span>
+                      <span>−₹{disc.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8, background: '#ecfdf5', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669', fontSize: 14 }}>
+                    <span>{createItems.length} item(s)</span>
+                    <span>Total ≈ ₹{(gross - disc).toFixed(2)}</span>
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
 
@@ -1072,53 +1188,6 @@ const InvoiceApproverPage: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* ── Return Items Modal ───────────────────────────────────────────── */}
-      {returnOrder && (
-        <ReturnFromOrderModal
-          order={returnOrder}
-          open={returnOpen}
-          onClose={() => { setReturnOpen(false); setReturnOrder(null); }}
-        />
-      )}
-
-      {/* ── Collect Payment Modal ─────────────────────────────────────────── */}
-      <Modal
-        title={<span style={{ fontWeight: 700 }}>Collect Payment — {selectedOrder?.orderNumber}</span>}
-        open={payModal}
-        onCancel={() => setPayModal(false)}
-        onOk={handleCollect}
-        confirmLoading={collecting}
-        okText="Collect"
-        okButtonProps={{ style: { background: '#2563eb', borderColor: '#2563eb' } }}
-        width={420}
-      >
-        {selectedOrder && (
-          <div style={{ marginBottom: 12, fontSize: 13, color: '#475569' }}>
-            Customer: <strong>{selectedOrder.customer?.businessName || selectedOrder.walkInName || 'Walk-in'}</strong>
-            &nbsp;&nbsp;Balance: <strong style={{ color: '#059669' }}>₹{Number(selectedOrder.balanceAmount).toFixed(2)}</strong>
-          </div>
-        )}
-        <Form form={payForm} layout="vertical">
-          <Form.Item name="paymentMethodId" label="Payment Method" rules={[{ required: true, message: 'Select a method' }]}>
-            <Select placeholder="Select method" style={{ width: '100%' }}>
-              {methods.map((m: any) => (
-                <Option key={m.id} value={m.id}>{m.name}</Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="amount" label="Amount (₹)" rules={[{ required: true, message: 'Enter amount' }]}>
-            <InputNumber min={0.01} precision={2} style={{ width: '100%' }} prefix="₹" />
-          </Form.Item>
-          {needsRef && (
-            <Form.Item name="referenceNumber" label="Reference Number" rules={[{ required: true, message: 'Enter reference number' }]}>
-              <Input placeholder="UPI ref / Cheque no / NEFT ref" />
-            </Form.Item>
-          )}
-          <Form.Item name="notes" label="Notes">
-            <Input placeholder="Optional" />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 };

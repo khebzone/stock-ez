@@ -5,6 +5,7 @@ import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.entity.TenantSettings;
 import com.stockez.api.module.tenant.repository.TenantRepository;
 import com.stockez.api.module.tenant.repository.TenantSettingsRepository;
+import com.stockez.api.module.upload.OrphanedUploadCleanupService;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.common.exception.BusinessException;
@@ -30,6 +31,7 @@ public class TenantService {
     private final TenantSettingsRepository tenantSettingsRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final OrphanedUploadCleanupService uploadCleanupService;
 
     public TenantDtos.TenantResponse createTenant(TenantDtos.CreateTenantRequest req) {
         if (tenantRepository.existsBySubdomain(req.getSubdomain())) {
@@ -48,8 +50,6 @@ public class TenantService {
             planEndDate = LocalDate.now().plusDays(days);
         }
 
-        int maxUsers = maxUsersForPlan(plan);
-
         Tenant tenant = Tenant.builder()
                 .name(req.getName())
                 .subdomain(req.getSubdomain())
@@ -65,7 +65,7 @@ public class TenantService {
                 .plan(plan)
                 .billingCycle(req.getBillingCycle() != null ? req.getBillingCycle() : "MONTHLY")
                 .planEndDate(planEndDate)
-                .maxUsers(maxUsers)
+                .maxUsers(req.getMaxUsers())
                 .build();
 
         Tenant saved = tenantRepository.save(tenant);
@@ -160,11 +160,13 @@ public class TenantService {
         tenant.setCity(req.getCity());
         tenant.setState(req.getState());
 
-        if (req.getStatus() != null) tenant.setStatus(req.getStatus());
-        if (req.getPlan() != null) {
-            tenant.setPlan(req.getPlan());
-            tenant.setMaxUsers(maxUsersForPlan(req.getPlan()));
+        if (req.getStatus() != null) {
+            boolean goingInactive = req.getStatus() == Tenant.TenantStatus.INACTIVE
+                    && tenant.getStatus() != Tenant.TenantStatus.INACTIVE;
+            tenant.setStatus(req.getStatus());
+            if (goingInactive) uploadCleanupService.deleteTenantImages(id);
         }
+        if (req.getPlan() != null) tenant.setPlan(req.getPlan());
         if (req.getBillingCycle() != null) tenant.setBillingCycle(req.getBillingCycle());
         if (req.getPlanEndDate() != null) tenant.setPlanEndDate(req.getPlanEndDate());
         if (req.getMaxUsers() != null && req.getMaxUsers() > 0) tenant.setMaxUsers(req.getMaxUsers());
@@ -187,7 +189,17 @@ public class TenantService {
         tenant.setGstin(req.getGstin());
         tenant.setFssaiNumber(req.getFssaiNumber());
         tenant.setPanNumber(req.getPanNumber());
-        if (req.getLogoUrl() != null) tenant.setLogoUrl(req.getLogoUrl());
+        tenant.setLogoUrl(req.getLogoUrl());
+        tenant.setInvoiceTerms(req.getInvoiceTerms());
+        tenant.setExtraImageUrl(req.getExtraImageUrl());
+        tenant.setPaymentQrImageUrl(req.getPaymentQrImageUrl());
+        tenant.setBankName(req.getBankName());
+        tenant.setBankAccountName(req.getBankAccountName());
+        tenant.setBankAccountNumber(req.getBankAccountNumber());
+        tenant.setBankBranch(req.getBankBranch());
+        tenant.setBankIfsc(req.getBankIfsc());
+        tenant.setStateCode(req.getStateCode());
+        tenant.setInvoiceFooterNote(req.getInvoiceFooterNote());
         return toResponse(tenantRepository.save(tenant));
     }
 
@@ -219,6 +231,7 @@ public class TenantService {
         settings.setLockBillingAfterCheckout(req.isLockBillingAfterCheckout());
         settings.setSeparateDeliveryAllocation(req.isSeparateDeliveryAllocation());
         if (req.getDiscountType() != null) settings.setDiscountType(req.getDiscountType());
+        settings.setShowPurchaseRateToSales(req.isShowPurchaseRateToSales());
         return toSettingsResponse(tenantSettingsRepository.save(settings));
     }
 
@@ -253,6 +266,7 @@ public class TenantService {
         res.setLockBillingAfterCheckout(s.isLockBillingAfterCheckout());
         res.setSeparateDeliveryAllocation(s.isSeparateDeliveryAllocation());
         res.setDiscountType(s.getDiscountType());
+        res.setShowPurchaseRateToSales(s.isShowPurchaseRateToSales());
         return res;
     }
 
@@ -276,8 +290,20 @@ public class TenantService {
         res.setBillingCycle(t.getBillingCycle());
         res.setPlanEndDate(t.getPlanEndDate());
         res.setMaxUsers(t.getMaxUsers());
+        res.setCurrentUserCount(userRepository.countByTenantIdAndActiveTrueAndRoleNotIn(
+                t.getId(), java.util.List.of(User.UserRole.ADMIN, User.UserRole.SUPER_ADMIN)));
         res.setNotes(t.getNotes());
         res.setLogoUrl(t.getLogoUrl());
+        res.setInvoiceTerms(t.getInvoiceTerms());
+        res.setExtraImageUrl(t.getExtraImageUrl());
+        res.setPaymentQrImageUrl(t.getPaymentQrImageUrl());
+        res.setBankName(t.getBankName());
+        res.setBankAccountName(t.getBankAccountName());
+        res.setBankAccountNumber(t.getBankAccountNumber());
+        res.setBankBranch(t.getBankBranch());
+        res.setBankIfsc(t.getBankIfsc());
+        res.setStateCode(t.getStateCode());
+        res.setInvoiceFooterNote(t.getInvoiceFooterNote());
         res.setTrialEndsAt(t.getTrialEndsAt());
         res.setCreatedAt(t.getCreatedAt());
         if (t.getPlanEndDate() != null) {

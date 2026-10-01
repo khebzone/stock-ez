@@ -23,13 +23,7 @@ public class AccountingService {
     private final PaymentRepository paymentRepository;
 
     public AccountingDtos.SalesReportResponse getSalesReport(UUID tenantId, LocalDate from, LocalDate to) {
-        // In real production, this would use a native query or specialized reporting table
-        // For simplicity, we are fetching records for the tenant
-        List<Order> orders = orderRepository.findAll().stream()
-                .filter(o -> o.getTenant().getId().equals(tenantId))
-                .filter(o -> !o.getOrderDate().isBefore(from) && !o.getOrderDate().isAfter(to))
-                .filter(o -> o.getStatus() != Order.OrderStatus.CANCELLED)
-                .collect(Collectors.toList());
+        List<Order> orders = orderRepository.findByTenantAndDateRangeAllOrders(tenantId, from, to, Order.OrderStatus.CANCELLED);
 
         BigDecimal totalSales = orders.stream().map(Order::getTotalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalGst = orders.stream().map(Order::getTotalGst).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -58,10 +52,7 @@ public class AccountingService {
     }
 
     public AccountingDtos.CollectionReportResponse getCollectionReport(UUID tenantId, LocalDate from, LocalDate to) {
-        List<Payment> payments = paymentRepository.findAll().stream()
-                .filter(p -> p.getTenant().getId().equals(tenantId))
-                .filter(p -> !p.getCollectionDate().isBefore(from) && !p.getCollectionDate().isAfter(to))
-                .collect(Collectors.toList());
+        List<Payment> payments = paymentRepository.findByTenantAndDateRange(tenantId, from, to);
 
         BigDecimal total = payments.stream().map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
 

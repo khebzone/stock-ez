@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import fullLogo from '../../assets/logo-full-light.png';
 import { Form, Input, Button, Modal } from 'antd';
-import { UserOutlined, LockOutlined, CloseOutlined, InfoCircleOutlined, ArrowRightOutlined, CheckCircleFilled } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, CloseOutlined, InfoCircleOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useLoginMutation } from '../../store/api/authApi';
 import { getDefaultRoute } from '../../utils/permissions';
+import { getTenantSlug } from '../../utils/tenant';
 
 const FEATURES = [
   { icon: '📦', title: 'Smart Order & Route Management', desc: 'Plan routes, assign salesmen, track orders live.' },
@@ -36,6 +38,8 @@ const LoginPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loginError, setLoginError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
+  const tenantSlug = getTenantSlug();
+  const isTenant = !!tenantSlug;
   const [usernameReadOnly, setUsernameReadOnly] = useState(true);
   const [shakeForm, setShakeForm] = useState(false);
   const [statsActive, setStatsActive] = useState(false);
@@ -428,13 +432,7 @@ const LoginPage: React.FC = () => {
           <div className="lp-left-inner">
             {/* Logo */}
             <div className="lp-logo">
-              <div className="lp-logo-mark">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 22V12h6v10" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <span className="lp-logo-text">StockEz</span>
+              <img src={fullLogo} alt="StockEz" style={{ height: 118, width: 'auto', display: 'block' }} />
             </div>
 
             {/* Hero */}
@@ -493,8 +491,25 @@ const LoginPage: React.FC = () => {
 
           <div className={`lp-form-box${shakeForm ? ' shake' : ''}`}>
             <div style={{ marginBottom: 32 }}>
-              <h2 className="lp-form-title">Welcome back</h2>
-              <p className="lp-form-sub">Sign in to your distribution workspace</p>
+              {isTenant ? (
+                <>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '4px 12px', marginBottom: 14 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: 0.8 }}>{tenantSlug}</span>
+                  </div>
+                  <h2 className="lp-form-title">Welcome back</h2>
+                  <p className="lp-form-sub">Sign in to your distribution workspace</p>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '4px 12px', marginBottom: 14 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7c3aed' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: 0.8 }}>Platform Admin</span>
+                  </div>
+                  <h2 className="lp-form-title">Platform Administration</h2>
+                  <p className="lp-form-sub">StockEz super admin access only</p>
+                </>
+              )}
             </div>
 
             {loginError && (

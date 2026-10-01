@@ -76,6 +76,9 @@ public class CustomerService {
                 .altPhone(req.getAltPhone())
                 .email(req.getEmail())
                 .address(req.getAddress())
+                .city(req.getCity())
+                .state(req.getState())
+                .pinCode(req.getPinCode())
                 .gstin(req.getGstin())
                 .route(route)
                 .routePlace(place)
@@ -113,8 +116,20 @@ public class CustomerService {
     }
 
     @Transactional(readOnly = true)
+    public List<CustomerDtos.CustomerResponse> getAllActive(UUID tenantId) {
+        return customerRepository.findByTenantIdAndActiveTrueOrderByBusinessNameAsc(tenantId)
+                .stream().map(this::toResponse).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerDtos.CustomerResponse> list(UUID tenantId, String search, UUID routeId, UUID placeId, Pageable pageable) {
+        String q = (search != null && !search.isBlank()) ? "%" + search.toLowerCase() + "%" : null;
+        return customerRepository.findFiltered(tenantId, q, routeId, placeId, pageable).map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
     public Page<CustomerDtos.CustomerResponse> search(UUID tenantId, String q, Pageable pageable) {
-        return customerRepository.search(tenantId, q, pageable).map(this::toResponse);
+        return customerRepository.search(tenantId, "%" + q.toLowerCase() + "%", pageable).map(this::toResponse);
     }
 
     public CustomerDtos.CustomerResponse updateCustomer(UUID id, CustomerDtos.UpdateCustomerRequest req, UUID tenantId) {
@@ -126,6 +141,9 @@ public class CustomerService {
         c.setAltPhone(req.getAltPhone());
         c.setEmail(req.getEmail());
         c.setAddress(req.getAddress());
+        c.setCity(req.getCity());
+        c.setState(req.getState());
+        c.setPinCode(req.getPinCode());
         c.setGstin(req.getGstin());
         c.setCreditAllowed(req.isCreditAllowed());
         c.setCreditDays(req.getCreditDays());
@@ -237,6 +255,9 @@ public class CustomerService {
         res.setAltPhone(c.getAltPhone());
         res.setEmail(c.getEmail());
         res.setAddress(c.getAddress());
+        res.setCity(c.getCity());
+        res.setState(c.getState());
+        res.setPinCode(c.getPinCode());
         res.setGstin(c.getGstin());
         res.setCreditAllowed(c.isCreditAllowed());
         res.setCreditDays(c.getCreditDays());

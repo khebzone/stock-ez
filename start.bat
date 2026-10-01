@@ -14,7 +14,7 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8080 "') do (
 )
 
 echo  Starting Backend  (port 8080)...
-start "StockEz Backend" cmd /k "cd /d C:\Users\Kathiravan\Desktop\StockEz\stockez-api && .\mvnw.cmd spring-boot:run"
+start "StockEz Backend" cmd /k "cd /d C:\Users\Kathiravan\Desktop\StockEz\stockez-api && .\mvnw.cmd clean spring-boot:run"
 
 echo  Waiting 5 seconds before starting frontend...
 timeout /t 5 /nobreak >nul

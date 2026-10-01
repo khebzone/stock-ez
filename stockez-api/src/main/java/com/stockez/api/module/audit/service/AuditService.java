@@ -41,12 +41,14 @@ public class AuditService {
     @Transactional(readOnly = true)
     public Page<AuditLog> getReport(UUID tenantId, String entityType, String performedBy,
                                     String action, Instant from, Instant to, Pageable pageable) {
+        Instant fromParam = from != null ? from : Instant.EPOCH;
+        Instant toParam   = to   != null ? to   : Instant.parse("2999-12-31T23:59:59Z");
         return auditLogRepository.findFiltered(
                 tenantId,
                 (entityType != null && !entityType.isBlank()) ? entityType : null,
-                (performedBy != null && !performedBy.isBlank()) ? performedBy : null,
+                (performedBy != null && !performedBy.isBlank()) ? "%" + performedBy.toLowerCase() + "%" : null,
                 (action != null && !action.isBlank()) ? action : null,
-                from, to, pageable);
+                fromParam, toParam, pageable);
     }
 
     private String resolveCurrentUser() {

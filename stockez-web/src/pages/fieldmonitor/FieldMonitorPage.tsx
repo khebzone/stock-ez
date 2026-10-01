@@ -4,13 +4,15 @@ import {
   ShoppingOutlined, WalletOutlined, CarOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { noFutureDates } from '../../utils/date';
 import { useGetFieldActivityQuery } from '../../store/api/routeAllocationApi';
 import PageHeader from '../../components/PageHeader';
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: 'default', SUBMITTED: 'blue', APPROVED: 'cyan',
-  PREPARING: 'orange', PREPARED: 'purple',
+  PACKING: 'orange', PACKED: 'purple',
   DISPATCHED: 'geekblue', DELIVERED: 'green', CANCELLED: 'red',
+  RETURN_TO_WAREHOUSE: 'volcano',
 };
 
 const KpiCard: React.FC<{ icon: React.ReactNode; label: string; value: string; color?: string }> = ({ icon, label, value, color }) => (
@@ -46,7 +48,7 @@ const OrdersExpandedRow: React.FC<{ orders: any[] }> = ({ orders }) => {
 
 const FieldMonitorPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const { data, isLoading } = useGetFieldActivityQuery(selectedDate);
+  const { data, isLoading, refetch } = useGetFieldActivityQuery(selectedDate);
   const activities: any[] = data?.data?.activities || [];
 
   const salesActivities    = activities.filter((a: any) => a.type === 'SALES');
@@ -57,6 +59,15 @@ const FieldMonitorPage: React.FC = () => {
   const totalCash      = activities.reduce((s: number, a: any) => s + Number(a.cashCollected || 0), 0);
   const totalCollected = activities.reduce((s: number, a: any) => s + Number(a.totalCollected || 0), 0);
 
+  const statusColumn = {
+    title: 'Status',
+    key: 'status',
+    width: 110,
+    render: (_: any, r: any) => r.status === 'COMPLETED'
+      ? <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>COMPLETED</span>
+      : <span style={{ fontSize: 12, color: '#059669', fontWeight: 600 }}>ACTIVE</span>,
+  };
+
   const salesColumns = [
     { title: 'Sales Person', key: 'person', render: (_: any, r: any) => <div><div style={{ fontWeight: 600, color: '#0f172a' }}>{r.person?.fullName}</div><div style={{ fontSize: 12, color: '#64748b' }}>{r.person?.phone}</div></div> },
     { title: 'Route', dataIndex: 'routeName' },
@@ -66,7 +77,7 @@ const FieldMonitorPage: React.FC = () => {
     { title: 'Cash', dataIndex: 'cashCollected', width: 110, align: 'right' as const, render: (v: number) => `₹${Number(v || 0).toFixed(2)}` },
     { title: 'UPI', dataIndex: 'upiCollected', width: 110, align: 'right' as const, render: (v: number) => `₹${Number(v || 0).toFixed(2)}` },
     { title: 'Total Collected', dataIndex: 'totalCollected', width: 130, align: 'right' as const, render: (v: number) => <span style={{ fontWeight: 700, color: '#059669' }}>₹{Number(v || 0).toFixed(2)}</span> },
-    { title: 'Status', dataIndex: 'status', width: 80, render: (s: string) => <span style={{ fontSize: 12, color: s === 'ACTIVE' ? '#059669' : '#64748b' }}>{s}</span> },
+    statusColumn,
   ];
 
   const deliveryColumns = [
@@ -75,10 +86,16 @@ const FieldMonitorPage: React.FC = () => {
     { title: 'Vehicle / KM', key: 'vehicle', render: (_: any, r: any) => <div><div style={{ color: '#334155' }}>{r.vehicle?.vehicleNumber || '—'}</div>{r.kmDriven != null ? <div style={{ fontSize: 11, color: '#64748b' }}>{r.startKm} → {r.endKm} ({r.kmDriven} km)</div> : r.startKm != null ? <div style={{ fontSize: 11, color: '#64748b' }}>Start: {r.startKm} km</div> : null}</div> },
     { title: 'Total', dataIndex: 'ordersCount', width: 70, align: 'right' as const, render: (v: number) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Delivered', dataIndex: 'deliveriesCompleted', width: 90, align: 'right' as const, render: (v: number) => <span style={{ fontWeight: 700, color: '#059669' }}>{v}</span> },
+    { title: 'Returned', key: 'returned', width: 90, align: 'right' as const, render: (_: any, r: any) => {
+      const count = (r.orders || []).filter((o: any) => o.status === 'RETURN_TO_WAREHOUSE').length;
+      return count > 0
+        ? <span style={{ fontWeight: 700, color: '#dc2626' }}>{count}</span>
+        : <span style={{ color: '#94a3b8' }}>0</span>;
+    }},
     { title: 'Cash', dataIndex: 'cashCollected', width: 110, align: 'right' as const, render: (v: number) => `₹${Number(v || 0).toFixed(2)}` },
     { title: 'UPI', dataIndex: 'upiCollected', width: 110, align: 'right' as const, render: (v: number) => `₹${Number(v || 0).toFixed(2)}` },
     { title: 'Total Collected', dataIndex: 'totalCollected', width: 130, align: 'right' as const, render: (v: number) => <span style={{ fontWeight: 700, color: '#059669' }}>₹{Number(v || 0).toFixed(2)}</span> },
-    { title: 'Status', dataIndex: 'status', width: 80, render: (s: string) => <span style={{ fontSize: 12, color: s === 'ACTIVE' ? '#059669' : '#64748b' }}>{s}</span> },
+    statusColumn,
   ];
 
   return (
@@ -92,6 +109,7 @@ const FieldMonitorPage: React.FC = () => {
             onChange={(d) => d && setSelectedDate(d.format('YYYY-MM-DD'))}
             format="DD MMM YYYY"
             allowClear={false}
+            disabledDate={noFutureDates}
           />
         }
       />

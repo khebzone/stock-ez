@@ -100,8 +100,8 @@ public class TenantController {
     }
 
     @GetMapping("/profile")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get company profile [ADMIN]")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get company profile")
     public ResponseEntity<ApiResponse<TenantDtos.TenantResponse>> getProfile(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(tenantService.getTenantById(tenantId)));
@@ -117,8 +117,8 @@ public class TenantController {
     }
 
     @GetMapping("/settings")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get workflow settings [ADMIN]")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get workflow settings")
     public ResponseEntity<ApiResponse<TenantDtos.WorkflowSettingsResponse>> getSettings(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(tenantService.getSettings(tenantId)));

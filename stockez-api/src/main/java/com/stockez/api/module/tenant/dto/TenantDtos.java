@@ -55,6 +55,10 @@ public class TenantDtos {
 
         @Min(1) @Max(365)
         private int trialDays = 7;
+
+        @NotNull(message = "User limit is required")
+        @Min(value = 1, message = "Minimum 1 user")
+        private Integer maxUsers;
     }
 
     @Data
@@ -101,8 +105,19 @@ public class TenantDtos {
         private String billingCycle;
         private LocalDate planEndDate;
         private int maxUsers;
+        private long currentUserCount;
         private String notes;
         private String logoUrl;
+        private String invoiceTerms;
+        private String extraImageUrl;
+        private String paymentQrImageUrl;
+        private String bankName;
+        private String bankAccountName;
+        private String bankAccountNumber;
+        private String bankBranch;
+        private String bankIfsc;
+        private String stateCode;
+        private String invoiceFooterNote;
         private Instant trialEndsAt;
         private Instant createdAt;
         private Long daysUntilExpiry;
@@ -126,14 +141,24 @@ public class TenantDtos {
         @NotBlank @Size(max = 50)  private String ownerName;
         @NotBlank @Pattern(regexp = "^[6-9]\\d{9}$", message = "Enter a valid 10-digit mobile number") private String phone;
         @NotBlank @Email           private String email;
-        @Size(max = 500)           private String address;
-        @Size(max = 100)           private String city;
-        @Size(max = 50)            private String state;
-        @Size(max = 10)            private String pinCode;
-        @Size(max = 15)            private String gstin;
-        @Size(max = 20)            private String fssaiNumber;
-        @Size(max = 10)            private String panNumber;
+        @NotBlank @Size(max = 500) private String address;
+        @NotBlank @Size(max = 100) private String city;
+        @NotBlank @Size(max = 50)  private String state;
+        @Pattern(regexp = "^[1-9]\\d{5}$", message = "Enter a valid 6-digit PIN code") @Size(max = 6) private String pinCode;
+        @NotBlank @Size(max = 15) @Pattern(regexp = "^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$", message = "Invalid GSTIN format") private String gstin;
+        @NotBlank @Pattern(regexp = "^\\d{14}$", message = "FSSAI number must be 14 digits") private String fssaiNumber;
+        @NotBlank @Size(max = 10) @Pattern(regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$", message = "Invalid PAN format") private String panNumber;
         @Size(max = 500)           private String logoUrl;
+        @Size(max = 2000)          private String invoiceTerms;
+        @Size(max = 500)           private String extraImageUrl;
+        @Size(max = 500)           private String paymentQrImageUrl;
+        @Size(max = 120)           private String bankName;
+        @Size(max = 120)           private String bankAccountName;
+        @Size(max = 40)            private String bankAccountNumber;
+        @Size(max = 120)           private String bankBranch;
+        @Size(max = 20) @Pattern(regexp = "^$|^[A-Z]{4}0[A-Z0-9]{6}$", message = "Invalid IFSC code") private String bankIfsc;
+        @Size(max = 2) @Pattern(regexp = "^$|^[0-9]{2}$", message = "State code must be 2 digits") private String stateCode;
+        @Size(max = 500)           private String invoiceFooterNote;
     }
 
     @Data
@@ -146,6 +171,7 @@ public class TenantDtos {
         private boolean lockBillingAfterCheckout;
         private boolean separateDeliveryAllocation;
         private TenantSettings.DiscountType discountType;
+        private boolean showPurchaseRateToSales;
     }
 
     @Data
@@ -158,5 +184,6 @@ public class TenantDtos {
         private boolean lockBillingAfterCheckout;
         private boolean separateDeliveryAllocation;
         private TenantSettings.DiscountType discountType;
+        private boolean showPurchaseRateToSales;
     }
 }

@@ -67,6 +67,20 @@ public class PurchaseEntry {
     @Builder.Default
     private BigDecimal totalSgst = BigDecimal.ZERO;
 
+    @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal paidAmount = BigDecimal.ZERO;
+
+    @Column(name = "is_opening_balance")
+    @Builder.Default
+    private boolean openingBalance = false;
+
+    // ACTIVE or VOID. A voided entry keeps its number and rows (audit trail, GST continuity) but
+    // its stock/financial impact is reversed to zero — see PurchaseService.voidPurchaseEntry.
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private String status = "ACTIVE";
+
     @Column(length = 1000)
     private String notes;
 

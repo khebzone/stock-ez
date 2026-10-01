@@ -7,6 +7,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts';
 import dayjs from 'dayjs';
+import { noFutureDates } from '../../utils/date';
 import { useGetSalesAnalysisQuery } from '../../store/api/reportApi';
 
 const { RangePicker } = DatePicker;
@@ -67,6 +68,7 @@ const SalesAnalysisPage: React.FC = () => {
             onChange={v => v && setRange(v as [dayjs.Dayjs, dayjs.Dayjs])}
             style={{ borderRadius: 10 }}
             allowClear={false}
+            disabledDate={noFutureDates}
           />
           <Select
             value={groupBy} onChange={setGroupBy}

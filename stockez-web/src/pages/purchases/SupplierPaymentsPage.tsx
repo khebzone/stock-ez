@@ -3,6 +3,7 @@ import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Skeleton, 
 import { PlusOutlined, DeleteOutlined, FileExcelOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
+  useGetUnpaidPurchaseEntriesQuery,
   useGetSupplierPaymentSummariesQuery,
   useGetSupplierPaymentsQuery,
   useCreateSupplierPaymentMutation,
@@ -10,12 +11,14 @@ import {
 } from '../../store/api/purchaseApi';
 import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
+import { hasPermission } from '../../utils/permissions';
 
 const PAYMENT_METHODS = ['CASH', 'UPI', 'NEFT', 'RTGS', 'CHEQUE', 'BANK_TRANSFER'];
 
 const SupplierPaymentsPage: React.FC = () => {
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any>(null);
   const [form] = Form.useForm();
 
   const { data: summariesData, isLoading: summaryLoading } = useGetSupplierPaymentSummariesQuery();
@@ -27,15 +30,29 @@ const SupplierPaymentsPage: React.FC = () => {
   );
   const payments: any[] = paymentsData?.data || [];
 
+  const { data: unpaidData, isLoading: unpaidLoading } = useGetUnpaidPurchaseEntriesQuery(
+    selectedSupplier!,
+    { skip: !selectedSupplier }
+  );
+  const unpaidEntries: any[] = unpaidData?.data || [];
+
   const [createPayment, { isLoading: creating }] = useCreateSupplierPaymentMutation();
   const [deletePayment] = useDeleteSupplierPaymentMutation();
 
   const selected = summaries.find(s => s.supplierName === selectedSupplier);
 
+  const openPayForEntry = (entry: any) => {
+    setSelectedEntry(entry);
+    form.resetFields();
+    form.setFieldsValue({ amount: entry.balanceAmount, paymentDate: dayjs() });
+    setShowPaymentModal(true);
+  };
+
   const handleSubmit = async (values: any) => {
     try {
       await createPayment({
         supplierName: selectedSupplier,
+        purchaseEntryId: selectedEntry?.id || null,
         amount: values.amount,
         paymentDate: values.paymentDate.format('YYYY-MM-DD'),
         paymentMethod: values.paymentMethod,
@@ -44,9 +61,10 @@ const SupplierPaymentsPage: React.FC = () => {
       }).unwrap();
       message.success('Payment recorded');
       form.resetFields();
+      setSelectedEntry(null);
       setShowPaymentModal(false);
-    } catch {
-      message.error('Failed to record payment');
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to record payment');
     }
   };
 
@@ -181,18 +199,41 @@ const SupplierPaymentsPage: React.FC = () => {
               </div>
             )}
 
+            {/* Unpaid Bills */}
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>Unpaid Bills</div>
+            {unpaidLoading ? <Skeleton active paragraph={{ rows: 3 }} /> : (
+              <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 65px 80px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 16px', minWidth: 420 }}>
+                  {['Date', 'Bill No.', 'Total', 'Balance', 'Days', ''].map(h => (
+                    <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
+                  ))}
+                </div>
+                {unpaidEntries.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8' }}>No unpaid bills</div>
+                ) : unpaidEntries.map((e: any, i: number) => {
+                  const days = dayjs().diff(dayjs(e.purchaseDate), 'day');
+                  const daysColor = days > 30 ? '#dc2626' : days > 15 ? '#d97706' : '#64748b';
+                  return (
+                    <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 1fr 65px 80px', padding: '11px 16px', alignItems: 'center', borderBottom: i < unpaidEntries.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 420 }}>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(e.purchaseDate).format('DD MMM YYYY')}</div>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 12 }}>{e.entryNumber}</div>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 12 }}>{formatINR(e.totalAmount)}</div>
+                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: 12 }}>{formatINR(e.balanceAmount)}</div>
+                      <div style={{ fontWeight: 700, color: daysColor, fontSize: 12 }}>{days === 0 ? 'Today' : `${days}d`}</div>
+                      {hasPermission('SUPPLIER_PAYMENTS_CREATE') && (
+                        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openPayForEntry(e)}
+                          style={{ borderRadius: 7, fontSize: 11, fontWeight: 700, background: '#059669', borderColor: '#059669', padding: '0 8px' }}>
+                          Pay
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Payment list header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>Payment History</div>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => { form.setFieldValue('paymentDate', dayjs()); setShowPaymentModal(true); }}
-                style={{ borderRadius: 8 }}
-              >
-                Record Payment
-              </Button>
-            </div>
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14 }}>Payment History</div>
 
             {paymentsLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : (
               <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -209,13 +250,15 @@ const SupplierPaymentsPage: React.FC = () => {
                     <div style={{ fontWeight: 800, color: '#059669', fontSize: 14 }}>{formatINR(p.amount)}</div>
                     <div style={{ fontSize: 12, color: '#475569' }}>{p.paymentMethod}</div>
                     <div style={{ fontSize: 12, color: '#94a3b8' }}>{p.referenceNumber || '—'}</div>
-                    <Popconfirm
-                      title="Delete this payment?"
-                      onConfirm={() => handleDelete(p.id)}
-                      okText="Delete" okButtonProps={{ danger: true }}
-                    >
-                      <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                    </Popconfirm>
+                    {hasPermission('SUPPLIER_PAYMENTS_DELETE') && (
+                      <Popconfirm
+                        title="Delete this payment?"
+                        onConfirm={() => handleDelete(p.id)}
+                        okText="Delete" okButtonProps={{ danger: true }}
+                      >
+                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                      </Popconfirm>
+                    )}
                   </div>
                 ))}
               </div>
@@ -226,13 +269,38 @@ const SupplierPaymentsPage: React.FC = () => {
 
       {/* Record Payment Modal */}
       <Modal
-        title={`Record Payment — ${selectedSupplier}`}
+        title={
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>
+              {selectedEntry ? `Pay Bill — ${selectedEntry.entryNumber}` : `Record Payment — ${selectedSupplier}`}
+            </div>
+            {selectedEntry && (
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 3 }}>
+                {selectedSupplier} · Balance {formatINR(selectedEntry.balanceAmount)}
+              </div>
+            )}
+          </div>
+        }
         open={showPaymentModal}
-        onCancel={() => setShowPaymentModal(false)}
+        onCancel={() => { setShowPaymentModal(false); setSelectedEntry(null); }}
         footer={null}
         width={460}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmit} style={{ marginTop: 16 }}>
+        {selectedEntry && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '16px 0' }}>
+            {[
+              { label: 'Bill Total', value: formatINR(selectedEntry.totalAmount), color: '#0f172a' },
+              { label: 'Paid So Far', value: formatINR(selectedEntry.paidAmount), color: '#059669' },
+              { label: 'Balance Due', value: formatINR(selectedEntry.balanceAmount), color: '#dc2626' },
+            ].map(col => (
+              <div key={col.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px', textAlign: 'center', border: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>{col.label}</div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: col.color }}>{col.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <Form form={form} layout="vertical" onFinish={handleSubmit} style={{ marginTop: selectedEntry ? 0 : 16 }}>
           <Form.Item name="amount" label="Amount Paid *" rules={[{ required: true, message: 'Enter amount' }]}>
             <InputNumber
               prefix="₹" style={{ width: '100%' }} min={0.01} precision={2}

@@ -41,13 +41,13 @@ const DeliveryPaymentsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [form] = Form.useForm();
 
-  const { data: outstandingData, isLoading: outLoading, refetch: refetchOutstanding } = useGetOutstandingSummaryQuery();
-  const { data: dayData, isLoading: dayLoading, refetch: refetchDay } = useGetMyDayCollectionsQuery();
+  const { data: outstandingData, isLoading: outLoading, refetch: refetchOutstanding } = useGetOutstandingSummaryQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: dayData, isLoading: dayLoading, refetch: refetchDay } = useGetMyDayCollectionsQuery(undefined, { refetchOnMountOrArgChange: true });
   const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = useGetCustomerOrdersQuery(
-    selectedCustomerId!, { skip: !selectedCustomerId }
+    selectedCustomerId!, { skip: !selectedCustomerId, refetchOnMountOrArgChange: true }
   );
   const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useGetCustomerPaymentHistoryQuery(
-    selectedCustomerId!, { skip: !selectedCustomerId }
+    selectedCustomerId!, { skip: !selectedCustomerId, refetchOnMountOrArgChange: true }
   );
   const { data: methodsData, isLoading: methodsLoading } = useGetPaymentMethodsQuery();
 

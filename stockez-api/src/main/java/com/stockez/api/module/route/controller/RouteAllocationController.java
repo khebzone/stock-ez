@@ -12,9 +12,12 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -94,9 +97,26 @@ public class RouteAllocationController {
         return ResponseEntity.ok(ApiResponse.success(allocationService.getMyTodayAllocation(tenantId, userId)));
     }
 
+    @GetMapping("/gate-pass-options")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_CREATE','INVOICE_APPROVE','COUNTER_SALE_VIEW')")
+    @Operation(summary = "Get recent (last 7 days) sales Gate Passes for Counter Sale attribution")
+    public ResponseEntity<ApiResponse<List<RouteAllocationDtos.GatePassOption>>> getGatePassOptions(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        return ResponseEntity.ok(ApiResponse.success(allocationService.getGatePassOptions(tenantId, userId, hasBroadGatePassAccess())));
+    }
+
+    /** ADMIN or anyone who can already view the full Gate Pass board sees every salesperson's; everyone else sees only their own. */
+    private boolean hasBroadGatePassAccess() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("GATE_PASS_VIEW"));
+    }
+
     @GetMapping("/delivery-summary")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get per-route PREPARED order counts with delivery allocation for a date [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DELIVERY_UPDATE','DELIVERY_VIEW')")
+    @Operation(summary = "Get per-route PACKED order counts with delivery allocation for a date")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteDeliverySummary>> getDeliveryRouteSummary(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -105,13 +125,51 @@ public class RouteAllocationController {
     }
 
     @GetMapping("/warehouse-summary")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get per-route APPROVED order counts with warehouse allocation for a date [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PICKLIST_VIEW','PICKLIST_UPDATE')")
+    @Operation(summary = "Get per-route APPROVED order counts with warehouse allocation for a date")
     public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteWarehouseSummary>> getWarehouseSummary(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         LocalDate queryDate = date != null ? date : LocalDate.now();
         return ResponseEntity.ok(ApiResponse.success(allocationService.getWarehouseSummary(tenantId, queryDate)));
+    }
+
+    @PostMapping("/{id}/dispatch")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Dispatch all packed orders for a route allocation")
+    public ResponseEntity<ApiResponse<String>> dispatchOrders(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        int count = allocationService.dispatchPackedOrders(id, tenantId);
+        return ResponseEntity.ok(ApiResponse.success(null, count + " order(s) dispatched"));
+    }
+
+    @PostMapping("/{id}/complete-sales")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Mark the sales trip on a route allocation as completed")
+    public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> markSalesComplete(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(allocationService.markSalesComplete(id, tenantId), "Sales trip marked complete"));
+    }
+
+    @PostMapping("/{id}/complete-delivery")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Mark the delivery run on a route allocation as completed")
+    public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> markDeliveryComplete(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean force,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(allocationService.markDeliveryComplete(id, tenantId, force), "Delivery run marked complete"));
+    }
+
+    @PostMapping("/{id}/complete-warehouse")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Mark the warehouse task on a route allocation as completed")
+    public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> markWarehouseComplete(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(allocationService.markWarehouseComplete(id, tenantId), "Warehouse task marked complete"));
     }
 
     @GetMapping("/monitor")

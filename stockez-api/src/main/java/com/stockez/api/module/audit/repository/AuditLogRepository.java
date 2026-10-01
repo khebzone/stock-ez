@@ -23,10 +23,10 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
     @Query("SELECT a FROM AuditLog a WHERE a.tenantId = :tenantId " +
            "AND (:entityType IS NULL OR a.entityType = :entityType) " +
-           "AND (:performedBy IS NULL OR LOWER(a.performedBy) LIKE LOWER(CONCAT('%', :performedBy, '%'))) " +
+           "AND (:performedBy IS NULL OR LOWER(a.performedBy) LIKE :performedBy) " +
            "AND (:action IS NULL OR a.action = :action) " +
-           "AND (:from IS NULL OR a.performedAt >= :from) " +
-           "AND (:to IS NULL OR a.performedAt < :to) " +
+           "AND a.performedAt >= :from " +
+           "AND a.performedAt < :to " +
            "ORDER BY a.performedAt DESC")
     Page<AuditLog> findFiltered(
             @Param("tenantId") UUID tenantId,

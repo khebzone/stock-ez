@@ -77,7 +77,32 @@ public class RouteAllocation {
 
     @Column(length = 20)
     @Builder.Default
-    private String status = "ACTIVE";
+    private String status = "ACTIVE"; // legacy — superseded by the per-role flags below
+
+    @Builder.Default
+    @Column(name = "sales_completed", nullable = false)
+    private boolean salesCompleted = false;
+
+    @Builder.Default
+    @Column(name = "delivery_completed", nullable = false)
+    private boolean deliveryCompleted = false;
+
+    // Snapshot captured when the delivery run is completed (manual or auto).
+    @Column(name = "delivery_completed_at")
+    private Instant deliveryCompletedAt;
+
+    @Column(name = "delivery_delivered_count")
+    private Integer deliveryDeliveredCount;
+
+    @Column(name = "delivery_pending_count")
+    private Integer deliveryPendingCount;
+
+    @Column(name = "delivery_total_count")
+    private Integer deliveryTotalCount;
+
+    @Builder.Default
+    @Column(name = "warehouse_completed", nullable = false)
+    private boolean warehouseCompleted = false;
 
     @Column(length = 500)
     private String notes;

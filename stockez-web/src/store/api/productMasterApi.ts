@@ -6,7 +6,7 @@ export const productMasterApi = baseApi.injectEndpoints({
       query: (type) => `/product-masters?type=${type}`,
       providesTags: (_r, _e, type) => [{ type: 'ProductMaster', id: type }],
     }),
-    createMaster: builder.mutation<any, { type: string; name: string; value?: string; parentName?: string }>({
+    createMaster: builder.mutation<any, { type: string; name: string; value?: string; parentId?: string }>({
       query: (body) => ({ url: '/product-masters', method: 'POST', body }),
       invalidatesTags: (_r, _e, arg) => [{ type: 'ProductMaster', id: arg.type }],
     }),

@@ -4,6 +4,7 @@ import { TrophyOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetTargetsQuery, useCreateTargetMutation } from '../../store/api/reportApi';
 import { useGetUsersQuery } from '../../store/api/userApi';
+import { hasPermission } from '../../utils/permissions';
 
 const fmt = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 const fmtShort = (v: number) => v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${(v / 1000).toFixed(1)}K` : `₹${v}`;
@@ -79,7 +80,7 @@ const SetTargetModal: React.FC<SetTargetModalProps> = ({ open, onClose, month, y
         <Form.Item name="userId" label="Salesperson" rules={[{ required: true, message: 'Required' }]}>
           <Select
             showSearch
-            optionFilterProp="label"
+            filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
             placeholder="Select salesperson"
             disabled={!!existing}
             options={salesUsers.map((u: any) => ({ value: u.id, label: u.fullName || u.name }))}
@@ -147,10 +148,12 @@ const TargetsPage: React.FC = () => {
             style={{ width: 100 }}
             options={yearOptions}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openNew}
-            style={{ borderRadius: 8, background: '#2563eb', fontWeight: 600 }}>
-            Set Target
-          </Button>
+          {hasPermission('INCENTIVES_MANAGE') && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openNew}
+              style={{ borderRadius: 8, background: '#2563eb', fontWeight: 600 }}>
+              Set Target
+            </Button>
+          )}
         </div>
       </div>
 
@@ -197,10 +200,12 @@ const TargetsPage: React.FC = () => {
             <TrophyOutlined style={{ fontSize: 48, marginBottom: 14, display: 'block', color: '#cbd5e1' }} />
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, color: '#64748b' }}>No targets set for {MONTHS[month - 1]} {year}</div>
             <div style={{ fontSize: 13, marginBottom: 20 }}>Set monthly targets for your sales team to track performance</div>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openNew}
-              style={{ borderRadius: 8, background: '#2563eb' }}>
-              Set First Target
-            </Button>
+            {hasPermission('INCENTIVES_MANAGE') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={openNew}
+                style={{ borderRadius: 8, background: '#2563eb' }}>
+                Set First Target
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -281,12 +286,14 @@ const TargetsPage: React.FC = () => {
                     </div>
 
                     {/* Edit */}
-                    <div style={{ textAlign: 'right' }}>
-                      <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(t)}
-                        style={{ borderRadius: 6, fontSize: 12 }}>
-                        Edit
-                      </Button>
-                    </div>
+                    {hasPermission('INCENTIVES_MANAGE') && (
+                      <div style={{ textAlign: 'right' }}>
+                        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(t)}
+                          style={{ borderRadius: 6, fontSize: 12 }}>
+                          Edit
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

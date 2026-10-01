@@ -11,8 +11,8 @@ spring:
     password: ${DB_PASSWORD:stockez123}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
+      maximum-pool-size: 15
+      minimum-idle: 2
       idle-timeout: 30000
       connection-timeout: 20000
       max-lifetime: 1800000
@@ -29,6 +29,16 @@ spring:
         jdbc:
           time_zone: Asia/Kolkata
         default_schema: public
+
+  cache:
+    type: ${CACHE_TYPE:redis}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      connect-timeout: 2000ms
 
   flyway:
     enabled: true
@@ -51,6 +61,9 @@ spring:
 
 # StockEz Custom Properties
 stockez:
+  super-admin:
+    phone: ${SUPER_ADMIN_PHONE:9384745303}
+    password: ${SUPER_ADMIN_PASSWORD:Stockez@321}
   security:
     jwt:
       secret: ${JWT_SECRET:YourSuperSecretKeyForStockEzPlatformMinimum256BitRequiredForHS512AlgorithmChangeInProduction2025}
@@ -86,8 +99,27 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# File storage
+# Sentry — error tracking
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENV:production}
+  traces-sample-rate: 0.1
+  send-default-pii: false
+  logging:
+    minimum-event-level: error
+    minimum-breadcrumb-level: info
+
+# Log file path (override with LOG_PATH env var in production) + file storage
 app:
+  log:
+    path: ${LOG_PATH:./logs}
   upload:
     dir: ${UPLOAD_DIR:/tmp/uploads}
     base-url: ${BASE_URL:http://localhost:8080}
+  storage:
+    r2:
+      account-id: ${R2_ACCOUNT_ID:}
+      access-key: ${R2_ACCESS_KEY:}
+      secret-key: ${R2_SECRET_KEY:}
+      bucket: ${R2_BUCKET:stockez-images}
+      public-url: ${R2_PUBLIC_URL:}

@@ -16,6 +16,8 @@ import com.stockez.api.module.incentive.repository.IncentiveSlabRepository;
 import com.stockez.api.module.order.entity.Order;
 import com.stockez.api.module.order.repository.OrderRepository;
 import com.stockez.api.module.order.repository.PaymentRepository;
+import com.stockez.api.module.product.entity.ProductMaster;
+import com.stockez.api.module.product.repository.ProductMasterRepository;
 import com.stockez.api.module.product.repository.ProductRepository;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.tenant.repository.TenantRepository;
@@ -52,11 +54,12 @@ public class IncentiveService {
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final TenantRepository tenantRepository;
+    private final ProductMasterRepository masterRepository;
     private final ProductRepository productRepository;
 
     private static final List<Order.OrderStatus> ACTIVE_STATUSES = List.of(
-        Order.OrderStatus.APPROVED, Order.OrderStatus.PREPARING,
-        Order.OrderStatus.PREPARED, Order.OrderStatus.DISPATCHED, Order.OrderStatus.DELIVERED
+        Order.OrderStatus.APPROVED, Order.OrderStatus.PACKING,
+        Order.OrderStatus.PACKED, Order.OrderStatus.DISPATCHED, Order.OrderStatus.DELIVERED
     );
 
     // ── Targets ──────────────────────────────────────────────────────────────
@@ -66,19 +69,22 @@ public class IncentiveService {
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
         User salesPerson = userRepository.findByIdAndTenantId(req.getSalesPersonId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", req.getSalesPersonId().toString()));
+        ProductMaster brandMaster = masterRepository.findByIdAndTenantId(req.getBrandId(), tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Brand", req.getBrandId().toString()));
 
         BrandTarget target = targetRepository
-                .findByTenantIdAndSalesPersonIdAndBrandAndTargetMonthAndTargetYear(
-                        tenantId, req.getSalesPersonId(), req.getBrand(), req.getTargetMonth(), req.getTargetYear())
+                .findByTenantIdAndSalesPersonIdAndBrandMasterIdAndTargetMonthAndTargetYear(
+                        tenantId, req.getSalesPersonId(), req.getBrandId(), req.getTargetMonth(), req.getTargetYear())
                 .orElseGet(() -> BrandTarget.builder().tenant(tenant).salesPerson(salesPerson).build());
 
-        target.setBrand(req.getBrand());
+        target.setBrandMaster(brandMaster);
+        target.setBrand(brandMaster.getName());
         target.setTargetMonth(req.getTargetMonth());
         target.setTargetYear(req.getTargetYear());
         target.setTargetValue(req.getTargetValue());
 
         BrandTarget saved = targetRepository.save(target);
-        BigDecimal achieved = computeAchieved(tenantId, salesPerson.getId(), req.getBrand(), req.getTargetMonth(), req.getTargetYear());
+        BigDecimal achieved = computeAchieved(tenantId, salesPerson.getId(), brandMaster.getName(), req.getTargetMonth(), req.getTargetYear());
         return toTargetRow(saved, achieved, tenantId);
     }
 
@@ -108,8 +114,11 @@ public class IncentiveService {
     }
 
     @Transactional(readOnly = true)
-    public List<String> getDistinctBrands(UUID tenantId) {
-        return productRepository.findDistinctBrands(tenantId);
+    public List<IncentiveDtos.BrandOption> getDistinctBrands(UUID tenantId) {
+        return productRepository.findDistinctBrandMastersWithActiveProducts(tenantId)
+                .stream()
+                .map(m -> new IncentiveDtos.BrandOption(m.getId(), m.getName()))
+                .collect(Collectors.toList());
     }
 
     // ── Slabs ─────────────────────────────────────────────────────────────────
@@ -123,6 +132,7 @@ public class IncentiveService {
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .map(e -> {
                     IncentiveDtos.BrandSlabSummary s = new IncentiveDtos.BrandSlabSummary();
+                    s.setBrandId(e.getValue().get(0).getBrandMaster().getId());
                     s.setBrand(e.getKey());
                     s.setSlabs(e.getValue().stream().map(this::toSlabResponse).collect(Collectors.toList()));
                     return s;
@@ -138,12 +148,15 @@ public class IncentiveService {
     public List<IncentiveDtos.IncentiveSlabResponse> saveSlabs(IncentiveDtos.SaveSlabsRequest req, UUID tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        ProductMaster brandMaster = masterRepository.findByIdAndTenantId(req.getBrandId(), tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Brand", req.getBrandId().toString()));
 
-        slabRepository.deleteByTenantIdAndBrand(tenantId, req.getBrand());
+        slabRepository.deleteByTenantIdAndBrandMasterId(tenantId, req.getBrandId());
 
         List<IncentiveSlab> slabs = req.getSlabs().stream().map(s -> IncentiveSlab.builder()
                 .tenant(tenant)
-                .brand(req.getBrand())
+                .brandMaster(brandMaster)
+                .brand(brandMaster.getName())
                 .fromPct(s.getFromPct())
                 .toPct(s.getToPct())
                 .incentiveAmount(s.getIncentiveAmount())
@@ -176,10 +189,11 @@ public class IncentiveService {
             BigDecimal incentiveAmount = matched != null ? matched.getIncentiveAmount() : BigDecimal.ZERO;
 
             IncentiveCredit credit = creditRepository
-                    .findByTenantIdAndSalesPersonIdAndBrandAndTargetMonthAndTargetYear(
-                            tenantId, t.getSalesPerson().getId(), t.getBrand(), req.getTargetMonth(), req.getTargetYear())
+                    .findByTenantIdAndSalesPersonIdAndBrandMasterIdAndTargetMonthAndTargetYear(
+                            tenantId, t.getSalesPerson().getId(), t.getBrandMaster().getId(), req.getTargetMonth(), req.getTargetYear())
                     .orElseGet(() -> IncentiveCredit.builder().tenant(tenant).salesPerson(t.getSalesPerson()).build());
 
+            credit.setBrandMaster(t.getBrandMaster());
             credit.setBrand(t.getBrand());
             credit.setTargetMonth(req.getTargetMonth());
             credit.setTargetYear(req.getTargetYear());
@@ -254,7 +268,8 @@ public class IncentiveService {
             }
 
             boolean credited = creditRepository
-                    .findByTenantIdAndSalesPersonIdAndBrandAndTargetMonthAndTargetYear(tenantId, userId, t.getBrand(), month, year)
+                    .findByTenantIdAndSalesPersonIdAndBrandMasterIdAndTargetMonthAndTargetYear(
+                            tenantId, userId, t.getBrandMaster().getId(), month, year)
                     .map(c -> "CREDITED".equals(c.getStatus()))
                     .orElse(false);
 
@@ -591,6 +606,7 @@ public class IncentiveService {
         row.setSalesPersonId(t.getSalesPerson().getId());
         row.setSalesPersonName(t.getSalesPerson().getFullName());
         row.setSalesPersonPhone(t.getSalesPerson().getPhone());
+        row.setBrandId(t.getBrandMaster().getId());
         row.setBrand(t.getBrand());
         row.setTargetMonth(t.getTargetMonth());
         row.setTargetYear(t.getTargetYear());

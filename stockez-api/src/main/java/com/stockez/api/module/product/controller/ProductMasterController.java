@@ -25,7 +25,7 @@ public class ProductMasterController {
     private final ProductMasterService masterService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PRODUCTS_CREATE','PRODUCTS_EDIT','MASTERS_MANAGE')")
     public ResponseEntity<ApiResponse<ProductMasterDtos.MasterResponse>> create(
             @Valid @RequestBody ProductMasterDtos.CreateMasterRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -42,7 +42,7 @@ public class ProductMasterController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PRODUCTS_CREATE','PRODUCTS_EDIT','MASTERS_MANAGE')")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

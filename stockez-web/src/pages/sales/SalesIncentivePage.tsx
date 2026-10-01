@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Select, Spin, Progress, Badge, Grid } from 'antd';
 import { TrophyOutlined, FireOutlined, RocketOutlined, CheckCircleFilled, LockOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -357,7 +357,7 @@ const SalesIncentivePage: React.FC = () => {
 
   const { data, isLoading, isFetching } = useGetMyIncentivesQuery(
     { month, year },
-    { pollingInterval: 30_000, refetchOnMountOrArgChange: true },
+    { pollingInterval: 30_000 },
   );
 
   const view   = data?.data;

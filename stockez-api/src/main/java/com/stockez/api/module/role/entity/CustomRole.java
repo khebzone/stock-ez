@@ -29,6 +29,10 @@ public class CustomRole {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(name = "field_staff", nullable = false)
+    @Builder.Default
+    private boolean fieldStaff = false;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "role_permissions", joinColumns = @JoinColumn(name = "role_id"))
     @Column(name = "permission")

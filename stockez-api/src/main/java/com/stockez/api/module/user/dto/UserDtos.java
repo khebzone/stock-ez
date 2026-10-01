@@ -83,4 +83,11 @@ public class UserDtos {
         private String employmentType;
         private Instant createdAt;
     }
+
+    @Data
+    public static class UserQuotaResponse {
+        private long currentCount;
+        private int maxUsers;
+        private boolean atLimit;
+    }
 }

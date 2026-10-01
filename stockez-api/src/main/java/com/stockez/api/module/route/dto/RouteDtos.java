@@ -12,7 +12,7 @@ public class RouteDtos {
     public static class CreateRouteRequest {
         @NotBlank(message = "Route name is required")
         @Size(min = 2, max = 100, message = "Route name must be between 2 and 100 characters")
-        @Pattern(regexp = "[a-zA-Z\\s\\-\\.]+", message = "Route name must contain only letters, spaces or hyphens — no numbers or special characters")
+        @Pattern(regexp = "[a-zA-Z0-9\\s\\-\\.]+", message = "Route name must contain only letters, numbers, spaces or hyphens")
         private String name;
         @Size(max = 500)
         private String description;
@@ -22,7 +22,7 @@ public class RouteDtos {
     public static class AddRoutePlaceRequest {
         @NotBlank(message = "Stop name is required")
         @Size(min = 2, max = 100, message = "Stop name must be between 2 and 100 characters")
-        @Pattern(regexp = "[a-zA-Z\\s\\-\\.]+", message = "Stop name must contain only letters, spaces or hyphens — no numbers or special characters")
+        @Pattern(regexp = "[a-zA-Z0-9\\s\\-\\.]+", message = "Stop name must contain only letters, numbers, spaces or hyphens")
         private String name;
         @Size(max = 500)
         private String description;
@@ -32,7 +32,7 @@ public class RouteDtos {
     public static class UpdateRouteRequest {
         @NotBlank(message = "Route name is required")
         @Size(min = 2, max = 100, message = "Route name must be between 2 and 100 characters")
-        @Pattern(regexp = "[a-zA-Z\\s\\-\\.]+", message = "Route name must contain only letters, spaces or hyphens — no numbers or special characters")
+        @Pattern(regexp = "[a-zA-Z0-9\\s\\-\\.]+", message = "Route name must contain only letters, numbers, spaces or hyphens")
         private String name;
         @Size(max = 500)
         private String description;
@@ -42,7 +42,7 @@ public class RouteDtos {
     public static class UpdateRoutePlaceRequest {
         @NotBlank(message = "Stop name is required")
         @Size(min = 2, max = 100, message = "Stop name must be between 2 and 100 characters")
-        @Pattern(regexp = "[a-zA-Z\\s\\-\\.]+", message = "Stop name must contain only letters, spaces or hyphens — no numbers or special characters")
+        @Pattern(regexp = "[a-zA-Z0-9\\s\\-\\.]+", message = "Stop name must contain only letters, numbers, spaces or hyphens")
         private String name;
         @Size(max = 500)
         private String description;

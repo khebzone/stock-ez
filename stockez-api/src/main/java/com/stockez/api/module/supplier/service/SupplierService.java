@@ -23,9 +23,14 @@ public class SupplierService {
     private final SupplierRepository supplierRepository;
     private final AuditService auditService;
 
+    public java.util.List<SupplierDtos.SupplierResponse> getAllActive(UUID tenantId) {
+        return supplierRepository.findByTenantIdAndActiveTrue(tenantId, org.springframework.data.domain.Sort.by("name"))
+                .stream().map(this::toResponse).collect(java.util.stream.Collectors.toList());
+    }
+
     public Page<SupplierDtos.SupplierResponse> getAll(UUID tenantId, String search, Pageable pageable) {
         Page<Supplier> page = (search != null && !search.isBlank())
-                ? supplierRepository.search(tenantId, search, pageable)
+                ? supplierRepository.search(tenantId, search.toLowerCase() + "%", pageable)
                 : supplierRepository.findByTenantIdAndActiveTrue(tenantId, pageable);
         return page.map(this::toResponse);
     }

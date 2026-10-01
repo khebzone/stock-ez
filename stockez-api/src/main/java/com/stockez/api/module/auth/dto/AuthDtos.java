@@ -40,6 +40,7 @@ public class AuthDtos {
         private String phone;
         private String role;
         private String roleName;
+        private boolean fieldStaff;
         private java.util.List<String> permissions;
         private String tenantId;
         private String tenantName;

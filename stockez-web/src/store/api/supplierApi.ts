@@ -2,10 +2,12 @@ import { baseApi } from './baseApi';
 
 export const supplierApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getSuppliers: builder.query<any, { search?: string }>({
-      query: ({ search } = {}) => search?.trim()
-        ? `/suppliers?search=${encodeURIComponent(search.trim())}&size=100`
-        : `/suppliers?size=100`,
+    getSuppliers: builder.query<any, void>({
+      query: () => `/suppliers/all`,
+      providesTags: ['Supplier'],
+    }),
+    getSuppliersPaged: builder.query<any, { page: number; size: number; search?: string }>({
+      query: ({ page, size, search = '' }) => `/suppliers?page=${page}&size=${size}&search=${encodeURIComponent(search)}`,
       providesTags: ['Supplier'],
     }),
     getSupplier: builder.query<any, string>({
@@ -36,6 +38,9 @@ export const supplierApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/tenants/profile', method: 'PUT', body }),
       invalidatesTags: ['CompanyProfile'],
     }),
+    uploadCompanyLogo: builder.mutation<any, FormData>({
+      query: (formData) => ({ url: '/upload/image', method: 'POST', body: formData }),
+    }),
     getWorkflowSettings: builder.query<any, void>({
       query: () => '/tenants/settings',
       providesTags: ['WorkflowSettings'],
@@ -49,6 +54,7 @@ export const supplierApi = baseApi.injectEndpoints({
 
 export const {
   useGetSuppliersQuery,
+  useGetSuppliersPagedQuery,
   useGetSupplierQuery,
   useCreateSupplierMutation,
   useUpdateSupplierMutation,
@@ -56,6 +62,7 @@ export const {
   useImportSuppliersMutation,
   useGetCompanyProfileQuery,
   useUpdateCompanyProfileMutation,
+  useUploadCompanyLogoMutation,
   useGetWorkflowSettingsQuery,
   useUpdateWorkflowSettingsMutation,
 } = supplierApi;

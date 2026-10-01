@@ -1,6 +1,7 @@
 package com.stockez.api.module.order.entity;
 
 import com.stockez.api.module.customer.entity.Customer;
+import com.stockez.api.module.route.entity.RouteAllocation;
 import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.user.entity.User;
 import jakarta.persistence.*;
@@ -18,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Sales Order — lifecycle: DRAFT → SUBMITTED → APPROVED → PREPARED → DISPATCHED → DELIVERED
+ * Sales Order — lifecycle: DRAFT → SUBMITTED → APPROVED → PACKING → PACKED → DISPATCHED → DELIVERED
  */
 @Entity
 @Table(name = "orders",
@@ -45,15 +46,9 @@ public class Order {
     @Column(nullable = false, unique = true, length = 50)
     private String orderNumber; // e.g., ORD-2025-00001
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "customer_id", nullable = true)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
-
-    @Column(name = "walk_in_name", length = 200)
-    private String walkInName;
-
-    @Column(name = "walk_in_phone", length = 20)
-    private String walkInPhone;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sales_person_id", nullable = false)
@@ -66,6 +61,10 @@ public class Order {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approved_by_id")
     private User approvedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "route_allocation_id")
+    private RouteAllocation routeAllocation;
 
     @Column(nullable = false)
     private LocalDate orderDate;
@@ -90,6 +89,22 @@ public class Order {
     @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
+    @Column(name = "round_off_amount")
+    @Builder.Default
+    private BigDecimal roundOffAmount = BigDecimal.ZERO;
+
+    // Bill-level discount: NONE / PERCENT / AMOUNT. value = what the biller typed (% or ₹),
+    // amount = the ₹ actually applied before GST (apportioned across lines in the service).
+    @Column(name = "overall_discount_type", length = 10)
+    private String overallDiscountType;
+
+    @Column(name = "overall_discount_value", precision = 12, scale = 2)
+    private BigDecimal overallDiscountValue;
+
+    @Column(name = "overall_discount_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal overallDiscountAmount = BigDecimal.ZERO;
+
     @Builder.Default
     private BigDecimal paidAmount = BigDecimal.ZERO;
 
@@ -99,10 +114,15 @@ public class Order {
     @Column(length = 1000)
     private String notes;
 
+    @Column(name = "is_opening_balance")
+    @Builder.Default
+    private boolean openingBalance = false;
+
     private Instant approvedAt;
-    private Instant preparedAt;
+    private Instant packedAt;
     private Instant dispatchedAt;
     private Instant deliveredAt;
+    private Instant returnedAt;
 
     // Invoice PDF URL (stored in S3)
     @Column(length = 500)
@@ -116,13 +136,14 @@ public class Order {
     private Instant updatedAt;
 
     public enum OrderStatus {
-        DRAFT,       // Sales person is creating the order
-        SUBMITTED,   // Sales person submitted — waiting for invoice person
-        APPROVED,    // Invoice person approved — bill generated
-        PREPARING,   // Warehouse is picking products
-        PREPARED,    // Warehouse prepared — ready for dispatch
-        DISPATCHED,  // Delivery person collected
-        DELIVERED,   // Delivered to customer
-        CANCELLED    // Cancelled
+        DRAFT,                // Sales person is creating the order
+        SUBMITTED,            // Sales person submitted — waiting for invoice person
+        APPROVED,             // Invoice person approved — bill generated
+        PACKING,              // Warehouse is packing the order
+        PACKED,               // Packed and ready for dispatch
+        DISPATCHED,           // Delivery person collected
+        DELIVERED,            // Delivered to customer
+        RETURN_TO_WAREHOUSE,  // Shop closed / not available — returned to warehouse
+        CANCELLED             // Cancelled
     }
 }

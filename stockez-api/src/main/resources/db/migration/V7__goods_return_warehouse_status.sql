@@ -1,0 +1,2 @@
+ALTER TABLE goods_returns
+    ADD COLUMN warehouse_status VARCHAR(30) NOT NULL DEFAULT 'VERIFIED';

@@ -11,6 +11,7 @@ import {
   UserOutlined, PhoneOutlined, ShopOutlined, DeleteOutlined, EditOutlined, DownloadOutlined,
   WarningFilled, TeamOutlined, ArrowRightOutlined, SearchOutlined,
 } from '@ant-design/icons';
+import { hasPermission } from '../../utils/permissions';
 
 /* ── Animated block error dialog ── */
 const BlockedDeleteModal: React.FC<{
@@ -286,6 +287,7 @@ const BeatPlanDrawer: React.FC<{ routeId: string | null; onClose: () => void }> 
                 <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{place.name}</div>
                 <Badge
                   count={place.customers?.length || 0}
+                  overflowCount={9999}
                   style={{ background: '#059669' }}
                   showZero
                 />
@@ -382,7 +384,7 @@ const RoutesPage: React.FC = () => {
 
   const allRoutes = routesData?.data || [];
   const routes = search.trim()
-    ? allRoutes.filter((r: any) => r.name.toLowerCase().includes(search.trim().toLowerCase()))
+    ? allRoutes.filter((r: any) => r.name.toLowerCase().startsWith(search.trim().toLowerCase()))
     : allRoutes;
 
   const handleRouteSubmit = async () => {
@@ -461,9 +463,11 @@ const RoutesPage: React.FC = () => {
             <Button icon={<DownloadOutlined />} onClick={downloadAllRoutesExcel}>
               Download All Routes
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingRoute(null); routeForm.resetFields(); setRouteModal(true); }}>
-              Add Route
-            </Button>
+            {hasPermission('ROUTES_CREATE') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingRoute(null); routeForm.resetFields(); setRouteModal(true); }}>
+                Add Route
+              </Button>
+            )}
           </Space>
         }
       />
@@ -549,14 +553,18 @@ const RoutesPage: React.FC = () => {
                           {!isXSmall && 'Add Stop'}
                         </Button>
                       </Tooltip>
-                      <Tooltip title="Edit Route Name">
-                        <Button size="small" icon={<EditOutlined />} shape="circle" style={{ borderRadius: 6 }}
-                          onClick={() => { setEditingRoute(route); routeForm.setFieldsValue({ name: route.name, description: route.description }); setRouteModal(true); }} />
-                      </Tooltip>
-                      <Popconfirm title="Delete this route?" description="This will also deactivate all stops. Routes with active customers cannot be deleted."
-                        onConfirm={() => handleDeleteRoute(route.id, route.name)} okText="Delete" okButtonProps={{ danger: true }} cancelText="Cancel">
-                        <Button size="small" icon={<DeleteOutlined />} shape="circle" danger style={{ borderRadius: 6 }} />
-                      </Popconfirm>
+                      {hasPermission('ROUTES_EDIT') && (
+                        <Tooltip title="Edit Route Name">
+                          <Button size="small" icon={<EditOutlined />} shape="circle" style={{ borderRadius: 6 }}
+                            onClick={() => { setEditingRoute(route); routeForm.setFieldsValue({ name: route.name, description: route.description }); setRouteModal(true); }} />
+                        </Tooltip>
+                      )}
+                      {hasPermission('ROUTES_CREATE') && (
+                        <Popconfirm title="Delete this route?" description="This will also deactivate all stops. Routes with active customers cannot be deleted."
+                          onConfirm={() => handleDeleteRoute(route.id, route.name)} okText="Delete" okButtonProps={{ danger: true }} cancelText="Cancel">
+                          <Button size="small" icon={<DeleteOutlined />} shape="circle" danger style={{ borderRadius: 6 }} />
+                        </Popconfirm>
+                      )}
                     </div>
                   </div>
 
@@ -713,7 +721,7 @@ const RoutesPage: React.FC = () => {
           <Form.Item name="name" label="Route Name" rules={[
             { required: true, message: 'Route name is required' },
             { min: 2, message: 'Must be at least 2 characters' },
-            { pattern: /^[a-zA-Z\s\-.]+$/, message: 'Only letters, spaces or hyphens allowed — no numbers' },
+            { pattern: /^[a-zA-Z0-9\s\-.]+$/, message: 'Only letters, numbers, spaces or hyphens allowed' },
           ]}>
             <Input
               placeholder="e.g. Cholapuram, Papanasam, Kumbakonam East"
@@ -741,7 +749,7 @@ const RoutesPage: React.FC = () => {
           <Form.Item name="name" label="Stop Name" rules={[
             { required: true, message: 'Stop name is required' },
             { min: 2, message: 'Must be at least 2 characters' },
-            { pattern: /^[a-zA-Z\s\-.]+$/, message: 'Only letters, spaces or hyphens allowed — no numbers' },
+            { pattern: /^[a-zA-Z0-9\s\-.]+$/, message: 'Only letters, numbers, spaces or hyphens allowed' },
           ]}>
             <Input
               placeholder="e.g. Kovilacheri, Solapuram, Papanasam"
@@ -766,7 +774,7 @@ const RoutesPage: React.FC = () => {
           <Form.Item name="name" label="Stop Name" rules={[
             { required: true, message: 'Stop name is required' },
             { min: 2, message: 'Must be at least 2 characters' },
-            { pattern: /^[a-zA-Z\s\-.]+$/, message: 'Only letters, spaces or hyphens allowed — no numbers' },
+            { pattern: /^[a-zA-Z0-9\s\-.]+$/, message: 'Only letters, numbers, spaces or hyphens allowed' },
           ]}>
             <Input
               size="large" autoFocus

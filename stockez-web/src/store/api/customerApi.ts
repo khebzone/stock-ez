@@ -2,13 +2,16 @@ import { baseApi } from './baseApi';
 
 export const customerApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getCustomers: builder.query<any, { routeId?: string; placeId?: string; search?: string }>({
-      query: ({ routeId, placeId, search } = {}) => {
-        if (search?.trim()) return `/customers/search?q=${encodeURIComponent(search.trim())}&size=100`;
-        if (placeId) return `/customers/by-place/${placeId}?size=100`;
-        if (routeId) return `/customers/by-route/${routeId}?size=100`;
-        // No filter — return all via search with empty q
-        return `/customers/search?q=&size=200`;
+    getCustomers: builder.query<any, void>({
+      query: () => `/customers/all`,
+      providesTags: ['Customer'],
+    }),
+    getCustomersPaged: builder.query<any, { page: number; size: number; search?: string; routeId?: string; placeId?: string }>({
+      query: ({ page, size, search = '', routeId, placeId }) => {
+        const params = new URLSearchParams({ page: String(page), size: String(size), search });
+        if (routeId) params.set('routeId', routeId);
+        if (placeId) params.set('placeId', placeId);
+        return `/customers?${params}`;
       },
       providesTags: ['Customer'],
     }),
@@ -41,6 +44,7 @@ export const customerApi = baseApi.injectEndpoints({
 
 export const {
   useGetCustomersQuery,
+  useGetCustomersPagedQuery,
   useGetCustomerQuery,
   useCreateCustomerMutation,
   useUpdateCustomerMutation,

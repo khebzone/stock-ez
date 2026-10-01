@@ -4,6 +4,7 @@ import {
   Popconfirm, Modal, Tag,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { hasPermission } from '../../utils/permissions';
 import {
   useGetAllSlabsQuery,
   useGetDistinctBrandsQuery,
@@ -22,14 +23,14 @@ const IncentiveSlabPage: React.FC = () => {
   const { data: allSlabsData, isLoading } = useGetAllSlabsQuery();
   const [saveSlabs, { isLoading: saving }] = useSaveSlabsMutation();
 
-  const brands: string[] = brandsData?.data || [];
+  const brands: Array<{ id: string; name: string }> = brandsData?.data || [];
   const allSlabs: any[] = allSlabsData?.data || [];
 
-  const selectedSummary = allSlabs.find((s: any) => s.brand === selectedBrand);
+  const selectedSummary = allSlabs.find((s: any) => s.brandId === selectedBrand);
 
-  const openEdit = (brand: string) => {
-    setSelectedBrand(brand);
-    const existing = allSlabs.find((s: any) => s.brand === brand);
+  const openEdit = (brandId: string) => {
+    setSelectedBrand(brandId);
+    const existing = allSlabs.find((s: any) => s.brandId === brandId);
     setEditSlabs(existing?.slabs?.map((s: any) => ({
       fromPct: s.fromPct,
       toPct: s.toPct,
@@ -64,8 +65,9 @@ const IncentiveSlabPage: React.FC = () => {
       }
     }
     try {
-      await saveSlabs({ brand: selectedBrand, slabs: editSlabs }).unwrap();
-      message.success(`Incentive slabs saved for ${selectedBrand}`);
+      const brandName = brands.find(b => b.id === selectedBrand)?.name || selectedBrand;
+      await saveSlabs({ brandId: selectedBrand, slabs: editSlabs }).unwrap();
+      message.success(`Incentive slabs saved for ${brandName}`);
       setModalOpen(false);
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to save');
@@ -107,7 +109,7 @@ const IncentiveSlabPage: React.FC = () => {
       key: 'actions',
       width: 80,
       render: (_: any, r: any) => (
-        <Button size="small" onClick={() => openEdit(r.brand)}>Edit</Button>
+        <Button size="small" onClick={() => openEdit(r.brandId)}>Edit</Button>
       ),
     },
   ];
@@ -117,11 +119,11 @@ const IncentiveSlabPage: React.FC = () => {
       <PageHeader
         title="Incentive Slabs"
         subtitle="Configure brand-wise incentive tiers based on achievement percentage"
-        action={
+        action={hasPermission('INCENTIVES_MANAGE') && (
           <Button type="primary" icon={<PlusOutlined />} onClick={openNew}>
             Add Brand Slabs
           </Button>
-        }
+        )}
       />
 
       <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -164,7 +166,7 @@ const IncentiveSlabPage: React.FC = () => {
             placeholder="Select brand"
             showSearch
             style={{ width: '100%' }}
-            options={brands.map((b: string) => ({ value: b, label: b }))}
+            options={brands.map((b) => ({ value: b.id, label: b.name }))}
           />
         </div>
 

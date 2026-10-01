@@ -31,12 +31,20 @@ public class UserService {
     private final AuditService auditService;
 
     public UserDtos.UserResponse createUser(UserDtos.CreateUserRequest request, UUID tenantId) {
-        if (userRepository.existsByPhoneAndTenantId(request.getPhone(), tenantId)) {
-            throw new BusinessException("Phone number already registered in this organization", "PHONE_EXISTS");
+        if (userRepository.existsByPhoneAndActiveTrue(request.getPhone())) {
+            throw new BusinessException("Phone number is already registered", "PHONE_EXISTS");
         }
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+
+        long staffCount = userRepository.countByTenantIdAndActiveTrueAndRoleNotIn(
+                tenantId, java.util.List.of(User.UserRole.ADMIN, User.UserRole.SUPER_ADMIN));
+        if (staffCount >= tenant.getMaxUsers()) {
+            throw new BusinessException(
+                    "User limit reached (" + tenant.getMaxUsers() + " users). Upgrade your plan to add more.",
+                    "USER_LIMIT_REACHED");
+        }
 
         CustomRole customRole = null;
         if (request.getCustomRoleId() != null) {
@@ -128,10 +136,34 @@ public class UserService {
     public void reactivateUser(UUID id, UUID tenantId) {
         User user = userRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", id.toString()));
+        if (user.getRole() == User.UserRole.STAFF) {
+            Tenant tenant = tenantRepository.findById(tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+            long staffCount = userRepository.countByTenantIdAndActiveTrueAndRoleNotIn(
+                    tenantId, java.util.List.of(User.UserRole.ADMIN, User.UserRole.SUPER_ADMIN));
+            if (staffCount >= tenant.getMaxUsers()) {
+                throw new BusinessException(
+                        "User limit reached (" + tenant.getMaxUsers() + " users). Upgrade your plan to add more.",
+                        "USER_LIMIT_REACHED");
+            }
+        }
         user.setActive(true);
         userRepository.save(user);
         auditService.record(tenantId, "USER", user.getId(), "REACTIVATED",
                 "User " + user.getFullName() + " reactivated");
+    }
+
+    @Transactional(readOnly = true)
+    public UserDtos.UserQuotaResponse getUserQuota(UUID tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        long staffCount = userRepository.countByTenantIdAndActiveTrueAndRoleNotIn(
+                tenantId, java.util.List.of(User.UserRole.ADMIN, User.UserRole.SUPER_ADMIN));
+        UserDtos.UserQuotaResponse res = new UserDtos.UserQuotaResponse();
+        res.setCurrentCount(staffCount);
+        res.setMaxUsers(tenant.getMaxUsers());
+        res.setAtLimit(staffCount >= tenant.getMaxUsers());
+        return res;
     }
 
     public void changePassword(UUID id, UserDtos.ChangePasswordRequest request, UUID tenantId) {

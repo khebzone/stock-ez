@@ -3,9 +3,9 @@ import { useParams } from 'react-router-dom';
 import { Spin, Table, Button, Tag } from 'antd';
 import { PrinterOutlined, DownloadOutlined } from '@ant-design/icons';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
-interface ProductInfo { id: string; name: string; brand: string; unit: string; imageUrl?: string; }
+interface ProductInfo { id: string; name: string; brand: string; unit: string; imageUrl?: string; hsnCode?: string; }
 interface OrderItem {
   id: string; product: ProductInfo; quantity: number;
   unitPrice: number; discountPercent?: number; discountAmount?: number;
@@ -16,10 +16,10 @@ interface CustomerInfo { businessName?: string; ownerName?: string; phone?: stri
 interface PersonInfo { id: string; fullName: string; phone?: string; }
 interface OrderResponse {
   id: string; orderNumber: string; status: string; orderDate: string;
-  customer?: CustomerInfo; walkInName?: string; walkInPhone?: string;
+  customer?: CustomerInfo;
   salesPerson?: PersonInfo;
   items: OrderItem[];
-  subTotal: number; totalGst: number; totalAmount: number;
+  subTotal: number; totalGst: number; roundOffAmount?: number; totalAmount: number;
   paidAmount: number; balanceAmount: number; notes?: string;
   createdAt: string;
 }
@@ -42,7 +42,7 @@ const fmtDate = (d: string | undefined) => {
 
 const statusColor: Record<string, string> = {
   DRAFT: 'default', SUBMITTED: 'blue', APPROVED: 'cyan',
-  PREPARING: 'orange', PREPARED: 'lime', DISPATCHED: 'purple',
+  PACKING: 'orange', PACKED: 'lime', DISPATCHED: 'purple',
   DELIVERED: 'green', CANCELLED: 'red',
 };
 
@@ -69,14 +69,14 @@ function toWords(amount: number): string {
 }
 
 const InvoicePage: React.FC = () => {
-  const { orderNumber } = useParams<{ orderNumber: string }>();
+  const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<PublicInvoiceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/public/invoice/${orderNumber}`)
+    fetch(`${API_BASE}/api/public/invoice/${id}`)
       .then(r => r.json())
       .then(res => {
         if (res.success) setData(res.data);
@@ -84,14 +84,22 @@ const InvoicePage: React.FC = () => {
       })
       .catch(() => setError('Could not connect to server'))
       .finally(() => setLoading(false));
-  }, [orderNumber]);
+  }, [id]);
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/public/invoice/${orderNumber}/pdf`);
-      const json = await res.json();
-      if (json.success && json.data.pdfUrl) window.open(json.data.pdfUrl, '_blank');
+      const res = await fetch(`${API_BASE}/api/public/invoice/${id}/pdf`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data?.order?.orderNumber || 'invoice'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } finally {
       setPdfLoading(false);
     }
@@ -117,8 +125,8 @@ const InvoicePage: React.FC = () => {
   }
 
   const { order, company } = data;
-  const customerName = order.customer?.businessName || order.customer?.ownerName || order.walkInName || 'Walk-in Customer';
-  const customerPhone = order.customer?.phone || order.walkInPhone;
+  const customerName = order.customer?.businessName || order.customer?.ownerName || '—';
+  const customerPhone = order.customer?.phone;
   const customerAddress = order.customer?.address;
   const companyAddress = [company.address, company.city, company.state, company.pinCode].filter(Boolean).join(', ');
 
@@ -161,6 +169,13 @@ const InvoicePage: React.FC = () => {
       ),
     },
     {
+      title: 'HSN',
+      key: 'hsn',
+      align: 'center' as const,
+      width: 70,
+      render: (r: OrderItem) => <span style={{ fontSize: 11 }}>{r.product?.hsnCode || '—'}</span>,
+    },
+    {
       title: 'Qty',
       dataIndex: 'quantity',
       key: 'qty',
@@ -177,12 +192,12 @@ const InvoicePage: React.FC = () => {
       render: (v: number) => <span style={{ fontSize: 12 }}>{fmt(v)}</span>,
     },
     {
-      title: 'Disc%',
-      dataIndex: 'discountPercent',
+      title: 'Disc',
+      dataIndex: 'discountAmount',
       key: 'disc',
       align: 'right' as const,
-      width: 50,
-      render: (v?: number) => <span style={{ fontSize: 12 }}>{v ? `${v}%` : '-'}</span>,
+      width: 64,
+      render: (v?: number) => <span style={{ fontSize: 12 }}>{v && v > 0 ? fmt(v) : '-'}</span>,
     },
     {
       title: 'GST%',
@@ -346,12 +361,13 @@ const InvoicePage: React.FC = () => {
           {/* Total summary */}
           <div style={{ width: 220, flexShrink: 0 }}>
             {[
-              { label: 'Subtotal (excl. GST)', value: order.subTotal, color: undefined },
-              { label: 'Total GST', value: order.totalGst, color: undefined },
+              { label: 'Subtotal (excl. GST)', value: order.subTotal, signed: false },
+              { label: 'Total GST', value: order.totalGst, signed: false },
+              ...(order.roundOffAmount ? [{ label: 'Round Off', value: order.roundOffAmount, signed: true }] : []),
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, color: '#475569' }}>
                 <span>{row.label}</span>
-                <span>{fmt(row.value)}</span>
+                <span>{row.signed ? (row.value >= 0 ? '+' : '-') : ''}{fmt(row.signed ? Math.abs(row.value) : row.value)}</span>
               </div>
             ))}
             <div style={{ height: 1, background: '#e2e8f0', margin: '6px 0' }} />

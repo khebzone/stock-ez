@@ -16,6 +16,6 @@ public interface BrandTargetRepository extends JpaRepository<BrandTarget, UUID> 
     List<BrandTarget> findByTenantIdAndSalesPersonIdAndTargetMonthAndTargetYear(
             UUID tenantId, UUID salesPersonId, int targetMonth, int targetYear);
 
-    Optional<BrandTarget> findByTenantIdAndSalesPersonIdAndBrandAndTargetMonthAndTargetYear(
-            UUID tenantId, UUID salesPersonId, String brand, int targetMonth, int targetYear);
+    Optional<BrandTarget> findByTenantIdAndSalesPersonIdAndBrandMasterIdAndTargetMonthAndTargetYear(
+            UUID tenantId, UUID salesPersonId, UUID brandMasterId, int targetMonth, int targetYear);
 }

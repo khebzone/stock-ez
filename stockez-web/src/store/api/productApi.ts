@@ -2,25 +2,22 @@ import { baseApi } from './baseApi';
 
 export const productApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getProducts: builder.query<any, { page?: number; size?: number; search?: string; category?: string }>({
-      query: ({ page = 0, size = 50, search, category } = {}) => {
+    getAllProducts: builder.query<any, void>({
+      query: () => '/products/all',
+      providesTags: ['Product'],
+    }),
+    getProducts: builder.query<any, { page?: number; size?: number; search?: string; categoryId?: string; brandId?: string }>({
+      query: ({ page = 0, size = 20, search, categoryId, brandId } = {}) => {
         const params = new URLSearchParams({ page: String(page), size: String(size) });
         if (search) params.append('search', search);
-        if (category) params.append('category', category);
+        if (categoryId) params.append('categoryId', categoryId);
+        if (brandId) params.append('brandId', brandId);
         return `/products?${params}`;
       },
       providesTags: ['Product'],
     }),
     getProduct: builder.query<any, string>({
       query: (id) => `/products/${id}`,
-      providesTags: ['Product'],
-    }),
-    getCategories: builder.query<any, void>({
-      query: () => '/products/categories',
-      providesTags: ['Product'],
-    }),
-    getBrands: builder.query<any, void>({
-      query: () => '/products/brands',
       providesTags: ['Product'],
     }),
     createProduct: builder.mutation<any, any>({
@@ -39,10 +36,9 @@ export const productApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetAllProductsQuery,
   useGetProductsQuery,
   useGetProductQuery,
-  useGetCategoriesQuery,
-  useGetBrandsQuery,
   useCreateProductMutation,
   useUpdateProductMutation,
   useDeleteProductMutation,

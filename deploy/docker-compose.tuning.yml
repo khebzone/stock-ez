@@ -1,0 +1,59 @@
+# ============================================================
+#  Resource tuning overlay. The defaults in docker-compose.prod.yml
+#  are Docker's, which are wrong for a single shared box:
+#    - the JVM grabs 1/4 of host RAM and starves Postgres
+#    - Postgres runs on shared_buffers=128MB
+#    - Redis has no memory cap and will grow until something dies
+#
+#  Values below are sized for MilesWeb SM-L2: 8 GB RAM / 2 vCPU.
+#  For a 12 GB / 6-core host use the numbers in the comments.
+#
+#  Usage — always pass BOTH files, in this order:
+#    docker compose -f docker-compose.prod.yml -f docker-compose.tuning.yml up -d
+# ============================================================
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB              # 12 GB host: 3GB
+      - -c
+      - effective_cache_size=5GB        # 12 GB host: 8GB
+      - -c
+      - maintenance_work_mem=256MB      # 12 GB host: 512MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1            # NVMe, not spinning disk
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=on
+      # Only 2 cores. Parallel workers would fight the JVM for them,
+      # and every query here is tenant-scoped and index-served anyway.
+      - -c
+      - max_parallel_workers_per_gather=0
+
+  redis:
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "1"
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb                           # 12 GB host: 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+
+  stockez-api:
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Xmx1500m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=200
+        -XX:+ExitOnOutOfMemoryError
+      # 12 GB host: -Xmx2500m

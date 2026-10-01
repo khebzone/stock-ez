@@ -38,6 +38,10 @@ export const tenantApi = baseApi.injectEndpoints({
       query: ({ id, days }) => ({ url: `/tenants/${id}/extend-trial`, method: 'POST', body: { days } }),
       invalidatesTags: ['Tenant'],
     }),
+    getCompanyProfile: builder.query<any, void>({
+      query: () => '/tenants/profile',
+      providesTags: ['Tenant'],
+    }),
   }),
 });
 
@@ -50,4 +54,5 @@ export const {
   useActivateTenantMutation,
   useSetReadOnlyMutation,
   useExtendTrialMutation,
+  useGetCompanyProfileQuery,
 } = tenantApi;

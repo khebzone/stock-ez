@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
+import truckLogo from '../assets/logo-truck-light.png';
 import { Layout, Menu, Avatar, Dropdown, Badge, Breadcrumb, Input, Tooltip, Modal, Form, message, Grid, Drawer } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, UserOutlined, LogoutOutlined,
   GlobalOutlined, TeamOutlined, WalletOutlined, BarChartOutlined,
-  FileTextOutlined, BellOutlined, SearchOutlined, SettingOutlined,
+  FileTextOutlined, BellOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined, TagsOutlined,
   InboxOutlined, AlertOutlined, LineChartOutlined, BookOutlined, TrophyOutlined,
   CalculatorOutlined, RollbackOutlined, CarOutlined, AuditOutlined, EyeOutlined,
-  ShopOutlined, HddOutlined, LockOutlined, UploadOutlined, ClockCircleOutlined, ShoppingCartOutlined,
+  ShopOutlined, HddOutlined, LockOutlined, UploadOutlined, ClockCircleOutlined, ShoppingCartOutlined, DatabaseOutlined,
+  BankOutlined, ProfileOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import NotificationBell from '../components/NotificationBell';
 import { useChangePasswordMutation } from '../store/api/userApi';
 import { colors } from '../styles/tokens';
 import { hasPermission, isAdmin } from '../utils/permissions';
 import { hasPlan, type RequiredPlan } from '../utils/planGate';
+import DailyKural from '../components/DailyKural';
+import WelcomeGift from '../components/WelcomeGift';
 
 const { Header, Sider, Content } = Layout;
 
@@ -28,21 +33,29 @@ const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 // permission: undefined = admin-only; permission: string = shown when user has that permission
+// hideForAdmin: true = hidden from admin (non-admin only item)
 // minPlan: feature requires this plan or higher (soft lock — still visible, upgrade overlay on click)
 const NAV_SECTIONS = [
   {
     section: 'MAIN',
     items: [
-      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', permission: undefined as string | undefined, minPlan: undefined as RequiredPlan | undefined },
+      { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard', permission: undefined as string | undefined, minPlan: undefined as RequiredPlan | undefined, showToAll: true },
     ],
   },
   {
     section: 'ORDERS',
     items: [
       { key: '/orders', icon: <FileTextOutlined />, label: 'Orders', permission: 'ORDERS_VIEW', minPlan: undefined as RequiredPlan | undefined },
-      { key: '/counter-sale', icon: <ShoppingCartOutlined />, label: 'Counter Sale', permission: 'ORDERS_CREATE', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/counter-sale', icon: <ShoppingCartOutlined />, label: 'Counter Sale', permission: 'COUNTER_SALE_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/invoice/approver', icon: <AuditOutlined />, label: 'Approve Orders', permission: 'INVOICE_VIEW', minPlan: undefined as RequiredPlan | undefined },
-      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', permission: 'PICKLIST_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+    ],
+  },
+  {
+    section: 'WAREHOUSE',
+    items: [
+      { key: '/warehouse/picklist', icon: <InboxOutlined />, label: 'Route Pick List', permission: 'PICKLIST_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined, hideForAdmin: false },
+      { key: '/warehouse/my-tasks', icon: <InboxOutlined />, label: 'My Tasks', permission: 'PICKLIST_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined, hideForAdmin: false },
+      { key: '/warehouse/returns', icon: <RollbackOutlined />, label: 'Delivery Returns', permission: 'PICKLIST_VIEW' as string | undefined, minPlan: undefined, hideForAdmin: false },
     ],
   },
   {
@@ -51,6 +64,8 @@ const NAV_SECTIONS = [
       { key: '/purchases', icon: <InboxOutlined />, label: 'Purchases', permission: 'PURCHASES_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/stock-batches', icon: <HddOutlined />, label: 'Stock Batches', permission: 'STOCK_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/goods-return', icon: <RollbackOutlined />, label: 'Goods Return', permission: 'RETURNS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/stock-adjustments', icon: <AlertOutlined />, label: 'Stock Adjustment', permission: 'STOCK_ADJUSTMENT_VIEW' as string | undefined, minPlan: undefined as RequiredPlan | undefined },
+      { key: '/closing-stock', icon: <DatabaseOutlined />, label: 'Closing Stock', permission: 'CLOSING_STOCK_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
       { key: '/gate-pass', icon: <EyeOutlined />, label: 'Gate Pass', permission: 'GATE_PASS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
@@ -66,8 +81,10 @@ const NAV_SECTIONS = [
     section: 'FINANCE',
     items: [
       { key: '/payments', icon: <WalletOutlined />, label: 'Collections', permission: 'PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
-      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', permission: 'PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/customer-outstanding', icon: <WalletOutlined />, label: 'Customer Outstanding', permission: 'CUSTOMER_OUTSTANDING_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/refunds-claims', icon: <RollbackOutlined />, label: 'Refunds & Claims', permission: 'PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/supplier-payments', icon: <WalletOutlined />, label: 'Supplier Payments', permission: 'SUPPLIER_PAYMENTS_VIEW', minPlan: undefined as RequiredPlan | undefined },
+      { key: '/bank-clearance', icon: <BankOutlined />, label: 'Bank Clearance', permission: 'BANK_CLEARANCE_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/expenses', icon: <FileTextOutlined />, label: 'Expenses', permission: 'EXPENSES_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/day-closure', icon: <CalculatorOutlined />, label: 'Day Counter', permission: 'DAY_CLOSURE_VIEW', minPlan: undefined as RequiredPlan | undefined },
     ],
@@ -76,11 +93,18 @@ const NAV_SECTIONS = [
     section: 'REPORTS',
     items: [
       { key: '/reports', icon: <BarChartOutlined />, label: 'Reports Hub', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
-      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
-      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
-      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
-      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/daily', icon: <FileTextOutlined />, label: 'Daily Report', permission: 'REPORTS_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/aging', icon: <AlertOutlined />, label: 'Aging Report', permission: 'REPORTS_AGING_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/sales', icon: <LineChartOutlined />, label: 'Sales Analysis', permission: 'REPORTS_SALES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/customer-sales', icon: <LineChartOutlined />, label: 'Customer Sales', permission: 'REPORTS_SALES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/customer-item', icon: <ProfileOutlined />, label: 'Customer Item Report', permission: 'REPORTS_SALES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/route-item', icon: <ProfileOutlined />, label: 'Route Item Report', permission: 'REPORTS_SALES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/item-history', icon: <ProfileOutlined />, label: 'Item History', permission: 'REPORTS_SALES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/route-outstanding', icon: <AlertOutlined />, label: 'Route Outstanding', permission: 'REPORTS_AGING_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/ledger', icon: <BookOutlined />, label: 'Ledger', permission: 'REPORTS_LEDGER_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/targets', icon: <TrophyOutlined />, label: 'Targets', permission: 'INCENTIVES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
       { key: '/reports/audit', icon: <AuditOutlined />, label: 'Audit Report', permission: undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/reports/dead-stock', icon: <InboxOutlined />, label: 'Dead Stock', permission: 'REPORTS_DEADSTOCK_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
     ],
   },
   {
@@ -103,10 +127,10 @@ const NAV_SECTIONS = [
     section: 'SETUP',
     items: [
       { key: '/vehicles', icon: <CarOutlined />, label: 'Vehicles', permission: 'VEHICLES_VIEW', minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
-      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', permission: undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
+      { key: '/routes', icon: <GlobalOutlined />, label: 'Routes', permission: 'ROUTES_VIEW' as string | undefined, minPlan: 'PROFESSIONAL' as RequiredPlan | undefined },
       { key: '/users', icon: <UserOutlined />, label: 'Team', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
       { key: '/roles', icon: <SettingOutlined />, label: 'Roles', permission: undefined, minPlan: 'PREMIUM' as RequiredPlan | undefined },
-      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
+      { key: '/masters', icon: <TagsOutlined />, label: 'Product Masters', permission: 'MASTERS_MANAGE' as string | undefined, minPlan: undefined as RequiredPlan | undefined },
       { key: '/import', icon: <UploadOutlined />, label: 'Data Import', permission: 'IMPORT_VIEW', minPlan: undefined as RequiredPlan | undefined },
       { key: '/settings/company', icon: <SettingOutlined />, label: 'Company Settings', permission: undefined, minPlan: undefined as RequiredPlan | undefined },
     ],
@@ -115,6 +139,7 @@ const NAV_SECTIONS = [
 
 const SECTION_META: Record<string, { label: string; icon: React.ReactNode }> = {
   ORDERS:      { label: 'Orders',     icon: <FileTextOutlined /> },
+  WAREHOUSE:   { label: 'Warehouse',  icon: <DatabaseOutlined /> },
   INVENTORY:   { label: 'Inventory',  icon: <InboxOutlined /> },
   CRM:         { label: 'CRM',        icon: <TeamOutlined /> },
   FINANCE:     { label: 'Finance',    icon: <WalletOutlined /> },
@@ -135,14 +160,19 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/payments': ['Finance', 'Collections'],
   '/expenses': ['Finance', 'Expenses'],
   '/customer-outstanding': ['Finance', 'Customer Outstanding'],
+  '/refunds-claims': ['Finance', 'Refunds & Claims'],
   '/supplier-payments': ['Finance', 'Supplier Payments'],
+  '/bank-clearance': ['Finance', 'Bank Clearance'],
   '/reports': ['Finance', 'Reports'],
   '/masters': ['Setup', 'Product Masters'],
   '/invoice/approver': ['Operations', 'Approve Orders'],
   '/purchases': ['Operations', 'Purchases'],
   '/purchases/new': ['Operations', 'Purchases', 'New Entry'],
   '/warehouse/picklist': ['Operations', 'Route Pick List'],
+  '/warehouse/my-tasks': ['Operations', 'My Tasks'],
+  '/warehouse/returns':  ['Warehouse', 'Delivery Returns'],
   '/goods-return': ['Operations', 'Goods Return & Damage'],
+  '/stock-adjustments': ['Inventory', 'Stock Adjustment'],
   '/day-closure': ['Finance', 'Day Counter'],
   '/attendance': ['Field Ops', 'Attendance'],
   '/gate-pass': ['Field Ops', 'Gate Pass'],
@@ -150,9 +180,16 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/vehicles': ['Setup', 'Vehicles'],
   '/reports/aging': ['Finance', 'Reports', 'Aging Report'],
   '/reports/sales': ['Finance', 'Reports', 'Sales Analysis'],
+  '/reports/customer-sales': ['Finance', 'Reports', 'Customer Sales'],
+  '/reports/customer-item': ['Finance', 'Reports', 'Customer Item Report'],
+  '/reports/route-item': ['Finance', 'Reports', 'Route Item Report'],
+  '/reports/item-history': ['Finance', 'Reports', 'Item History'],
+  '/reports/route-outstanding': ['Finance', 'Reports', 'Route Outstanding'],
   '/reports/ledger': ['Finance', 'Reports', 'Ledger'],
   '/reports/targets': ['Finance', 'Reports', 'Targets'],
   '/reports/audit': ['Reports', 'Audit Report'],
+  '/reports/dead-stock': ['Finance', 'Reports', 'Dead Stock'],
+  '/closing-stock': ['Inventory', 'Closing Stock'],
   '/incentives/targets': ['Incentives', 'Brand Targets'],
   '/incentives/collection/targets': ['Incentives', 'Collection Targets'],
   '/incentives/slabs': ['Incentives', 'Incentive Slabs'],
@@ -180,8 +217,13 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const roleCfg = ROLE_CONFIG[role] || { label: roleName, color: '#4361ee' };
   const sideW = collapsed ? SIDEBAR_COLLAPSED_W : SIDEBAR_W;
 
-  const isItemVisible = (item: { permission?: string }) =>
-    item.permission === undefined ? isAdmin() : hasPermission(item.permission);
+  const isItemVisible = (item: { key?: string; permission?: string; hideForAdmin?: boolean; showToAll?: boolean }) => {
+    if (item.showToAll) return true;
+    if (item.hideForAdmin && isAdmin()) return false;
+    // Attendance is reachable by staff who can only self check-in, not just those who can view everyone's report
+    if (item.key === '/attendance') return hasPermission('ATTENDANCE_VIEW') || hasPermission('ATTENDANCE_CHECKIN');
+    return item.permission === undefined ? isAdmin() : hasPermission(item.permission);
+  };
 
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     const active = NAV_SECTIONS.find(s =>
@@ -227,7 +269,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return result;
   };
 
-  const handleLogout = () => { localStorage.clear(); navigate('/login'); };
+  const handleLogout = () => { ['token','refreshToken','tenantId','userId','user'].forEach(k => localStorage.removeItem(k)); navigate('/login'); };
 
   const handleChangePwd = async (values: any) => {
     if (values.newPassword !== values.confirmPassword) {
@@ -323,20 +365,14 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             height: HEADER_H,
             display: 'flex',
             alignItems: 'center',
-            padding: collapsed ? '0 18px' : '0 22px',
+            padding: collapsed ? 0 : '0 22px',
+            justifyContent: collapsed ? 'center' : 'flex-start',
             borderBottom: `1px solid ${colors.sidebarBorder}`,
-            gap: 10,
+            gap: 11,
             overflow: 'hidden',
             flexShrink: 0,
           }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: 'linear-gradient(135deg, #059669, #047857)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
-            }}>
-              <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>D</span>
-            </div>
+            <img src={truckLogo} alt="StockEz" style={{ height: 40, width: 'auto', flexShrink: 0, objectFit: 'contain', display: 'block' }} />
             {!collapsed && (
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ color: '#fff', fontWeight: 800, fontSize: 16, lineHeight: 1.2, whiteSpace: 'nowrap' }}>StockEz</div>
@@ -381,15 +417,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           borderBottom: `1px solid ${colors.sidebarBorder}`,
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #059669, #047857)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(5,150,105,0.4)',
-            }}>
-              <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>D</span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <img src={truckLogo} alt="StockEz" style={{ height: 40, width: 'auto', objectFit: 'contain', display: 'block' }} />
             <div>
               <div style={{ color: '#fff', fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>StockEz</div>
               <div style={{ color: colors.sidebarMuted, fontSize: 10, fontWeight: 500 }}>Distribution Platform</div>
@@ -490,23 +519,6 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             )}
           </div>
 
-          {/* Center: Search (desktop only) */}
-          {isDesktop && (
-            <div style={{ flex: '0 0 320px' }}>
-              <Input
-                prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 14 }} />}
-                placeholder="Search orders, customers, products..."
-                style={{
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  border: '1px solid #edf0f4',
-                  fontSize: 13,
-                  height: 36,
-                }}
-                styles={{ input: { background: '#f8fafc' } }}
-              />
-            </div>
-          )}
 
           {/* Right: actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -526,21 +538,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   </div>
                 </Tooltip>
 
-                <Tooltip title="Notifications">
-                  <Badge count={3} size="small" offset={[-4, 4]}>
-                    <div style={{
-                      cursor: 'pointer', width: 34, height: 34,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      borderRadius: 8, color: '#64748b', fontSize: 16,
-                      transition: 'all 0.2s',
-                    }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f1f5f9'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                    >
-                      <BellOutlined />
-                    </div>
-                  </Badge>
-                </Tooltip>
+                <NotificationBell />
 
                 <div style={{ width: 1, height: 28, background: '#edf0f4', margin: '0 4px' }} />
               </>
@@ -582,6 +580,9 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </Content>
       </Layout>
+
+      <WelcomeGift />
+      <DailyKural />
 
       {/* Change Password Modal */}
       <Modal

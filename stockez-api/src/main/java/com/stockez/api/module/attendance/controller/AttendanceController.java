@@ -28,7 +28,7 @@ public class AttendanceController {
 
     @PostMapping("/settings")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Save office location and attendance settings [ADMIN]")
+    @Operation(summary = "Save office location and attendance settings")
     public ResponseEntity<ApiResponse<AttendanceDtos.SettingsResponse>> saveSettings(
             @Valid @RequestBody AttendanceDtos.SettingsRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -37,7 +37,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/settings")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
     @Operation(summary = "Get attendance settings")
     public ResponseEntity<ApiResponse<AttendanceDtos.SettingsResponse>> getSettings(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -75,8 +75,8 @@ public class AttendanceController {
     }
 
     @GetMapping("/by-date")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get attendance for all staff on a date [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
+    @Operation(summary = "Get attendance for all staff on a date")
     public ResponseEntity<ApiResponse<List<AttendanceDtos.AttendanceResponse>>> byDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -84,8 +84,8 @@ public class AttendanceController {
     }
 
     @GetMapping("/by-range")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get attendance for all staff in a date range [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
+    @Operation(summary = "Get attendance for all staff in a date range")
     public ResponseEntity<ApiResponse<List<AttendanceDtos.AttendanceResponse>>> byRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -94,8 +94,8 @@ public class AttendanceController {
     }
 
     @GetMapping("/by-user")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get attendance for a specific user in a date range [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ATTENDANCE_VIEW')")
+    @Operation(summary = "Get attendance for a specific user in a date range")
     public ResponseEntity<ApiResponse<List<AttendanceDtos.AttendanceResponse>>> byUser(
             @RequestParam UUID userId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

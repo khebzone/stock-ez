@@ -3,7 +3,7 @@ import { InputNumber, DatePicker, Select, Button, message, Modal, Drawer, Grid }
 import { WarningOutlined, PlusOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { useGetProductsQuery } from '../../store/api/productApi';
+import { useGetAllProductsQuery } from '../../store/api/productApi';
 import { useCreatePurchaseMutation } from '../../store/api/purchaseApi';
 import { useGetSuppliersQuery } from '../../store/api/supplierApi';
 
@@ -84,14 +84,17 @@ const numStyle: React.CSSProperties = { width: '100%', fontSize: 12 };
 const rightInput = { input: { textAlign: 'right' as const } };
 const NO_CONTROLS = false;
 
-// shared colgroup widths: 18 columns
-// #32 | Product240 | Unit42 | Qty80 | MRP80 | Expiry100 | TotalAmt90 | Discount72 |
-// PurchRate84 | CGST%50 | CGST₹70 | SGST%50 | SGST₹70 | NetTotal80 | MinSale80 | MaxSale80 | Stock60 | Del30
-const COLS = [32,240,42,80,80,100,90,72,84,50,70,50,70,80,80,80,60,30];
+// shared colgroup widths: 18 columns — numeric/date columns sized to show their
+// full values; Product (index 1) flexes to absorb any leftover width.
+// #28 | Product(flex) | Unit56 | Qty54 | MRP78 | Expiry126 | TotalAmt90 | Discount70 |
+// PurchRate84 | CGST%44 | CGST₹68 | SGST%44 | SGST₹68 | NetTotal86 | MinSale80 | MaxSale80 | Stock56 | Del26
+const COLS = [28,240,56,54,78,126,90,70,84,44,68,44,68,86,80,80,56,26];
 
+// Product column (index 1) is left flexible so it absorbs all leftover
+// horizontal space — fills the table edge-to-edge on wide screens.
 const ColGroup = () => (
   <colgroup>
-    {COLS.map((w, i) => <col key={i} style={{ width: w }} />)}
+    {COLS.map((w, i) => <col key={i} style={i === 1 ? undefined : { width: w }} />)}
   </colgroup>
 );
 
@@ -119,8 +122,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   const [drawerProdSearch, setDrawerProdSearch] = useState('');
   const [prodSearchMap, setProdSearchMap] = useState<Record<number, string>>({});
 
-  const { data: prodData,  isLoading: prodLoading } = useGetProductsQuery({ size: 500 });
-  const { data: suppData }                           = useGetSuppliersQuery({});
+  const { data: prodData,  isLoading: prodLoading } = useGetAllProductsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: suppData }                           = useGetSuppliersQuery(undefined, { refetchOnMountOrArgChange: true });
   const [createPurchase, { isLoading: saving }]      = useCreatePurchaseMutation();
 
   const products:  any[] = prodData?.data?.content || prodData?.data || [];
@@ -176,6 +179,14 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   };
 
   const updateLine = (id: number, field: keyof BatchLine, value: any) => {
+    if (field === 'productId' && value) {
+      const duplicate = lines.some(l => l.id !== id && l.productId === value);
+      if (duplicate) {
+        const prod = products.find((p: any) => p.id === value);
+        message.warning(`${prod?.name || 'This product'} is already added to this entry`);
+        return;
+      }
+    }
     setLines(prev => prev.map(l => {
       if (l.id !== id) return l;
       const u: BatchLine = { ...l, [field]: value };
@@ -222,11 +233,17 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
       if (!l.minSaleRate)        return `Min sale rate is required for ${name}`;
       if (!l.maxSaleRate)        return `Max sale rate is required for ${name}`;
       const { purRate } = calc(l);
+      if (l.mrp != null && purRate > 0 && purRate > l.mrp) {
+        return `Purchase rate (₹${purRate.toFixed(2)}) cannot exceed MRP (₹${l.mrp.toFixed(2)}) for ${name}`;
+      }
       if (l.minSaleRate != null && purRate > 0 && l.minSaleRate <= purRate) {
         return `Min sale rate (₹${l.minSaleRate.toFixed(2)}) must be greater than purchase rate (₹${purRate.toFixed(2)}) for ${name}`;
       }
       if (l.maxSaleRate != null && l.mrp != null && l.maxSaleRate > l.mrp) {
         return `Max sale rate (₹${l.maxSaleRate.toFixed(2)}) cannot exceed MRP (₹${l.mrp.toFixed(2)}) for ${name}`;
+      }
+      if (l.minSaleRate != null && l.maxSaleRate != null && l.minSaleRate > l.maxSaleRate) {
+        return `Min sale rate (₹${l.minSaleRate.toFixed(2)}) cannot exceed Max sale rate (₹${l.maxSaleRate.toFixed(2)}) for ${name}`;
       }
     }
     return null;
@@ -275,8 +292,10 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   const editProd = editLine ? products.find((p: any) => p.id === editLine.productId) : null;
   const { netAmt: eNet, cgstPct: eCgstPct, cgstAmt: eCgstAmt, sgstAmt: eSgstAmt, purRate: ePurRate } =
     editLine ? calc(editLine) : { netAmt: 0, cgstPct: 0, cgstAmt: 0, sgstAmt: 0, purRate: 0 };
-  const editMinRateError = editLine?.minSaleRate != null && ePurRate > 0 && editLine.minSaleRate <= ePurRate;
-  const editMaxRateError = editLine?.maxSaleRate != null && editLine?.mrp != null && editLine.maxSaleRate > editLine.mrp;
+  const editPurchRateExceedsMrp = editLine?.mrp != null && ePurRate > 0 && ePurRate > editLine.mrp;
+  const editMinRateError  = editLine?.minSaleRate != null && ePurRate > 0 && editLine.minSaleRate <= ePurRate;
+  const editMaxRateError  = editLine?.maxSaleRate != null && editLine?.mrp != null && editLine.maxSaleRate > editLine.mrp;
+  const editMinAboveMax   = editLine?.minSaleRate != null && editLine?.maxSaleRate != null && editLine.minSaleRate > editLine.maxSaleRate;
 
   return (
     <div>
@@ -290,7 +309,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
               Supplier <span style={{ color: RED }}>*</span>
             </label>
             <Select
-              size="middle" showSearch optionFilterProp="label"
+              size="middle" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
               placeholder="Select supplier"
               style={{ width: '100%' }}
               value={supplierId || undefined}
@@ -406,7 +425,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
         {/* Desktop: Table */}
         {!isMobile && (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ minWidth: 1390, width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <table style={{ minWidth: 1240, width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <ColGroup />
               <thead>
                 <tr>
@@ -414,7 +433,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                   <TH>Product</TH>
                   <TH center muted>Unit</TH>
                   <TH right>Qty</TH>
-                  <TH right>MRP</TH>
+                  <TH right>MRP *</TH>
                   <TH center>Expiry</TH>
                   <TH right>Total Amt</TH>
                   <TH right>Discount</TH>
@@ -438,8 +457,10 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                   const isExpired    = line.expiryDate && dayjs(line.expiryDate).isBefore(dayjs());
                   const daysLeft     = line.expiryDate ? dayjs(line.expiryDate).diff(dayjs(), 'day') : null;
                   const isNear       = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
-                  const minRateError = line.minSaleRate != null && purRate > 0 && line.minSaleRate <= purRate;
-                  const maxRateError = line.maxSaleRate != null && line.mrp != null && line.maxSaleRate > line.mrp;
+                  const purchRateExceedsMrp = line.mrp != null && purRate > 0 && purRate > line.mrp;
+                  const minRateError  = line.minSaleRate != null && purRate > 0 && line.minSaleRate <= purRate;
+                  const maxRateError  = line.maxSaleRate != null && line.mrp != null && line.maxSaleRate > line.mrp;
+                  const minAboveMax   = line.minSaleRate != null && line.maxSaleRate != null && line.minSaleRate > line.maxSaleRate;
 
                   return (
                     <React.Fragment key={line.id}>
@@ -472,9 +493,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                               prodSearchMap[line.id]
                                 ? products
                                     .filter((p: any) =>
-                                      p.name?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase()) ||
-                                      p.brand?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase()) ||
-                                      p.code?.toLowerCase().includes(prodSearchMap[line.id].toLowerCase())
+                                      p.name?.toLowerCase().startsWith(prodSearchMap[line.id].toLowerCase())
                                     )
                                     .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
                                 : line.productId
@@ -494,7 +513,9 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
 
                         {/* Unit */}
                         <C muted center>
-                          <span style={{ fontSize: 11, color: '#94a3b8' }}>{prod?.unit || '—'}</span>
+                          <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }} title={prod?.unit || ''}>
+                            {prod?.unit || '—'}
+                          </span>
                         </C>
 
                         {/* Qty */}
@@ -520,6 +541,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                             onChange={v => updateLine(line.id, 'mrp', v)}
                             onKeyDown={e => tabKey(e, line.id, 'mrp', lines)}
                             placeholder="0.00"
+                            status={line.productId && (!line.mrp || line.mrp <= 0) ? 'error' : undefined}
                           />
                         </C>
 
@@ -531,9 +553,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                               style={{ width: '100%', fontSize: 11 }}
                               value={line.expiryDate}
                               onChange={v => updateLine(line.id, 'expiryDate', v)}
-                              format="MM/YY"
-                              picker="month"
-                              placeholder="MM/YY"
+                              format="DD MMM YYYY"
+                              placeholder="DD MMM YYYY"
                               status={!line.expiryDate ? 'error' : undefined}
                             />
                             {!line.expiryDate && (
@@ -614,11 +635,16 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                             onChange={v => updateLine(line.id, 'minSaleRate', v)}
                             onKeyDown={e => tabKey(e, line.id, 'minSale', lines)}
                             placeholder={purRate > 0 ? purRate.toFixed(2) : '0.00'}
-                            status={minRateError ? 'error' : undefined}
+                            status={minRateError || minAboveMax ? 'error' : undefined}
                           />
                           {minRateError && (
                             <div style={{ fontSize: 9, color: RED, lineHeight: 1.2, marginTop: 2 }}>
                               &gt; ₹{purRate.toFixed(2)}
+                            </div>
+                          )}
+                          {minAboveMax && !minRateError && (
+                            <div style={{ fontSize: 9, color: RED, lineHeight: 1.2, marginTop: 2 }}>
+                              &lt; Max ₹{line.maxSaleRate?.toFixed(2)}
                             </div>
                           )}
                         </C>
@@ -662,6 +688,16 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                         </td>
                       </tr>
 
+                      {/* Purchase rate > MRP warning */}
+                      {purchRateExceedsMrp && (
+                        <tr>
+                          <td colSpan={18} style={{ padding: '2px 8px 6px 48px', borderBottom: '1px solid #f0f0f0', background: '#fff5f5' }}>
+                            <span style={{ fontSize: 10, color: RED, fontWeight: 600 }}>
+                              Purchase rate (₹{purRate.toFixed(2)}) exceeds MRP (₹{line.mrp!.toFixed(2)}) — cannot save
+                            </span>
+                          </td>
+                        </tr>
+                      )}
                       {/* Expiry hint */}
                       {(isExpired || isNear) && (
                         <tr>
@@ -900,7 +936,13 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                   value={editLine.mrp || undefined}
                   onChange={v => updateLine(editLine.id, 'mrp', v)}
                   placeholder="0.00" prefix="₹"
+                  status={editPurchRateExceedsMrp ? 'error' : undefined}
                 />
+                {editPurchRateExceedsMrp && (
+                  <div style={{ fontSize: 11, color: RED, marginTop: 4 }}>
+                    Purchase rate ₹{ePurRate.toFixed(2)} exceeds MRP — cannot save
+                  </div>
+                )}
               </div>
             </div>
 
@@ -911,7 +953,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                 size="large" style={{ width: '100%' }}
                 value={editLine.expiryDate}
                 onChange={v => updateLine(editLine.id, 'expiryDate', v)}
-                format="MM/YY" picker="month" placeholder="MM/YY"
+                format="DD MMM YYYY"
+                placeholder="DD MMM YYYY"
                 status={!editLine.expiryDate ? 'error' : undefined}
               />
             </div>
@@ -948,11 +991,16 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                   onChange={v => updateLine(editLine.id, 'minSaleRate', v)}
                   placeholder={ePurRate > 0 ? ePurRate.toFixed(2) : '0.00'}
                   prefix="₹"
-                  status={editMinRateError ? 'error' : undefined}
+                  status={editMinRateError || editMinAboveMax ? 'error' : undefined}
                 />
                 {editMinRateError && (
                   <div style={{ fontSize: 11, color: RED, marginTop: 4 }}>
                     Must be &gt; ₹{ePurRate.toFixed(2)}
+                  </div>
+                )}
+                {editMinAboveMax && !editMinRateError && (
+                  <div style={{ fontSize: 11, color: RED, marginTop: 4 }}>
+                    Cannot exceed Max ₹{editLine?.maxSaleRate?.toFixed(2)}
                   </div>
                 )}
               </div>

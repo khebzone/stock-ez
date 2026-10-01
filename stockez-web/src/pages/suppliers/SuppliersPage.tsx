@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table, Button, Modal, Form, Input, Space, Card, Popconfirm, message, Row, Col, Drawer, Grid,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons';
 import {
-  useGetSuppliersQuery, useCreateSupplierMutation,
+  useGetSuppliersPagedQuery, useCreateSupplierMutation,
   useUpdateSupplierMutation, useDeleteSupplierMutation,
 } from '../../store/api/supplierApi';
 import PageHeader from '../../components/PageHeader';
+import { hasPermission } from '../../utils/permissions';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
 
 const SuppliersPage: React.FC = () => {
@@ -20,10 +21,21 @@ const SuppliersPage: React.FC = () => {
   const [viewing, setViewing]         = useState<any>(null);
   const [form] = Form.useForm();
 
-  const { data, isLoading, refetch } = useGetSuppliersQuery({ search });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearchQuery(search); setCurrentPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading } = useGetSuppliersPagedQuery({ page: currentPage - 1, size: 20, search: searchQuery });
   const [createSupplier, { isLoading: creating }] = useCreateSupplierMutation();
   const [updateSupplier, { isLoading: updating }] = useUpdateSupplierMutation();
   const [deleteSupplier] = useDeleteSupplierMutation();
+
+  const suppliers: any[] = data?.data?.content || [];
+  const totalSuppliers: number = data?.data?.totalElements || 0;
 
   const handleExport = () => {
     const token    = localStorage.getItem('token');
@@ -47,8 +59,6 @@ const SuppliersPage: React.FC = () => {
       .catch(() => message.error('Export failed'));
   };
 
-  const suppliers = data?.data?.content || data?.data || [];
-
   const openAdd = () => { setEditing(null); form.resetFields(); setModalOpen(true); };
   const openEdit = (s: any) => {
     setEditing(s); form.setFieldsValue({ ...s }); setModalOpen(true);
@@ -65,7 +75,6 @@ const SuppliersPage: React.FC = () => {
         message.success('Supplier added');
       }
       setModalOpen(false);
-      refetch();
     } catch (err: any) {
       if (err?.errorFields) {
         form.scrollToField(err.errorFields[0].name);
@@ -79,7 +88,6 @@ const SuppliersPage: React.FC = () => {
     try {
       await deleteSupplier(id).unwrap();
       message.success('Supplier removed');
-      refetch();
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed');
     }
@@ -135,11 +143,13 @@ const SuppliersPage: React.FC = () => {
         <Space>
           <Button type="text" size="small" icon={<EyeOutlined />}
             onClick={() => { setViewing(r); setDrawerOpen(true); }} />
-          <Button type="text" size="small" icon={<EditOutlined />}
-            onClick={() => openEdit(r)} />
-          <Popconfirm title="Remove this supplier?" onConfirm={() => handleDelete(r.id)}>
-            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {hasPermission('SUPPLIERS_EDIT') && <Button type="text" size="small" icon={<EditOutlined />}
+            onClick={() => openEdit(r)} />}
+          {hasPermission('SUPPLIERS_DELETE') && (
+            <Popconfirm title="Remove this supplier?" onConfirm={() => handleDelete(r.id)}>
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
           <AuditHistoryButton entityType="SUPPLIER" entityId={r.id} title={`Audit — ${r.name}`} />
         </Space>
       ),
@@ -151,15 +161,17 @@ const SuppliersPage: React.FC = () => {
       <PageHeader
         title="Suppliers"
         subtitle="Companies that supply your products"
-        count={suppliers.length}
+        count={totalSuppliers}
         countLabel="suppliers"
         action={
           <Space>
             <Button icon={<DownloadOutlined />} onClick={handleExport}>Export Excel</Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}
-              style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}>
-              Add Supplier
-            </Button>
+            {hasPermission('SUPPLIERS_CREATE') && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}
+                style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}>
+                Add Supplier
+              </Button>
+            )}
           </Space>
         }
       />
@@ -229,10 +241,12 @@ const SuppliersPage: React.FC = () => {
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
                   <Button size="small" icon={<EyeOutlined />} onClick={() => { setViewing(r); setDrawerOpen(true); }}>View</Button>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>
-                  <Popconfirm title="Remove this supplier?" onConfirm={() => handleDelete(r.id)}>
-                    <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
-                  </Popconfirm>
+                  {hasPermission('SUPPLIERS_EDIT') && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Edit</Button>}
+                  {hasPermission('SUPPLIERS_DELETE') && (
+                    <Popconfirm title="Remove this supplier?" onConfirm={() => handleDelete(r.id)}>
+                      <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+                    </Popconfirm>
+                  )}
                 </div>
               </div>
             ))}
@@ -252,8 +266,8 @@ const SuppliersPage: React.FC = () => {
           </div>
           <Table
             columns={columns} dataSource={suppliers} rowKey="id" loading={isLoading}
-            pagination={{ pageSize: 20, showTotal: t => `${t} suppliers` }}
-            size="middle" scroll={{ x: 800 }}
+            pagination={{ total: totalSuppliers, current: currentPage, pageSize: 20, showSizeChanger: false, showTotal: t => `${t} suppliers`, onChange: (p) => setCurrentPage(p) }}
+            size="middle" virtual scroll={{ x: 800, y: 550 }}
             locale={{ emptyText: <div style={{ padding: '40px 0', color: '#64748b' }}>No suppliers yet. Add your first supplier.</div> }}
           />
         </Card>

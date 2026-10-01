@@ -94,12 +94,15 @@ public class GlobalExceptionHandler {
             } else if (msg.contains("unique_route_per_day")) {
                 userMessage = "This route is already allocated for the selected date.";
                 field = "routeId";
-            } else if (msg.contains("users") && msg.contains("phone")) {
+            } else if (msg.contains("uq_users_phone_per_tenant") || (msg.contains("users") && msg.contains("phone"))) {
                 userMessage = "A user with this mobile number already exists.";
                 field = "phone";
             } else if (msg.contains("uq_supplier_phone_per_tenant")) {
                 userMessage = "A supplier with this phone number already exists.";
                 field = "phone";
+            } else if (msg.contains("uq_order_number_per_tenant") || msg.contains("orders_order_number_key")) {
+                userMessage = "An order with this number already exists.";
+                field = "orderNumber";
             }
         }
 

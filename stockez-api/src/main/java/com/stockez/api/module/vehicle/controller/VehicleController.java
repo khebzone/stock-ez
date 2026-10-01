@@ -65,7 +65,7 @@ public class VehicleController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('VEHICLES_EDIT')")
     public ResponseEntity<ApiResponse<Void>> delete(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

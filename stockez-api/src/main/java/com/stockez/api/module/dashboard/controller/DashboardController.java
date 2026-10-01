@@ -23,8 +23,8 @@ public class DashboardController {
     private final DashboardService dashboardService;
 
     @GetMapping("/admin")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get admin dashboard overview [ADMIN]")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get admin dashboard overview [office users]")
     public ResponseEntity<ApiResponse<DashboardDtos.AdminDashboardStats>> adminStats(
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
         return ResponseEntity.ok(ApiResponse.success(dashboardService.getAdminStats(tenantId)));

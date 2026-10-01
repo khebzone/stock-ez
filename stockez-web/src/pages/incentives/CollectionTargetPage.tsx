@@ -5,6 +5,7 @@ import {
 } from 'antd';
 import { PlusOutlined, EditOutlined, TrophyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { hasPermission } from '../../utils/permissions';
 import {
   useGetCollectionTargetsSummaryQuery,
   useSaveCollectionTargetMutation,
@@ -137,11 +138,11 @@ const CollectionTargetPage: React.FC = () => {
       title: '',
       key: 'actions',
       width: 48,
-      render: (_: any, r: any) => (
+      render: (_: any, r: any) => hasPermission('INCENTIVES_MANAGE') ? (
         <Tooltip title="Edit target">
           <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
         </Tooltip>
-      ),
+      ) : null,
     },
   ];
 
@@ -162,9 +163,9 @@ const CollectionTargetPage: React.FC = () => {
             </Select>
             <Select allowClear placeholder="All salespersons" style={{ width: 190 }}
               value={filterPerson} onChange={setFilterPerson}
-              showSearch optionFilterProp="label"
+              showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
               options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName})` : u.fullName }))} />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Set Target</Button>
+            {hasPermission('INCENTIVES_MANAGE') && <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Set Target</Button>}
           </div>
         }
       />
@@ -209,7 +210,7 @@ const CollectionTargetPage: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="salesPersonId" label="Sales Person *" rules={[{ required: true, message: 'Select a sales person' }]}>
-            <Select placeholder="Select sales person" showSearch optionFilterProp="label"
+            <Select placeholder="Select sales person" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
               disabled={!!editRow}
               options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName}) — ${u.phone}` : `${u.fullName} — ${u.phone}` }))} />
           </Form.Item>

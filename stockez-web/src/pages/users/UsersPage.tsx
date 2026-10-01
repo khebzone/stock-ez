@@ -4,7 +4,7 @@ import {
   Row, Col, Card, Popconfirm, message, Tooltip, Avatar, Badge, InputNumber, Tag,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation, useReactivateUserMutation } from '../../store/api/userApi';
+import { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation, useReactivateUserMutation, useGetUserQuotaQuery } from '../../store/api/userApi';
 import { useGetRoleSummariesQuery } from '../../store/api/roleApi';
 import PageHeader from '../../components/PageHeader';
 import AuditHistoryButton from '../../components/AuditHistoryButton';
@@ -107,16 +107,19 @@ const UsersPage: React.FC = () => {
 
   const { data, isLoading } = useGetUsersQuery({ includeInactive });
   const { data: rolesData } = useGetRoleSummariesQuery();
+  const { data: quotaData } = useGetUserQuotaQuery();
   const [createUser, { isLoading: creating }] = useCreateUserMutation();
   const [updateUser, { isLoading: updating }] = useUpdateUserMutation();
   const [deleteUser] = useDeleteUserMutation();
   const [reactivateUser] = useReactivateUserMutation();
 
   const roles: any[] = rolesData?.data || [];
-  const allUsers = (data?.data?.content || data?.data || []).filter((u: any) => u.roleName !== 'SUPER_ADMIN');
+  const allUsers = (data?.data?.content || data?.data || []).filter((u: any) => u.roleName !== 'SUPER_ADMIN' && u.roleName !== 'ADMIN');
   const users = includeInactive ? allUsers.filter((u: any) => !u.active) : allUsers;
   const activeCount = allUsers.filter((u: any) => u.active).length;
   const inactiveCount = allUsers.filter((u: any) => !u.active).length;
+  const quota = quotaData?.data;
+  const atLimit = quota?.atLimit ?? false;
 
   const openAdd = () => { setEditingUser(null); form.resetFields(); setModalOpen(true); };
   const openEdit = (user: any) => {
@@ -261,9 +264,11 @@ const UsersPage: React.FC = () => {
       <PageHeader
         title="Team Members"
         subtitle={
-          includeInactive
-            ? `${activeCount} active · ${inactiveCount} inactive`
-            : isMobile ? 'Manage staff' : 'Manage staff and access roles'
+          quota
+            ? `${quota.currentCount} / ${quota.maxUsers} users used`
+            : includeInactive
+              ? `${activeCount} active · ${inactiveCount} inactive`
+              : isMobile ? 'Manage staff' : 'Manage staff and access roles'
         }
         count={includeInactive ? users.length : activeCount}
         countLabel={includeInactive ? 'total' : 'active'}
@@ -275,9 +280,11 @@ const UsersPage: React.FC = () => {
             >
               {includeInactive ? 'Active Only' : 'Show Inactive'}
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-              Add User
-            </Button>
+            <Tooltip title={atLimit ? `User limit reached (${quota?.maxUsers} max). Upgrade plan to add more.` : undefined}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openAdd} disabled={atLimit}>
+                Add User
+              </Button>
+            </Tooltip>
           </Space>
         }
       />
@@ -326,7 +333,7 @@ const UsersPage: React.FC = () => {
 
           <Row gutter={16}>
             <Col span={isMobile ? 24 : 12}>
-              <Form.Item name="phone" label="Phone *" rules={[{ required: true }, { len: 10, message: '10 digits' }]}>
+              <Form.Item name="phone" label="Phone *" rules={[{ required: true }, { pattern: /^\d{10}$/, message: 'Enter a valid 10-digit number' }]}>
                 <Input placeholder="9876543210" maxLength={10} />
               </Form.Item>
             </Col>
@@ -337,7 +344,7 @@ const UsersPage: React.FC = () => {
             </Col>
           </Row>
 
-          <Form.Item name="email" label="Email">
+          <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Enter a valid email (e.g. name@domain.com)' }]}>
             <Input placeholder="Optional" autoComplete="off" />
           </Form.Item>
 

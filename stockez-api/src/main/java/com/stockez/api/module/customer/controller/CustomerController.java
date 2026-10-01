@@ -81,6 +81,29 @@ public class CustomerController {
         return ResponseEntity.ok(ApiResponse.success(customerService.getAllocatedCustomers(tenantId, userId)));
     }
 
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','ORDERS_VIEW','ORDERS_CREATE','INVOICE_APPROVE')")
+    @Operation(summary = "List customers with pagination and optional filters")
+    public ResponseEntity<ApiResponse<PagedResponse<CustomerDtos.CustomerResponse>>> list(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(required = false) UUID routeId,
+            @RequestParam(required = false) UUID placeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<CustomerDtos.CustomerResponse> result = customerService.list(tenantId, search, routeId, placeId,
+                PageRequest.of(page, size, Sort.by("businessName")));
+        return ResponseEntity.ok(ApiResponse.success(toPagedResponse(result)));
+    }
+
+    @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','ORDERS_VIEW','ORDERS_CREATE','INVOICE_APPROVE')")
+    @Operation(summary = "Get all active customers sorted by name")
+    public ResponseEntity<ApiResponse<java.util.List<CustomerDtos.CustomerResponse>>> getAll(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.getAllActive(tenantId)));
+    }
+
     @GetMapping("/search")
     @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('CUSTOMERS_VIEW','ORDERS_VIEW','ORDERS_CREATE','INVOICE_APPROVE')")
     @Operation(summary = "Search customers by name/phone")
@@ -105,8 +128,8 @@ public class CustomerController {
     }
 
     @PutMapping("/by-place/{placeId}/reorder")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Reorder customers within a place [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('CUSTOMERS_EDIT')")
+    @Operation(summary = "Reorder customers within a place")
     public ResponseEntity<ApiResponse<java.util.List<CustomerDtos.CustomerResponse>>> reorder(
             @PathVariable UUID placeId,
             @RequestBody CustomerDtos.ReorderCustomersRequest request,

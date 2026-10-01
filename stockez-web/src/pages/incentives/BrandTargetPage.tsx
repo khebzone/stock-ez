@@ -5,6 +5,7 @@ import {
 } from 'antd';
 import { PlusOutlined, EditOutlined, TrophyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { hasPermission } from '../../utils/permissions';
 import { useGetTargetsSummaryQuery, useSaveTargetMutation, useGetDistinctBrandsQuery } from '../../store/api/incentiveApi';
 import { useGetUsersQuery } from '../../store/api/userApi';
 import PageHeader from '../../components/PageHeader';
@@ -44,7 +45,7 @@ const BrandTargetPage: React.FC = () => {
   const [saveTarget, { isLoading: saving }] = useSaveTargetMutation();
 
   const targets: any[] = targetsData?.data?.targets || [];
-  const brands: string[] = brandsData?.data || [];
+  const brands: Array<{ id: string; name: string }> = brandsData?.data || [];
   const users: any[] = (usersData?.data?.content || usersData?.data || []).filter((u: any) => u.roleName !== 'ADMIN' && u.active !== false);
 
   const summary = targetsData?.data;
@@ -60,7 +61,7 @@ const BrandTargetPage: React.FC = () => {
     setEditRow(row);
     form.setFieldsValue({
       salesPersonId: row.salesPersonId,
-      brand: row.brand,
+      brandId: row.brandId,
       targetMonth: row.targetMonth,
       targetYear: row.targetYear,
       targetValue: row.targetValue,
@@ -144,11 +145,11 @@ const BrandTargetPage: React.FC = () => {
       title: '',
       key: 'actions',
       width: 48,
-      render: (_: any, r: any) => (
+      render: (_: any, r: any) => hasPermission('INCENTIVES_MANAGE') ? (
         <Tooltip title="Edit target">
           <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(r)} />
         </Tooltip>
-      ),
+      ) : null,
     },
   ];
 
@@ -169,9 +170,9 @@ const BrandTargetPage: React.FC = () => {
             </Select>
             <Select allowClear placeholder="All salespersons" style={{ width: 190 }}
               value={filterPerson} onChange={setFilterPerson}
-              showSearch optionFilterProp="label"
+              showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
               options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName})` : u.fullName }))} />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Set Target</Button>
+            {hasPermission('INCENTIVES_MANAGE') && <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Set Target</Button>}
           </Space>
         }
       />
@@ -216,13 +217,13 @@ const BrandTargetPage: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="salesPersonId" label="Sales Person *" rules={[{ required: true, message: 'Select a sales person' }]}>
-            <Select placeholder="Select sales person" showSearch optionFilterProp="label"
+            <Select placeholder="Select sales person" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
               disabled={!!editRow}
               options={users.map((u: any) => ({ value: u.id, label: u.roleName ? `${u.fullName} (${u.roleName}) — ${u.phone}` : `${u.fullName} — ${u.phone}` }))} />
           </Form.Item>
-          <Form.Item name="brand" label="Brand *" rules={[{ required: true, message: 'Select a brand' }]}>
+          <Form.Item name="brandId" label="Brand *" rules={[{ required: true, message: 'Select a brand' }]}>
             <Select placeholder="Select brand" showSearch disabled={!!editRow}
-              options={brands.map((b: string) => ({ value: b, label: b }))} />
+              options={brands.map((b) => ({ value: b.id, label: b.name }))} />
           </Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <Form.Item name="targetMonth" label="Month *" rules={[{ required: true }]}>

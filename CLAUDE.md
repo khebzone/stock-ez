@@ -199,7 +199,7 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 ### Order Numbering
 - Orders: `ORD-YYYY-NNNNN`
 - Purchase entries: `PUR-YYYY-NNNNN`
-- Goods returns: `RTN-YYYY-NNNNN`
+- Goods returns (per type, own counter each): sales `SRN-YYYY-NNNNN`, purchase `PRN-YYYY-NNNNN`, damage `DMG-YYYY-NNNNN` — legacy rows may still be `RTN-YYYY-NNNNN`
 - Batches: `BCH-YYYYMMDD-NNN`
 
 ---

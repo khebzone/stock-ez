@@ -6,6 +6,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetTodayCounterQuery, useCloseDayMutation, useGetDayClosureHistoryQuery } from '../../store/api/dayClosureApi';
+import { hasPermission } from '../../utils/permissions';
 
 const fmt = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 const fmtShort = (v: number) => v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${(v / 1000).toFixed(1)}K` : `₹${v || 0}`;
@@ -182,16 +183,18 @@ const TodayCounter: React.FC = () => {
                 placeholder="Any remarks for today..."
               />
             </div>
-            <Button
-              type="primary"
-              size="large"
-              icon={<LockOutlined />}
-              disabled={physicalCash === null}
-              onClick={() => setConfirmOpen(true)}
-              style={{ borderRadius: 10, background: '#2563eb', fontWeight: 700, height: 40 }}
-            >
-              Close Day
-            </Button>
+            {hasPermission('DAY_CLOSURE_CREATE') && (
+              <Button
+                type="primary"
+                size="large"
+                icon={<LockOutlined />}
+                disabled={physicalCash === null}
+                onClick={() => setConfirmOpen(true)}
+                style={{ borderRadius: 10, background: '#2563eb', fontWeight: 700, height: 40 }}
+              >
+                Close Day
+              </Button>
+            )}
           </div>
         </div>
       )}

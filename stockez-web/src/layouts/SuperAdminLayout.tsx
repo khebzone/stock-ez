@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import truckLogo from '../assets/logo-truck-light.png';
 import { Layout, Menu, Avatar, Dropdown, Grid, Drawer } from 'antd';
 import {
   CloudServerOutlined,
@@ -26,7 +27,7 @@ const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  const handleLogout = () => { localStorage.clear(); navigate('/login'); };
+  const handleLogout = () => { ['token','refreshToken','tenantId','userId','user'].forEach(k => localStorage.removeItem(k)); navigate('/login'); };
 
   const userDropdown = [
     {
@@ -71,14 +72,7 @@ const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         borderBottom: `1px solid ${colors.sidebarBorder}`,
         gap: 10,
       }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-          background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(239,68,68,0.4)',
-        }}>
-          <span style={{ color: '#fff', fontWeight: 900, fontSize: 15 }}>S</span>
-        </div>
+        <img src={truckLogo} alt="StockEz" style={{ height: 38, width: 'auto', flexShrink: 0, objectFit: 'contain', display: 'block' }} />
         <div>
           <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, lineHeight: 1.2 }}>StockEz</div>
           <div style={{ color: colors.sidebarMuted, fontSize: 10, letterSpacing: 0.5 }}>Super Admin</div>

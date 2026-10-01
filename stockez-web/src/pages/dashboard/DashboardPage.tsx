@@ -1,14 +1,14 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Row, Col, Skeleton, Card, Table, Tag, Alert, Button } from 'antd';
 import {
   ShoppingOutlined, TeamOutlined, WalletOutlined,
-  RiseOutlined, ClockCircleOutlined, CheckCircleOutlined, TruckOutlined,
+  ClockCircleOutlined, CheckCircleOutlined, TruckOutlined,
   ArrowUpOutlined, ArrowDownOutlined, WarningOutlined, ExclamationCircleOutlined,
+  DollarOutlined, BankOutlined,
 } from '@ant-design/icons';
-import { useGetAdminDashboardQuery, useGetWarehouseDashboardQuery } from '../../store/api/dashboardApi';
-import { useGetSalesReportQuery } from '../../store/api/dashboardApi';
+import { useGetAdminDashboardQuery, useGetWarehouseDashboardQuery, useGetSalesReportQuery } from '../../store/api/dashboardApi';
 import { useGetOrdersQuery } from '../../store/api/orderApi';
-import { useGetNearExpiryAlertsQuery } from '../../store/api/purchaseApi';
+import { useGetNearExpiryAlertsQuery, useGetSupplierPaymentSummariesQuery } from '../../store/api/purchaseApi';
 import SalesTrendChart from '../../components/charts/SalesTrendChart';
 import OrderStatusChart from '../../components/charts/OrderStatusChart';
 import dayjs from 'dayjs';
@@ -90,8 +90,8 @@ const STATUS_CFG: Record<string, { color: string; icon: React.ReactNode; label: 
   DRAFT:      { color: '#94a3b8', icon: <ClockCircleOutlined />, label: 'Draft' },
   SUBMITTED:  { color: '#f59e0b', icon: <ClockCircleOutlined />, label: 'Submitted' },
   APPROVED:   { color: '#059669', icon: <CheckCircleOutlined />, label: 'Approved' },
-  PREPARING:  { color: '#0891b2', icon: <ShoppingOutlined />,    label: 'Preparing' },
-  PREPARED:   { color: '#06b6d4', icon: <ShoppingOutlined />,    label: 'Prepared' },
+  PACKING:    { color: '#0891b2', icon: <ShoppingOutlined />,    label: 'Packing' },
+  PACKED:     { color: '#06b6d4', icon: <ShoppingOutlined />,    label: 'Packed' },
   DISPATCHED: { color: '#8b5cf6', icon: <TruckOutlined />,       label: 'Dispatched' },
   DELIVERED:  { color: '#10b981', icon: <CheckCircleOutlined />, label: 'Delivered' },
   CANCELLED:  { color: '#ef4444', icon: <ClockCircleOutlined />, label: 'Cancelled' },
@@ -99,20 +99,30 @@ const STATUS_CFG: Record<string, { color: string; icon: React.ReactNode; label: 
 
 const fmt = (v: number) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 
+/* ── Period toggle helper ── */
+type PeriodMode = '7d' | 'mtd' | 'last';
+const getPeriodDates = (mode: PeriodMode) => {
+  const today = dayjs();
+  if (mode === 'mtd') return { from: today.startOf('month').format('YYYY-MM-DD'), to: today.format('YYYY-MM-DD') };
+  if (mode === 'last') return { from: today.subtract(1, 'month').startOf('month').format('YYYY-MM-DD'), to: today.subtract(1, 'month').endOf('month').format('YYYY-MM-DD') };
+  return { from: today.subtract(6, 'day').format('YYYY-MM-DD'), to: today.format('YYYY-MM-DD') };
+};
+const PERIOD_LABELS: Record<PeriodMode, string> = { '7d': '7D', mtd: 'MTD', last: 'Last Mo' };
+
 /* ── Main ── */
 const DashboardPage: React.FC = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
-  const isWarehouse = !isAdmin;
+  const isWarehouse = user.role === 'WAREHOUSE';
+  const isStaff = !isAdmin && !isWarehouse;
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('7d');
 
-  const { data: statsResponse, isLoading, isError, refetch } = useGetAdminDashboardQuery(undefined, { skip: !isAdmin });
+  const { data: statsResponse, isLoading, isError, refetch } = useGetAdminDashboardQuery(undefined, { skip: !isAdmin && !isStaff });
   const { data: warehouseResponse, isLoading: whLoading, isError: whError, refetch: whRefetch } = useGetWarehouseDashboardQuery(undefined, { skip: !isWarehouse });
-  const { data: salesReport, isLoading: trendLoading } = useGetSalesReportQuery({
-    from: new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0],
-  }, { skip: !isAdmin });
-  const { data: recentOrdersData } = useGetOrdersQuery({ page: 0, size: 5 }, { skip: !isAdmin });
-  const { data: alertsData } = useGetNearExpiryAlertsQuery({ days: 30 }, { skip: !isAdmin });
+  const { data: salesReport, isLoading: trendLoading } = useGetSalesReportQuery(getPeriodDates(periodMode), { skip: !isAdmin && !isStaff });
+  const { data: recentOrdersData } = useGetOrdersQuery({ page: 0, size: 5 }, { skip: !isAdmin && !isStaff });
+  const { data: alertsData } = useGetNearExpiryAlertsQuery({ days: 30 }, { skip: !isAdmin && !isStaff });
+  const { data: supplierSummariesData } = useGetSupplierPaymentSummariesQuery(undefined, { skip: !isAdmin && !isStaff });
 
   const stats = statsResponse?.data;
   const trendData = (salesReport?.data?.dailyBreakdown || []).map((d: any) => ({
@@ -124,6 +134,16 @@ const DashboardPage: React.FC = () => {
   const allAlerts: any[] = alertsData?.data || [];
   const expiredAlerts  = allAlerts.filter((a: any) => a.daysToExpiry <= 0);
   const nearExpiryAlerts = allAlerts.filter((a: any) => a.daysToExpiry > 0);
+
+  const supplierSummaries: any[] = supplierSummariesData?.data || [];
+  const topVendorPayables = [...supplierSummaries]
+    .filter((s: any) => Number(s.outstanding) > 0)
+    .sort((a: any, b: any) => Number(b.outstanding) - Number(a.outstanding))
+    .slice(0, 5);
+  const totalVendorPayable = stats?.totalVendorPayable ?? supplierSummaries.reduce((sum: number, s: any) => sum + Number(s.outstanding || 0), 0);
+
+  const topOverdueCustomers: any[] = stats?.topOverdueCustomers || [];
+  const routeStats: any[] = stats?.routeStats || [];
 
   const orderStatusEntries = Object.entries(stats?.ordersByStatus || {}).filter(([, v]) => Number(v) > 0);
   const totalInPipeline = orderStatusEntries.reduce((s, [, v]) => s + Number(v), 0);
@@ -155,13 +175,13 @@ const DashboardPage: React.FC = () => {
             <KpiCard title="Pending Approval" value={wh?.pendingForApproval || 0} icon={<ClockCircleOutlined />} color="#f59e0b" bg="#fffbeb" subtitle="Orders awaiting approval" loading={whLoading} />
           </Col>
           <Col xs={24} sm={12} xl={6}>
-            <KpiCard title="Pending Preparation" value={wh?.pendingForPreparation || 0} icon={<ShoppingOutlined />} color="#3b82f6" bg="#eff6ff" subtitle="Approved, not yet prepared" loading={whLoading} />
+            <KpiCard title="Pending Packing" value={wh?.pendingForPreparation || 0} icon={<ShoppingOutlined />} color="#3b82f6" bg="#eff6ff" subtitle="Approved, not yet packed" loading={whLoading} />
           </Col>
           <Col xs={24} sm={12} xl={6}>
-            <KpiCard title="Being Prepared" value={wh?.currentlyPreparing || 0} icon={<WarningOutlined />} color="#8b5cf6" bg="#f5f3ff" subtitle="Currently in preparation" loading={whLoading} />
+            <KpiCard title="Currently Packing" value={wh?.currentlyPacking || 0} icon={<WarningOutlined />} color="#8b5cf6" bg="#f5f3ff" subtitle="Being packed now" loading={whLoading} />
           </Col>
           <Col xs={24} sm={12} xl={6}>
-            <KpiCard title="Ready to Dispatch" value={wh?.readyForDispatch || 0} icon={<TruckOutlined />} color="#059669" bg="#ecfdf5" subtitle="Prepared, awaiting dispatch" loading={whLoading} />
+            <KpiCard title="Ready to Dispatch" value={wh?.readyForDispatch || 0} icon={<TruckOutlined />} color="#059669" bg="#ecfdf5" subtitle="Packed, awaiting dispatch" loading={whLoading} />
           </Col>
         </Row>
       </div>
@@ -202,12 +222,12 @@ const DashboardPage: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard
-            title="Today's Revenue"
-            value={stats?.todaySales || 0}
+            title="Total Outstanding"
+            value={stats?.totalOutstanding || 0}
             prefix="₹"
-            icon={<RiseOutlined />}
-            color="#059669" bg="#eef2ff"
-            subtitle="Total sales today"
+            icon={<DollarOutlined />}
+            color="#3b82f6" bg="#eff6ff"
+            subtitle="Amount owed by customers"
             loading={isLoading}
           />
         </Col>
@@ -223,7 +243,7 @@ const DashboardPage: React.FC = () => {
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard
-            title="Collections"
+            title="Today's Collections"
             value={stats?.todayCollection || 0}
             prefix="₹"
             icon={<WalletOutlined />}
@@ -234,11 +254,12 @@ const DashboardPage: React.FC = () => {
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard
-            title="Active Customers"
-            value={stats?.activeCustomers || 0}
-            icon={<TeamOutlined />}
-            color="#8b5cf6" bg="#f5f3ff"
-            subtitle="Across all routes"
+            title="Overdue (>30 days)"
+            value={stats?.overdueAmount || 0}
+            prefix="₹"
+            icon={<ExclamationCircleOutlined />}
+            color="#ef4444" bg="#fef2f2"
+            subtitle="Outstanding beyond 30 days"
             loading={isLoading}
           />
         </Col>
@@ -343,6 +364,43 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Top Overdue Customers ── */}
+      {topOverdueCustomers.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ExclamationCircleOutlined style={{ color: '#ef4444', fontSize: 15 }} />
+              <span style={{ fontWeight: 700, color: '#b91c1c', fontSize: 13 }}>
+                Top Overdue Customers — outstanding beyond 30 days
+              </span>
+              <a href="/reports/aging" style={{ marginLeft: 'auto', fontSize: 12, color: '#ef4444', fontWeight: 600 }}>Full Aging Report</a>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 480 }}>
+                <thead>
+                  <tr style={{ background: '#fef2f2' }}>
+                    {['#', 'Customer', 'Phone', 'Overdue Amount', 'Days Overdue'].map(h => (
+                      <th key={h} style={{ padding: '8px 16px', textAlign: h === 'Overdue Amount' ? 'right' : h === 'Days Overdue' ? 'right' : 'left', fontWeight: 600, color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {topOverdueCustomers.map((c: any, i: number) => (
+                    <tr key={c.customerId} style={{ borderTop: '1px solid #fee2e2' }}>
+                      <td style={{ padding: '9px 16px', color: '#9ca3af', fontSize: 12, width: 36 }}>{i + 1}</td>
+                      <td style={{ padding: '9px 16px', fontWeight: 600, color: '#111827' }}>{c.businessName}</td>
+                      <td style={{ padding: '9px 16px', color: '#6b7280', fontSize: 12 }}>{c.phone}</td>
+                      <td style={{ padding: '9px 16px', textAlign: 'right', fontWeight: 800, color: '#dc2626' }}>₹{Number(c.overdueAmount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}</td>
+                      <td style={{ padding: '9px 16px', textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{c.oldestDueDays}d</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Charts Row ── */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={15}>
@@ -350,7 +408,24 @@ const DashboardPage: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
                 <div className="chart-title">Revenue Trend</div>
-                <div className="chart-sub" style={{ marginBottom: 0 }}>Last 7 days performance</div>
+                <div className="chart-sub" style={{ marginBottom: 0 }}>
+                  {periodMode === '7d' ? 'Last 7 days' : periodMode === 'mtd' ? 'Month to date' : 'Previous month'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['7d', 'mtd', 'last'] as PeriodMode[]).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPeriodMode(p)}
+                    style={{
+                      padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 6, border: '1px solid',
+                      borderColor: periodMode === p ? '#3b82f6' : '#e2e8f0',
+                      background: periodMode === p ? '#eff6ff' : '#fff',
+                      color: periodMode === p ? '#3b82f6' : '#64748b',
+                      cursor: 'pointer',
+                    }}
+                  >{PERIOD_LABELS[p]}</button>
+                ))}
               </div>
             </div>
             {trendLoading ? (
@@ -475,6 +550,97 @@ const DashboardPage: React.FC = () => {
                 },
               ]}
             />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* ── Route Collection + Vendor Payables ── */}
+      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+        {/* Route Collection Progress */}
+        <Col xs={24} lg={14}>
+          <Card
+            title={<span style={{ fontWeight: 700, fontSize: 15 }}>Route Collection</span>}
+            extra={<span style={{ fontSize: 12, color: '#94a3b8' }}>Today's performance by route</span>}
+            style={{ borderRadius: 12, height: '100%' }}
+            styles={{ body: { padding: 0 } }}
+          >
+            {isLoading ? (
+              <div style={{ padding: 20 }}><Skeleton active paragraph={{ rows: 4 }} /></div>
+            ) : routeStats.length === 0 ? (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No orders placed today</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 420 }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['Route', 'Orders', "Today's Collection", 'Outstanding'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Orders' || h === "Today's Collection" || h === 'Outstanding' ? 'right' : 'left', fontWeight: 600, color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {routeStats.map((r: any, i: number) => (
+                      <tr key={r.routeName} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : undefined }}>
+                        <td style={{ padding: '11px 16px', fontWeight: 600, color: '#0f172a' }}>{r.routeName}</td>
+                        <td style={{ padding: '11px 16px', textAlign: 'right', color: '#374151' }}>{r.todayOrders}</td>
+                        <td style={{ padding: '11px 16px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>
+                          ₹{Number(r.todayCollection || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                        </td>
+                        <td style={{ padding: '11px 16px', textAlign: 'right', fontWeight: 700, color: Number(r.outstanding) > 0 ? '#ef4444' : '#059669' }}>
+                          ₹{Number(r.outstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </Col>
+
+        {/* Vendor Payables */}
+        <Col xs={24} lg={10}>
+          <Card
+            title={<span style={{ fontWeight: 700, fontSize: 15 }}>Vendor Payables</span>}
+            extra={<a href="/supplier-payments" style={{ fontSize: 12, fontWeight: 600 }}>Manage</a>}
+            style={{ borderRadius: 12, height: '100%' }}
+            styles={{ body: { padding: '16px 20px' } }}
+          >
+            {isLoading ? (
+              <Skeleton active paragraph={{ rows: 4 }} />
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: Number(totalVendorPayable) > 0 ? '#dc2626' : '#059669' }}>
+                    ₹{Number(totalVendorPayable || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>total pending to suppliers</div>
+                </div>
+                {topVendorPayables.length === 0 ? (
+                  <div style={{ color: '#94a3b8', fontSize: 13 }}>All supplier payments up to date</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {topVendorPayables.map((s: any) => {
+                      const pct = Number(totalVendorPayable) > 0
+                        ? Math.round((Number(s.outstanding) / Number(totalVendorPayable)) * 100) : 0;
+                      return (
+                        <div key={s.supplierName}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>{s.supplierName}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>
+                              ₹{Number(s.outstanding).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                            </span>
+                          </div>
+                          <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: '#ef4444', borderRadius: 3 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
           </Card>
         </Col>
       </Row>

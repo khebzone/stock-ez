@@ -55,6 +55,15 @@ public class Customer {
     @Column(length = 500)
     private String address;
 
+    @Column(length = 100)
+    private String city;
+
+    @Column(length = 50)
+    private String state;
+
+    @Column(name = "pin_code", length = 10)
+    private String pinCode;
+
     @Column(length = 15)
     private String gstin;
 

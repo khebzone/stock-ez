@@ -51,6 +51,30 @@ export const paymentApi = baseApi.injectEndpoints({
       query: (customerId) => `/payments/customer/${customerId}/history`,
       providesTags: ['Payment'],
     }),
+    getSalesmanOutstanding: builder.query<any, void>({
+      query: () => '/payments/salesman-outstanding',
+      providesTags: ['Payment', 'Order'],
+    }),
+    getRouteOutstanding: builder.query<any, void>({
+      query: () => '/payments/route-outstanding',
+      providesTags: ['Payment', 'Order'],
+    }),
+    getInstruments: builder.query<any, void>({
+      query: () => '/payments/instruments',
+      providesTags: ['Payment'],
+    }),
+    depositInstrument: builder.mutation<any, { id: string; depositDate?: string; depositBank?: string }>({
+      query: ({ id, ...body }) => ({ url: `/payments/${id}/deposit`, method: 'POST', body }),
+      invalidatesTags: ['Payment'],
+    }),
+    realiseInstrument: builder.mutation<any, { id: string; realisedDate?: string }>({
+      query: ({ id, ...body }) => ({ url: `/payments/${id}/realise`, method: 'POST', body }),
+      invalidatesTags: ['Payment', 'Order'],
+    }),
+    bounceInstrument: builder.mutation<any, { id: string; bounceReason: string; bankCharges?: number }>({
+      query: ({ id, ...body }) => ({ url: `/payments/${id}/bounce`, method: 'POST', body }),
+      invalidatesTags: ['Payment', 'Order'],
+    }),
   }),
 });
 
@@ -66,4 +90,10 @@ export const {
   useGetOutstandingSummaryQuery,
   useGetCustomerOrdersQuery,
   useGetCustomerPaymentHistoryQuery,
+  useGetSalesmanOutstandingQuery,
+  useGetRouteOutstandingQuery,
+  useGetInstrumentsQuery,
+  useDepositInstrumentMutation,
+  useRealiseInstrumentMutation,
+  useBounceInstrumentMutation,
 } = paymentApi;

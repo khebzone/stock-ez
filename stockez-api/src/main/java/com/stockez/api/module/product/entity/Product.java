@@ -11,17 +11,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * FMCG Product entity.
- * Supports HSN code, brand, category/sub-category, multiple price tiers, GST.
- */
 @Entity
 @Table(name = "products",
     indexes = {
-        @Index(name = "idx_product_tenant", columnList = "tenant_id"),
-        @Index(name = "idx_product_category", columnList = "category"),
-        @Index(name = "idx_product_brand", columnList = "brand"),
-        @Index(name = "idx_product_active", columnList = "active")
+        @Index(name = "idx_products_tenant",      columnList = "tenant_id"),
+        @Index(name = "idx_products_brand_id",    columnList = "brand_id"),
+        @Index(name = "idx_products_category_id", columnList = "category_id"),
+        @Index(name = "idx_products_active",      columnList = "active")
     }
 )
 @EntityListeners(AuditingEntityListener.class)
@@ -42,17 +38,21 @@ public class Product {
     @Column(length = 50)
     private String hsnCode;
 
-    @Column(length = 100)
-    private String brand;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "brand_id")
+    private ProductMaster brandMaster;
 
-    @Column(length = 100)
-    private String category;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private ProductMaster categoryMaster;
 
-    @Column(length = 100)
-    private String subCategory;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sub_category_id")
+    private ProductMaster subCategoryMaster;
 
-    @Column(length = 20)
-    private String unit; // KG, PIECE, LITRE, BOX, CARTON
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "unit_id")
+    private ProductMaster unitMaster;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal mrp;
@@ -60,20 +60,18 @@ public class Product {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal purchaseRate;
 
-    /** Admin-enforced floor — salesperson cannot bill below this rate */
     @Column(precision = 10, scale = 2)
     private BigDecimal minSaleRate;
 
-    /** Admin-enforced ceiling — salesperson cannot bill above this rate */
     @Column(precision = 10, scale = 2)
     private BigDecimal maxSaleRate;
 
     @Column(nullable = false, precision = 5, scale = 2)
     @Builder.Default
-    private BigDecimal purchaseGstPercent = BigDecimal.ZERO; // GST paid on purchase (input tax)
+    private BigDecimal purchaseGstPercent = BigDecimal.ZERO;
 
     @Column(nullable = false, precision = 5, scale = 2)
-    private BigDecimal salesGstPercent; // GST charged on sales (output tax)
+    private BigDecimal salesGstPercent;
 
     @Column(precision = 5, scale = 2)
     @Builder.Default
@@ -93,7 +91,6 @@ public class Product {
     @Builder.Default
     private boolean active = true;
 
-    // Stock tracking (basic)
     @Builder.Default
     private Integer stockQuantity = 0;
 
@@ -109,4 +106,15 @@ public class Product {
 
     @LastModifiedDate
     private Instant updatedAt;
+
+    // Convenience accessors — all callers (reports, orders, PDF) use these and stay unchanged
+    public String getBrand() { return brandMaster != null ? brandMaster.getName() : null; }
+    public String getCategory() { return categoryMaster != null ? categoryMaster.getName() : null; }
+    public String getSubCategory() { return subCategoryMaster != null ? subCategoryMaster.getName() : null; }
+    public String getUnit() { return unitMaster != null ? unitMaster.getName() : null; }
+
+    public UUID getBrandId() { return brandMaster != null ? brandMaster.getId() : null; }
+    public UUID getCategoryId() { return categoryMaster != null ? categoryMaster.getId() : null; }
+    public UUID getSubCategoryId() { return subCategoryMaster != null ? subCategoryMaster.getId() : null; }
+    public UUID getUnitId() { return unitMaster != null ? unitMaster.getId() : null; }
 }

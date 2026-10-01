@@ -10,6 +10,8 @@ import {
   useImportProductsMutation,
   useImportCustomersMutation,
   useImportSuppliersMutation,
+  useImportCustomerBalancesMutation,
+  useImportSupplierBalancesMutation,
 } from '../../store/api/importApi';
 
 const { Dragger } = Upload;
@@ -20,6 +22,11 @@ interface ImportResult {
   imported: number;
   skipped: number;
   failed: number;
+  brandsCreated: number;
+  categoriesCreated: number;
+  subCategoriesCreated: number;
+  unitsCreated: number;
+  taxRatesCreated: number;
   errors: { row: number; message: string }[];
 }
 
@@ -44,7 +51,7 @@ const downloadTemplate = (type: string) => {
 
 const stripRowPrefix = (msg: string) => msg.replace(/^Row\s+\d+:\s*/i, '');
 
-const ResultPanel: React.FC<{ result: ImportResult }> = ({ result }) => {
+const ResultPanel: React.FC<{ result: ImportResult; showMastersSummary?: boolean }> = ({ result, showMastersSummary }) => {
   const screens = useBreakpoint();
   const isMobile = !screens.sm;
 
@@ -74,6 +81,32 @@ const ResultPanel: React.FC<{ result: ImportResult }> = ({ result }) => {
           <span style={{ fontSize: 12, color: '#64748b' }}>{result.totalRows} Total</span>
         </div>
       </div>
+
+      {showMastersSummary && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>MASTERS AUTO-CREATED</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {[
+              { label: 'Brands', count: result.brandsCreated },
+              { label: 'Categories', count: result.categoriesCreated },
+              { label: 'Sub-Categories', count: result.subCategoriesCreated },
+              { label: 'Units', count: result.unitsCreated },
+              { label: 'GST Rates', count: result.taxRatesCreated },
+            ].map(({ label, count }) => (
+              <div key={label} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: '#fff', border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 10px',
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#15803d' }}>{count}</span>
+                <span style={{ fontSize: 12, color: '#374151' }}>{label}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>
+            Go to Masters page to verify the total counts match your Excel.
+          </div>
+        </div>
+      )}
 
       {groupedRows.length > 0 && (
         <div style={{ border: '1px solid #fecaca', borderRadius: 8, overflow: 'hidden' }}>
@@ -113,10 +146,11 @@ interface TabPanelProps {
   steps: string[];
   uploadLabel: string;
   hint?: string;
+  showMastersSummary?: boolean;
   onUpload: (file: File) => Promise<ImportResult | null>;
 }
 
-const ImportTab: React.FC<TabPanelProps> = ({ label, templateKey, steps, uploadLabel, hint, onUpload }) => {
+const ImportTab: React.FC<TabPanelProps> = ({ label, templateKey, steps, uploadLabel, hint, showMastersSummary, onUpload }) => {
   const screens = useBreakpoint();
   const isMobile = !screens.sm;
 
@@ -200,7 +234,7 @@ const ImportTab: React.FC<TabPanelProps> = ({ label, templateKey, steps, uploadL
         </Button>
       </div>
 
-      {result && <div ref={resultRef}><ResultPanel result={result} /></div>}
+      {result && <div ref={resultRef}><ResultPanel result={result} showMastersSummary={showMastersSummary} /></div>}
     </div>
   );
 };
@@ -212,6 +246,8 @@ const ImportPage: React.FC = () => {
   const [importProducts] = useImportProductsMutation();
   const [importCustomers] = useImportCustomersMutation();
   const [importSuppliers] = useImportSuppliersMutation();
+  const [importCustomerBalances] = useImportCustomerBalancesMutation();
+  const [importSupplierBalances] = useImportSupplierBalancesMutation();
 
   const upload = (mutation: any) => async (file: File): Promise<ImportResult | null> => {
     const formData = new FormData();
@@ -238,7 +274,7 @@ const ImportPage: React.FC = () => {
           showIcon
           style={{ marginBottom: 16 }}
           message="Import Order"
-          description="Import in this order: (1) Products → (2) Customers → (3) Suppliers. Routes and stops are auto-created. Duplicates are skipped automatically."
+          description="Import in this order: (1) Products → (2) Customers → (3) Suppliers → (4) Customer Outstanding → (5) Supplier Outstanding. Routes and stops are auto-created. Duplicates are skipped automatically."
         />
         <Tabs
           items={[
@@ -251,6 +287,7 @@ const ImportPage: React.FC = () => {
                   templateKey="products"
                   steps={['Download template', 'Fill product list', 'Upload']}
                   uploadLabel="Import Products"
+                  showMastersSummary
                   onUpload={upload(importProducts)}
                 />
               ),
@@ -264,7 +301,6 @@ const ImportPage: React.FC = () => {
                   templateKey="customers"
                   steps={['Download template', 'Fill customer list', 'Upload']}
                   uploadLabel="Import Customers"
-                  hint="Opening Balance — enter the amount the customer already owed in your old system. Leave blank if nothing is outstanding."
                   onUpload={upload(importCustomers)}
                 />
               ),
@@ -279,6 +315,34 @@ const ImportPage: React.FC = () => {
                   steps={['Download template', 'Fill supplier details', 'Upload']}
                   uploadLabel="Import Suppliers"
                   onUpload={upload(importSuppliers)}
+                />
+              ),
+            },
+            {
+              key: 'customer-balances',
+              label: 'Customer Outstanding',
+              children: (
+                <ImportTab
+                  label="Customer Outstanding"
+                  templateKey="customer-balances"
+                  steps={['Download template', 'Fill date-wise outstanding', 'Upload']}
+                  uploadLabel="Import Customer Outstanding"
+                  hint="Download the template — all your customers are pre-filled with name, phone, route and stop. Fill Date and Amount for each outstanding invoice. Copy a customer row to add multiple invoices for the same customer. Customer name must match exactly."
+                  onUpload={upload(importCustomerBalances)}
+                />
+              ),
+            },
+            {
+              key: 'supplier-balances',
+              label: 'Supplier Outstanding',
+              children: (
+                <ImportTab
+                  label="Supplier Outstanding"
+                  templateKey="supplier-balances"
+                  steps={['Download template', 'Fill date-wise outstanding', 'Upload']}
+                  uploadLabel="Import Supplier Outstanding"
+                  hint="Download the template — all your suppliers are pre-filled with name and phone. Fill Date and Amount for each outstanding bill. Copy a supplier row to add multiple bills for the same supplier. Supplier name must match exactly."
+                  onUpload={upload(importSupplierBalances)}
                 />
               ),
             },

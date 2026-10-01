@@ -26,6 +26,14 @@ public class SupplierPaymentController {
 
     private final SupplierPaymentService service;
 
+    @GetMapping("/unpaid-entries")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_VIEW')")
+    public ResponseEntity<ApiResponse<List<SupplierPaymentDtos.UnpaidPurchaseEntry>>> getUnpaidEntries(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestParam String supplierName) {
+        return ResponseEntity.ok(ApiResponse.success(service.getUnpaidEntries(tenantId, supplierName)));
+    }
+
     @GetMapping("/summaries")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIER_PAYMENTS_VIEW')")
     public ResponseEntity<ApiResponse<List<SupplierPaymentDtos.SupplierSummary>>> getSummaries(

@@ -25,4 +25,19 @@ public interface SupplierPaymentRepository extends JpaRepository<SupplierPayment
     @Query("SELECT sp.supplierName, COALESCE(SUM(sp.amount), 0), MAX(sp.paymentDate) " +
            "FROM SupplierPayment sp WHERE sp.tenant.id = :tenantId GROUP BY sp.supplierName")
     List<Object[]> sumPaidBySupplier(@Param("tenantId") UUID tenantId);
+
+    @Query("SELECT COALESCE(SUM(sp.amount), 0) FROM SupplierPayment sp WHERE sp.tenant.id = :tenantId")
+    java.math.BigDecimal sumTotalPaidByTenant(@Param("tenantId") UUID tenantId);
+
+    @Query("SELECT sp FROM SupplierPayment sp WHERE sp.tenant.id = :tenantId " +
+           "AND LOWER(sp.supplierName) = LOWER(:supplierName) " +
+           "AND sp.paymentDate BETWEEN :from AND :to ORDER BY sp.paymentDate ASC, sp.createdAt ASC")
+    List<SupplierPayment> findByTenantAndSupplierAndDateRange(
+            @Param("tenantId") UUID tenantId, @Param("supplierName") String supplierName,
+            @Param("from") java.time.LocalDate from, @Param("to") java.time.LocalDate to);
+
+    @Query("SELECT COALESCE(SUM(sp.amount), 0) FROM SupplierPayment sp WHERE sp.tenant.id = :tenantId " +
+           "AND LOWER(sp.supplierName) = LOWER(:supplierName) AND sp.paymentDate < :from")
+    java.math.BigDecimal sumPaidBySupplierBeforeDate(
+            @Param("tenantId") UUID tenantId, @Param("supplierName") String supplierName, @Param("from") java.time.LocalDate from);
 }

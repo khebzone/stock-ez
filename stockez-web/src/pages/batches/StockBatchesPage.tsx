@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
-import { Table, Tag, Skeleton, Input, Button, Tooltip, Space } from 'antd';
-import { InboxOutlined, WarningOutlined, SearchOutlined, RollbackOutlined, DeleteOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Table, Skeleton, Input, Button, Tooltip, Space, Select } from 'antd';
+import { InboxOutlined, SearchOutlined, RollbackOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { exportToXLSX } from '../../components/TableToolbar';
+import dayjs from 'dayjs';
 import { useGetAllBatchesQuery } from '../../store/api/purchaseApi';
+import { useGetMastersQuery } from '../../store/api/productMasterApi';
+import { hasPermission } from '../../utils/permissions';
 import ReturnToSupplierModal from '../../components/ReturnToSupplierModal';
 import WriteOffModal from '../../components/WriteOffModal';
 
@@ -12,36 +16,68 @@ const STATUS_TABS = [
 ];
 
 const fmt = (v: any) => v != null ? `₹${Number(v).toFixed(2)}` : '—';
-
-const ExpiryTag: React.FC<{ batch: any }> = ({ batch }) => {
-  if (!batch.expiryDate) return <span style={{ color: '#94a3b8' }}>—</span>;
-  if (batch.expired)    return <Tag color="error">Expired</Tag>;
-  if (batch.nearExpiry) return <Tag color="warning">Near Expiry</Tag>;
-  return <Tag color="success">OK</Tag>;
-};
+const fmtDate = (v: any) => v ? dayjs(v).format('DD MMM YYYY') : '—';
 
 const StockBatchesPage: React.FC = () => {
-  const [status, setStatus] = useState('active');
-  const [page, setPage]     = useState(0);
-  const [search, setSearch] = useState('');
-  const [returnBatch, setReturnBatch] = useState<any>(null);
+  const [status, setStatus]       = useState('active');
+  const [page, setPage]           = useState(0);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch]       = useState('');
+  const [brand, setBrand]         = useState<string | undefined>();
+  const [returnBatch, setReturnBatch]   = useState<any>(null);
   const [writeOffBatch, setWriteOffBatch] = useState<any>(null);
 
-  const { data, isLoading } = useGetAllBatchesQuery({ status, page, size: 50 });
+  // Debounce search — fires API call 400ms after user stops typing
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(0); }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const { data: brandsData } = useGetMastersQuery('BRAND');
+  const brands: string[] = (brandsData?.data || []).map((b: any) => b.name).sort();
+
+  const { data, isLoading } = useGetAllBatchesQuery({ status, brand, search: search || undefined, page, size: 50 });
   const batches: any[] = data?.data?.content || [];
   const totalElements: number = data?.data?.totalElements || 0;
+  const filtered = batches;
 
-  const filtered = search.trim()
-    ? batches.filter(b => b.product?.name?.toLowerCase().includes(search.toLowerCase()))
-    : batches;
+  const exportToExcel = async () => {
+    const label = status === 'active' ? 'Active' : status === 'near-expiry' ? 'NearExpiry' : 'Expired';
+    await exportToXLSX(filtered, [
+      { title: 'Product', key: 'product', dataIndex: ['product', 'name'] },
+      { title: 'Brand', key: 'brand', dataIndex: ['product', 'brand'] },
+      { title: 'Unit', key: 'unit', dataIndex: ['product', 'unit'] },
+      { title: 'Batch No.', key: 'batchNumber' },
+      { title: 'Supplier', key: 'supplierName' },
+      { title: 'Qty Available', key: 'quantityAvailable', type: 'number' },
+      { title: 'MRP', key: 'mrp', type: 'currency' },
+      { title: 'Purchase Rate', key: 'purchaseRate', type: 'currency' },
+      { title: 'Min Sale Rate', key: 'minSaleRate', type: 'currency' },
+      { title: 'Max Sale Rate', key: 'maxSaleRate', type: 'currency' },
+      { title: 'Expiry Date', key: 'expiryDate', type: 'date' },
+      { title: 'Status', key: 'status', transform: (_: any, b: any) => (b.expired ? 'Expired' : b.nearExpiry ? 'Near Expiry' : 'OK') },
+      { title: 'Received Date', key: 'receivedDate', type: 'date' },
+    ], `StockBatches_${label}_${new Date().toISOString().slice(0, 10)}`, 'Stock Batches', {
+      title: 'Stock Batches',
+      subtitle: `${label} · ${filtered.length} batch${filtered.length === 1 ? '' : 'es'}`,
+    });
+  };
 
   const columns = [
     {
       title: 'Product',
       dataIndex: ['product', 'name'],
+      width: 240,
       render: (_: any, r: any) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>{r.product?.name}</div>
+          <Tooltip title={r.product?.name}>
+            <div style={{
+              fontWeight: 600, fontSize: 14, color: '#0f172a', lineHeight: 1.3,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>
+              {r.product?.name}
+            </div>
+          </Tooltip>
           <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.product?.brand} · {r.product?.unit}</div>
         </div>
       ),
@@ -49,19 +85,22 @@ const StockBatchesPage: React.FC = () => {
     {
       title: 'Batch No.',
       dataIndex: 'batchNumber',
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#374151' }}>{v}</span>,
+      width: 180,
+      render: (_: any, r: any) => (
+        <div>
+          <div style={{ whiteSpace: 'nowrap', fontSize: 13, color: '#334155' }}>{r.batchNumber}</div>
+          {/* Always rendered, even when blank — keeps every row the same height */}
+          <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.supplierName || ' '}</div>
+        </div>
+      ),
     },
     {
-      title: 'Supplier',
-      dataIndex: 'supplierName',
-      render: (v: string) => <span style={{ fontSize: 12, color: '#374151' }}>{v || '—'}</span>,
-    },
-    {
-      title: 'Qty Available',
+      title: 'Qty Avail.',
       dataIndex: 'quantityAvailable',
       align: 'right' as const,
+      width: 120,
       render: (v: number, r: any) => (
-        <span style={{ fontWeight: 700, color: v === 0 ? '#dc2626' : v <= 10 ? '#d97706' : '#059669' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: v === 0 ? '#dc2626' : v <= 10 ? '#d97706' : '#0f172a' }}>
           {v} {r.product?.unit}
         </span>
       ),
@@ -70,42 +109,43 @@ const StockBatchesPage: React.FC = () => {
       title: 'MRP',
       dataIndex: 'mrp',
       align: 'right' as const,
-      render: (v: any) => <span style={{ fontSize: 13 }}>{fmt(v)}</span>,
+      render: (v: any) => <span style={{ fontSize: 13, color: '#334155' }}>{fmt(v)}</span>,
     },
     {
       title: 'Purch. Rate',
       dataIndex: 'purchaseRate',
       align: 'right' as const,
-      render: (v: any) => <span style={{ fontSize: 13 }}>{fmt(v)}</span>,
+      render: (v: any) => <span style={{ fontSize: 13, color: '#334155' }}>{fmt(v)}</span>,
     },
     {
       title: 'Min Sale',
       dataIndex: 'minSaleRate',
       align: 'right' as const,
-      render: (v: any) => <span style={{ fontSize: 13, color: '#059669' }}>{fmt(v)}</span>,
+      render: (v: any) => <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{fmt(v)}</span>,
     },
     {
       title: 'Max Sale',
       dataIndex: 'maxSaleRate',
       align: 'right' as const,
-      render: (v: any) => <span style={{ fontSize: 13, color: '#374151' }}>{fmt(v)}</span>,
+      render: (v: any) => <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{fmt(v)}</span>,
     },
     {
       title: 'Expiry',
       dataIndex: 'expiryDate',
       render: (_: any, r: any) => (
-        <div>
-          <div style={{ fontSize: 12, color: r.expired ? '#dc2626' : r.nearExpiry ? '#d97706' : '#374151', fontWeight: r.expired || r.nearExpiry ? 600 : 400 }}>
-            {r.expiryDate || '—'}
-          </div>
-          <ExpiryTag batch={r} />
-        </div>
+        <span style={{
+          fontSize: 13,
+          color: r.expired ? '#dc2626' : r.nearExpiry ? '#d97706' : '#374151',
+          fontWeight: r.expired || r.nearExpiry ? 600 : 400,
+        }}>
+          {fmtDate(r.expiryDate)}
+        </span>
       ),
     },
     {
       title: 'Received',
       dataIndex: 'receivedDate',
-      render: (v: string) => <span style={{ fontSize: 12, color: '#64748b' }}>{v || '—'}</span>,
+      render: (v: string) => <span style={{ fontSize: 13, color: '#94a3b8' }}>{fmtDate(v)}</span>,
     },
     {
       title: '',
@@ -114,6 +154,7 @@ const StockBatchesPage: React.FC = () => {
       align: 'center' as const,
       render: (_: any, r: any) => {
         if (r.quantityAvailable <= 0) return null;
+        if (!hasPermission('RETURNS_CREATE')) return null;
         return (
           <Space size={4}>
             {r.supplierName && (
@@ -149,6 +190,13 @@ const StockBatchesPage: React.FC = () => {
           <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: -0.5 }}>Stock Batches</div>
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>All inventory batches with expiry and pricing</div>
         </div>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={exportToExcel}
+          disabled={filtered.length === 0}
+        >
+          Export Excel
+        </Button>
       </div>
 
       {/* Filter bar */}
@@ -170,11 +218,22 @@ const StockBatchesPage: React.FC = () => {
             </button>
           ))}
         </div>
+        <Select
+          placeholder="All Brands"
+          allowClear
+          value={brand}
+          onChange={v => { setBrand(v); setPage(0); }}
+          style={{ minWidth: 160 }}
+          showSearch
+          optionFilterProp="children"
+        >
+          {brands.map(b => <Select.Option key={b} value={b}>{b}</Select.Option>)}
+        </Select>
         <Input
           prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
           placeholder="Search product..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
           style={{ flex: 1, minWidth: 150 }}
           allowClear
         />
@@ -202,7 +261,8 @@ const StockBatchesPage: React.FC = () => {
               onChange: p => setPage(p - 1),
               showTotal: (total) => `${total} batches`,
             }}
-            rowClassName={(r) => r.expired ? 'batch-expired' : r.nearExpiry ? 'batch-near' : ''}
+            virtual
+            scroll={{ x: 1020, y: 550 }}
           />
         )}
       </div>

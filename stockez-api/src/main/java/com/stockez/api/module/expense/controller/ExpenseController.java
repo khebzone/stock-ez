@@ -34,7 +34,7 @@ public class ExpenseController {
     }
 
     @PostMapping("/categories")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_CREATE')")
     public ResponseEntity<ApiResponse<ExpenseDtos.CategoryResponse>> createCategory(
             @Valid @RequestBody ExpenseDtos.CreateCategoryRequest request,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {
@@ -43,7 +43,7 @@ public class ExpenseController {
     }
 
     @DeleteMapping("/categories/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('EXPENSES_DELETE')")
     public ResponseEntity<ApiResponse<Void>> deleteCategory(
             @PathVariable UUID id,
             @RequestHeader("X-Tenant-Id") UUID tenantId) {

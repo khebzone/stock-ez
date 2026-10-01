@@ -1,6 +1,7 @@
 package com.stockez.api.module.order.entity;
 
 import com.stockez.api.module.product.entity.Product;
+import com.stockez.api.module.purchase.entity.StockBatch;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -53,15 +54,26 @@ public class OrderItem {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal lineTotal;
 
+    @Column(precision = 10, scale = 2)
+    private BigDecimal mrp;
+
     // Batch info (from FIFO deduction — primary batch used)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
+    private StockBatch batch;
+
     @Column(length = 100)
     private String batchNumber;
 
     private LocalDate batchExpiryDate;
 
-    // Warehouse verification
+    // Warehouse verification (picking stage)
     @Builder.Default
     private boolean verified = false;
 
     private Integer verifiedQuantity;
+
+    // Warehouse verification (return-to-warehouse confirm stage) — how many units
+    // of this line actually reached the warehouse when the order was handed back.
+    private Integer returnReceivedQuantity;
 }

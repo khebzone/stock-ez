@@ -36,6 +36,14 @@ public class SupplierController {
     private final SupplierService supplierService;
     private final SupplierExcelService supplierExcelService;
 
+    @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_VIEW')")
+    @Operation(summary = "Get all active suppliers sorted by name")
+    public ResponseEntity<ApiResponse<java.util.List<SupplierDtos.SupplierResponse>>> getAll(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(supplierService.getAllActive(tenantId)));
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('SUPPLIERS_VIEW')")
     @Operation(summary = "List suppliers")
@@ -100,8 +108,8 @@ public class SupplierController {
     }
 
     @GetMapping("/import/template")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Download import template [ADMIN]")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('SUPPLIERS_VIEW','IMPORT_VIEW')")
+    @Operation(summary = "Download import template")
     public ResponseEntity<byte[]> template(@RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
         byte[] data = supplierExcelService.downloadTemplate();
         return ResponseEntity.ok()

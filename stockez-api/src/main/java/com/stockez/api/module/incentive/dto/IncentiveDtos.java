@@ -1,6 +1,5 @@
 package com.stockez.api.module.incentive.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -12,11 +11,18 @@ import java.util.UUID;
 public class IncentiveDtos {
 
     @Data
+    public static class BrandOption {
+        private UUID id;
+        private String name;
+        public BrandOption(UUID id, String name) { this.id = id; this.name = name; }
+    }
+
+    @Data
     public static class SaveTargetRequest {
         @NotNull(message = "Sales person is required")
         private UUID salesPersonId;
-        @NotBlank(message = "Brand is required")
-        private String brand;
+        @NotNull(message = "Brand is required")
+        private UUID brandId;
         @NotNull(message = "Month is required")
         private Integer targetMonth;
         @NotNull(message = "Year is required")
@@ -31,6 +37,7 @@ public class IncentiveDtos {
         private UUID salesPersonId;
         private String salesPersonName;
         private String salesPersonPhone;
+        private UUID brandId;
         private String brand;
         private int targetMonth;
         private int targetYear;
@@ -61,8 +68,8 @@ public class IncentiveDtos {
 
     @Data
     public static class SaveSlabsRequest {
-        @NotBlank(message = "Brand is required")
-        private String brand;
+        @NotNull(message = "Brand is required")
+        private UUID brandId;
         @NotNull(message = "Slabs list is required")
         private List<SlabRequest> slabs;
     }
@@ -78,6 +85,7 @@ public class IncentiveDtos {
 
     @Data
     public static class BrandSlabSummary {
+        private UUID brandId;
         private String brand;
         private List<IncentiveSlabResponse> slabs;
     }

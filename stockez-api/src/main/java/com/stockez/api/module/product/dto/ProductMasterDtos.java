@@ -21,8 +21,7 @@ public class ProductMasterDtos {
         @Size(max = 50)
         private String value;
 
-        @Size(max = 150)
-        private String parentName; // for SUB_CATEGORY only
+        private UUID parentId; // required for SUB_CATEGORY, null for all others
 
         private Integer sortOrder;
     }
@@ -33,7 +32,8 @@ public class ProductMasterDtos {
         private String type;
         private String name;
         private String value;
-        private String parentName;
+        private UUID parentId;
+        private String parentName; // derived from parentMaster.getName() — always fresh
         private boolean active;
         private Integer sortOrder;
         private Instant createdAt;

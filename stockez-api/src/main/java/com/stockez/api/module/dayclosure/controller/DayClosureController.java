@@ -10,7 +10,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,10 +37,10 @@ public class DayClosureController {
     @Operation(summary = "Close today's cash counter — enter physical cash count")
     public ResponseEntity<ApiResponse<DayClosureDtos.DayClosureResponse>> closeDay(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId,
             @Valid @RequestBody DayClosureDtos.CloseDayRequest req) {
-        String closedByName = SecurityContextHolder.getContext().getAuthentication().getName();
         return ResponseEntity.ok(ApiResponse.success(
-                dayClosureService.closeDay(tenantId, req, closedByName),
+                dayClosureService.closeDay(tenantId, req, userId),
                 "Day closed successfully"));
     }
 

@@ -89,6 +89,36 @@ public class Tenant {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "invoice_terms", columnDefinition = "TEXT")
+    private String invoiceTerms;
+
+    @Column(name = "extra_image_url", length = 500)
+    private String extraImageUrl;
+
+    @Column(name = "payment_qr_image_url", length = 500)
+    private String paymentQrImageUrl;
+
+    @Column(name = "bank_name", length = 120)
+    private String bankName;
+
+    @Column(name = "bank_account_name", length = 120)
+    private String bankAccountName;
+
+    @Column(name = "bank_account_number", length = 40)
+    private String bankAccountNumber;
+
+    @Column(name = "bank_branch", length = 120)
+    private String bankBranch;
+
+    @Column(name = "bank_ifsc", length = 20)
+    private String bankIfsc;
+
+    @Column(name = "state_code", length = 2)
+    private String stateCode;
+
+    @Column(name = "invoice_footer_note", length = 500)
+    private String invoiceFooterNote;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

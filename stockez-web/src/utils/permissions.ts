@@ -16,19 +16,25 @@ export const hasPermission = (perm: string): boolean => {
 export const hasAnyPermission = (...perms: string[]): boolean =>
   perms.some(p => hasPermission(p));
 
-// FIELD users: have sales orders, delivery, or route access → mobile layout
+const hasSalesPerms    = (): boolean => { const p = getPermissions(); return p.includes('ORDERS_CREATE') || p.includes('ORDERS_VIEW'); };
+const hasDeliveryPerms = (): boolean => { const p = getPermissions(); return p.includes('DELIVERY_UPDATE') || p.includes('DELIVERY_VIEW'); };
+
+// Field workers get the mobile FieldLayout. This is the built-in SALES/DELIVERY
+// roles, plus any custom role explicitly flagged as "field staff" (set on the role
+// in Roles & Permissions). Every other role gets the office MainLayout sidebar —
+// regardless of which permissions it carries.
 export const isFieldUser = (): boolean => {
-  if (isAdmin()) return false;
-  return hasAnyPermission('ORDERS_VIEW', 'ORDERS_CREATE', 'DELIVERY_VIEW', 'DELIVERY_UPDATE', 'ROUTES_VIEW');
+  const u = getUser();
+  if (u.role === 'SALES' || u.role === 'DELIVERY') return true;
+  return u.fieldStaff === true;
 };
 
 // Determine initial route after login
 export const getDefaultRoute = (): string => {
-  const role = getUser().role;
+  const u = getUser();
+  const role = u.role;
   if (role === 'SUPER_ADMIN') return '/superadmin/tenants';
   if (isAdmin()) return '/dashboard';
-  if (hasPermission('ORDERS_VIEW') || hasPermission('ORDERS_CREATE')) return '/sales/dashboard';
-  if (hasPermission('DELIVERY_VIEW') || hasPermission('DELIVERY_UPDATE')) return '/delivery/dashboard';
-  if (isFieldUser()) return '/sales/dashboard';
+  if (u.fieldStaff === true) return '/field/dashboard';
   return '/dashboard';
 };

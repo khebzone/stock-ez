@@ -45,6 +45,20 @@ public class ImportController {
         return excelResponse(importService.supplierTemplate(), "suppliers-template.xlsx");
     }
 
+    @GetMapping("/template/customer-balances")
+    @Operation(summary = "Download customer opening balances Excel template")
+    public ResponseEntity<byte[]> customerOpeningBalancesTemplate(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
+        return excelResponse(importService.customerOpeningBalancesTemplate(tenantId), "customer-outstanding-template.xlsx");
+    }
+
+    @GetMapping("/template/supplier-balances")
+    @Operation(summary = "Download supplier opening balances Excel template")
+    public ResponseEntity<byte[]> supplierOpeningBalancesTemplate(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
+        return excelResponse(importService.supplierOpeningBalancesTemplate(tenantId), "supplier-outstanding-template.xlsx");
+    }
+
     // ── Imports ──
 
     @PostMapping(value = "/products", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -69,6 +83,22 @@ public class ImportController {
             @RequestParam("file") MultipartFile file,
             @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
         return ResponseEntity.ok(ApiResponse.success(importService.importSuppliers(file, tenantId), "Suppliers imported"));
+    }
+
+    @PostMapping(value = "/customer-balances", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Import customer opening balances from Excel")
+    public ResponseEntity<ApiResponse<ImportService.ImportResult>> importCustomerOpeningBalances(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
+        return ResponseEntity.ok(ApiResponse.success(importService.importCustomerOpeningBalances(file, tenantId), "Customer opening balances imported"));
+    }
+
+    @PostMapping(value = "/supplier-balances", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Import supplier opening balances from Excel")
+    public ResponseEntity<ApiResponse<ImportService.ImportResult>> importSupplierOpeningBalances(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) throws IOException {
+        return ResponseEntity.ok(ApiResponse.success(importService.importSupplierOpeningBalances(file, tenantId), "Supplier opening balances imported"));
     }
 
     private ResponseEntity<byte[]> excelResponse(byte[] data, String filename) {

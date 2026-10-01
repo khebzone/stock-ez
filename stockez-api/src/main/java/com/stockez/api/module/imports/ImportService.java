@@ -10,7 +10,9 @@ import com.stockez.api.module.product.entity.Product;
 import com.stockez.api.module.product.entity.ProductMaster;
 import com.stockez.api.module.product.repository.ProductMasterRepository;
 import com.stockez.api.module.product.repository.ProductRepository;
+import com.stockez.api.module.purchase.entity.PurchaseEntry;
 import com.stockez.api.module.purchase.entity.StockBatch;
+import com.stockez.api.module.purchase.repository.PurchaseEntryRepository;
 import com.stockez.api.module.purchase.repository.StockBatchRepository;
 import com.stockez.api.module.route.entity.Route;
 import com.stockez.api.module.route.entity.RoutePlace;
@@ -57,6 +59,7 @@ public class ImportService {
     private final StockBatchRepository stockBatchRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final PurchaseEntryRepository purchaseEntryRepository;
 
     // ──────────────────────── Result ────────────────────────
 
@@ -66,6 +69,11 @@ public class ImportService {
         private int imported;
         private int skipped;
         private int failed;
+        private int brandsCreated;
+        private int categoriesCreated;
+        private int subCategoriesCreated;
+        private int unitsCreated;
+        private int taxRatesCreated;
         private final List<RowError> errors = new ArrayList<>();
 
         @Data
@@ -74,6 +82,8 @@ public class ImportService {
             private final String message;
         }
     }
+
+    private record MasterResult(ProductMaster master, boolean created) {}
 
     // ──────────────────────── Templates ─────────────────────
 
@@ -91,7 +101,7 @@ public class ImportService {
         String[] headers = {
             "Business Name *", "Owner Name *", "Phone *", "Address",
             "GSTIN", "Route Name *", "Stop Name *", "Credit Allowed (YES/NO)",
-            "Credit Days", "Credit Limit (₹)", "Opening Balance (₹)"
+            "Credit Days", "Credit Limit (₹)"
         };
         return buildTemplate("Customers", headers, new int[]{2, 4}); // col 2 = Phone, col 4 = GSTIN
     }
@@ -100,10 +110,128 @@ public class ImportService {
         String[] headers = {
             "Supplier Name *", "Phone *", "Contact Person *", "Alt Phone",
             "Email", "Address", "City", "State",
-            "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code",
-            "Opening Balance (₹)"
+            "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code"
         };
         return buildTemplate("Suppliers", headers, new int[]{1, 3, 8, 11, 12}); // Phone, Alt Phone, GSTIN, Account Number, IFSC
+    }
+
+    public byte[] customerOpeningBalancesTemplate(UUID tenantId) throws IOException {
+        List<Customer> customers = customerRepository.findByTenantIdAndActiveTrueOrderByBusinessNameAsc(tenantId);
+
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            XSSFSheet sheet = wb.createSheet("Customer Outstanding");
+
+            XSSFCellStyle headerStyle = wb.createCellStyle();
+            XSSFFont headerFont = wb.createFont();
+            headerFont.setBold(true);
+            headerFont.setColor(IndexedColors.WHITE.getIndex());
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.DARK_TEAL.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            DataFormat fmt = wb.createDataFormat();
+            XSSFCellStyle textStyle = wb.createCellStyle();
+            textStyle.setDataFormat(fmt.getFormat("@"));
+
+            XSSFCellStyle refStyle = wb.createCellStyle();
+            refStyle.setDataFormat(fmt.getFormat("@"));
+            refStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            refStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            sheet.setDefaultColumnStyle(0, textStyle);
+            sheet.setDefaultColumnStyle(1, textStyle);
+            sheet.setDefaultColumnStyle(2, refStyle);
+            sheet.setDefaultColumnStyle(3, refStyle);
+            sheet.setDefaultColumnStyle(6, textStyle);
+
+            String[] headers = { "Customer Name *", "Customer Phone *", "Route", "Stop", "Date (DD/MM/YYYY) *", "Amount (₹) *", "Notes" };
+            Row headerRow = sheet.createRow(0);
+            int[] colWidths = { 7500, 5500, 5500, 5500, 5500, 5500, 5500 };
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, colWidths[i]);
+            }
+            sheet.createFreezePane(0, 1);
+
+            int rowIdx = 1;
+            for (Customer c : customers) {
+                Row row = sheet.createRow(rowIdx++);
+                Cell nameCell = row.createCell(0);
+                nameCell.setCellValue(c.getBusinessName());
+                nameCell.setCellStyle(textStyle);
+                Cell phoneCell = row.createCell(1);
+                phoneCell.setCellValue(c.getPhone());
+                phoneCell.setCellStyle(textStyle);
+                Cell routeCell = row.createCell(2);
+                routeCell.setCellValue(c.getRoute() != null ? c.getRoute().getName() : "");
+                routeCell.setCellStyle(refStyle);
+                Cell stopCell = row.createCell(3);
+                stopCell.setCellValue(c.getRoutePlace() != null ? c.getRoutePlace().getName() : "");
+                stopCell.setCellStyle(refStyle);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            wb.write(out);
+            return out.toByteArray();
+        }
+    }
+
+    public byte[] supplierOpeningBalancesTemplate(UUID tenantId) throws IOException {
+        List<Supplier> suppliers = supplierRepository.findByTenantIdAndActiveTrueOrderByNameAsc(tenantId);
+
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            XSSFSheet sheet = wb.createSheet("Supplier Outstanding");
+
+            XSSFCellStyle headerStyle = wb.createCellStyle();
+            XSSFFont headerFont = wb.createFont();
+            headerFont.setBold(true);
+            headerFont.setColor(IndexedColors.WHITE.getIndex());
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.DARK_TEAL.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            DataFormat fmt = wb.createDataFormat();
+            XSSFCellStyle textStyle = wb.createCellStyle();
+            textStyle.setDataFormat(fmt.getFormat("@"));
+
+            XSSFCellStyle refStyle = wb.createCellStyle();
+            refStyle.setDataFormat(fmt.getFormat("@"));
+            refStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            refStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            sheet.setDefaultColumnStyle(0, textStyle);
+            sheet.setDefaultColumnStyle(1, refStyle);
+            sheet.setDefaultColumnStyle(4, textStyle);
+            sheet.setDefaultColumnStyle(5, textStyle);
+
+            String[] headers = { "Supplier Name *", "Supplier Phone *", "Date (DD/MM/YYYY) *", "Amount (₹) *", "Reference (Old Inv No)", "Notes" };
+            Row headerRow = sheet.createRow(0);
+            int[] colWidths = { 7500, 5500, 5500, 5500, 5500, 5500 };
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, colWidths[i]);
+            }
+            sheet.createFreezePane(0, 1);
+
+            int rowIdx = 1;
+            for (Supplier s : suppliers) {
+                Row row = sheet.createRow(rowIdx++);
+                Cell nameCell = row.createCell(0);
+                nameCell.setCellValue(s.getName());
+                nameCell.setCellStyle(textStyle);
+                Cell phoneCell = row.createCell(1);
+                phoneCell.setCellValue(s.getPhone() != null ? s.getPhone() : "");
+                phoneCell.setCellStyle(refStyle);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            wb.write(out);
+            return out.toByteArray();
+        }
     }
 
     private byte[] buildTemplate(String sheetName, String[] headers) throws IOException {
@@ -140,6 +268,8 @@ public class ImportService {
                 cell.setCellStyle(headerStyle);
                 sheet.setColumnWidth(i, 5500);
             }
+
+            sheet.createFreezePane(0, 1);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             wb.write(out);
@@ -198,10 +328,10 @@ public class ImportService {
                     if (maxRate != null && mrp != null && maxRate.compareTo(mrp) > 0) {
                         rowErrors.add("Max Sale Rate (" + maxRate + ") cannot be greater than MRP (" + mrp + ")");
                     }
-                    BigDecimal salesGst = collectDecimal(row, 10, "Sales GST %", rowErrors);
+                    BigDecimal salesGst = collectPercentageDecimal(row, 10, "Sales GST %", rowErrors);
                     if (salesGst != null && (salesGst.compareTo(BigDecimal.ZERO) < 0 || salesGst.compareTo(BigDecimal.valueOf(100)) > 0))
                         rowErrors.add("Sales GST % must be between 0 and 100 (entered: " + salesGst + ")");
-                    BigDecimal purchGst = collectDecimal(row, 11, "Purchase GST %", rowErrors);
+                    BigDecimal purchGst = collectPercentageDecimal(row, 11, "Purchase GST %", rowErrors);
                     if (purchGst != null && (purchGst.compareTo(BigDecimal.ZERO) < 0 || purchGst.compareTo(BigDecimal.valueOf(100)) > 0))
                         rowErrors.add("Purchase GST % must be between 0 and 100 (entered: " + purchGst + ")");
                     String openingStockRaw = str(row, 12);
@@ -227,12 +357,20 @@ public class ImportService {
                         continue;
                     }
 
-                    String canonBrand       = ensureMaster(tenantId, tenant, "BRAND", brand, null);
-                    String canonCategory    = ensureMaster(tenantId, tenant, "CATEGORY", category, null);
-                    String canonSubCategory = ensureMaster(tenantId, tenant, "SUB_CATEGORY", subCategory, canonCategory);
-                    String canonUnit        = ensureMaster(tenantId, tenant, "UNIT", unit, null);
-                    ensureTaxRate(tenantId, tenant, salesGst);
-                    ensureTaxRate(tenantId, tenant, purchGst);
+                    MasterResult brandResult    = ensureMasterTracked(tenantId, tenant, "BRAND", brand, null);
+                    MasterResult categoryResult = ensureMasterTracked(tenantId, tenant, "CATEGORY", category, null);
+                    MasterResult subCatResult   = ensureMasterTracked(tenantId, tenant, "SUB_CATEGORY", subCategory, categoryResult.master());
+                    MasterResult unitResult     = ensureMasterTracked(tenantId, tenant, "UNIT", unit, null);
+                    if (brandResult.created())    result.setBrandsCreated(result.getBrandsCreated() + 1);
+                    if (categoryResult.created()) result.setCategoriesCreated(result.getCategoriesCreated() + 1);
+                    if (subCatResult.created())   result.setSubCategoriesCreated(result.getSubCategoriesCreated() + 1);
+                    if (unitResult.created())     result.setUnitsCreated(result.getUnitsCreated() + 1);
+                    if (ensureTaxRateTracked(tenantId, tenant, salesGst)) result.setTaxRatesCreated(result.getTaxRatesCreated() + 1);
+                    if (ensureTaxRateTracked(tenantId, tenant, purchGst)) result.setTaxRatesCreated(result.getTaxRatesCreated() + 1);
+                    ProductMaster brandMaster       = brandResult.master();
+                    ProductMaster categoryMaster    = categoryResult.master();
+                    ProductMaster subCategoryMaster = subCatResult.master();
+                    ProductMaster unitMaster        = unitResult.master();
 
                     if (productRepository.existsByTenantIdAndNameIgnoreCaseAndActiveTrue(tenantId, name)) {
                         result.setSkipped(result.getSkipped() + 1);
@@ -242,8 +380,9 @@ public class ImportService {
 
                     BigDecimal halfGst = salesGst.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
                     Product product = Product.builder()
-                            .tenant(tenant).name(name).hsnCode(hsnCode).brand(canonBrand)
-                            .category(canonCategory).subCategory(canonSubCategory).unit(canonUnit)
+                            .tenant(tenant).name(name).hsnCode(hsnCode)
+                            .brandMaster(brandMaster).categoryMaster(categoryMaster)
+                            .subCategoryMaster(subCategoryMaster).unitMaster(unitMaster)
                             .mrp(mrp).purchaseRate(purchRate)
                             .minSaleRate(minRate).maxSaleRate(maxRate)
                             .purchaseGstPercent(purchGst).salesGstPercent(salesGst)
@@ -261,7 +400,8 @@ public class ImportService {
                         StockBatch batch = StockBatch.builder()
                                 .tenant(tenant).product(saved)
                                 .batchNumber(batchNumber).mrp(mrp)
-                                .purchaseRate(purchRate).minSaleRate(minRate).maxSaleRate(maxRate)
+                                .purchaseRate(purchRate).purchaseGstPercent(purchGst)
+                                .minSaleRate(minRate).maxSaleRate(maxRate)
                                 .expiryDate(expiry).mfgDate(mfgDate).quantityReceived(openingStock)
                                 .quantityAvailable(openingStock).receivedDate(LocalDate.now())
                                 .build();
@@ -282,11 +422,9 @@ public class ImportService {
 
     public ImportResult importCustomers(MultipartFile file, UUID tenantId) throws IOException {
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow();
-        User adminUser = userRepository.findFirstByTenantIdAndRoleAndActiveTrue(tenantId, User.UserRole.ADMIN).orElseThrow();
         ImportResult result = new ImportResult();
         Map<String, Route> routeCache = new HashMap<>();
         Map<String, RoutePlace> placeCache = new HashMap<>();
-        int orderSeq = orderRepository.findMaxOrderSequence(tenantId);
 
         try (Workbook wb = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = wb.getSheetAt(0);
@@ -355,14 +493,6 @@ public class ImportService {
                 String creditLimitRaw = str(row, 9);
                 BigDecimal creditLimit = decimal(row, 9);
 
-                String openingBalanceRaw = str(row, 10);
-                BigDecimal openingBalance = decimal(row, 10);
-                if (openingBalanceRaw != null && openingBalance == null) {
-                    rowErrors.add("Opening Balance must be a valid number (entered: '" + openingBalanceRaw + "')");
-                } else if (openingBalance != null && openingBalance.compareTo(BigDecimal.ZERO) < 0) {
-                    rowErrors.add("Opening Balance cannot be negative");
-                }
-
                 if (creditAllowed) {
                     if (creditDaysRaw == null)   rowErrors.add("Credit Days is required when Credit Allowed is YES");
                     else if (creditDays == null)  rowErrors.add("Credit Days must be a whole number (e.g. 30)");
@@ -420,22 +550,6 @@ public class ImportService {
                 Customer saved = customerRepository.save(customer);
                 auditService.record(tenantId, "CUSTOMER", saved.getId(), "CREATED",
                         "Customer " + saved.getBusinessName() + " imported via Excel");
-
-                if (openingBalance != null && openingBalance.compareTo(BigDecimal.ZERO) > 0) {
-                    orderSeq++;
-                    String orderNumber = String.format("OPN-%d-%05d", Year.now().getValue(), orderSeq);
-                    Order openingOrder = Order.builder()
-                            .tenant(tenant).orderNumber(orderNumber).customer(saved)
-                            .salesPerson(adminUser).orderDate(LocalDate.now())
-                            .status(Order.OrderStatus.DELIVERED)
-                            .subTotal(openingBalance).totalGst(BigDecimal.ZERO)
-                            .totalAmount(openingBalance).paidAmount(BigDecimal.ZERO)
-                            .balanceAmount(openingBalance).deliveredAt(Instant.now())
-                            .notes("Opening balance")
-                            .build();
-                    orderRepository.save(openingOrder);
-                }
-
                 result.setImported(result.getImported() + 1);
             }
         }
@@ -543,14 +657,6 @@ public class ImportService {
                     rowErrors.add("IFSC Code '" + bankIfsc + "' is not valid — expected format: 4 letters + 0 + 6 alphanumeric (e.g. SBIN0001234)");
                 }
 
-                String openingBalanceRaw = str(row, 13);
-                BigDecimal openingBalance = decimal(row, 13);
-                if (openingBalanceRaw != null && openingBalance == null) {
-                    rowErrors.add("Opening Balance must be a valid number (entered: '" + openingBalanceRaw + "')");
-                } else if (openingBalance != null && openingBalance.compareTo(BigDecimal.ZERO) < 0) {
-                    rowErrors.add("Opening Balance cannot be negative");
-                }
-
                 if (!rowErrors.isEmpty()) {
                     result.setFailed(result.getFailed() + 1);
                     for (String err : rowErrors)
@@ -569,11 +675,190 @@ public class ImportService {
                         .contactPerson(contactPerson).email(email).address(address)
                         .city(city).state(state).gstin(gstin).fssaiNumber(fssaiNumber)
                         .bankName(bankName).bankAccount(bankAccount).bankIfsc(bankIfsc)
-                        .openingBalance(openingBalance != null ? openingBalance : BigDecimal.ZERO)
                         .build();
                 Supplier saved = supplierRepository.save(supplier);
                 auditService.record(tenantId, "SUPPLIER", saved.getId(), "CREATED",
                         "Supplier " + saved.getName() + " imported via Excel");
+                result.setImported(result.getImported() + 1);
+            }
+        }
+        return result;
+    }
+
+    // ──────────────────────── Customer Opening Balances Import ──
+
+    public ImportResult importCustomerOpeningBalances(MultipartFile file, UUID tenantId) throws IOException {
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow();
+        User adminUser = userRepository.findFirstByTenantIdAndRoleAndActiveTrue(tenantId, User.UserRole.ADMIN).orElseThrow();
+        ImportResult result = new ImportResult();
+        int orderSeq = orderRepository.findMaxOrderSequence(tenantId);
+
+        try (Workbook wb = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = wb.getSheetAt(0);
+            validateHeaders(sheet, CUSTOMER_OUTSTANDING_HEADERS, "Customer Outstanding");
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (isBlankRow(row)) continue;
+
+                // skip rows where date and amount are both blank (pre-filled customer with no outstanding)
+                if (str(row, 4) == null && str(row, 5) == null) continue;
+
+                result.setTotalRows(result.getTotalRows() + 1);
+
+                List<String> rowErrors = new ArrayList<>();
+
+                String customerName = collect(str(row, 0), "Customer Name", rowErrors);
+
+                String rawPhone = collect(str(row, 1), "Customer Phone", rowErrors);
+                String phone = null;
+                if (rawPhone != null) {
+                    String digits = rawPhone.replaceAll("[^0-9]", "");
+                    if (digits.length() != 10) rowErrors.add("Customer Phone must be exactly 10 digits (entered: '" + rawPhone + "')");
+                    else phone = digits;
+                }
+
+                String dateRaw = str(row, 4);
+                LocalDate entryDate = date(row, 4);
+                if (dateRaw == null) rowErrors.add("Date is required");
+                else if (entryDate == null) rowErrors.add("Date '" + dateRaw + "' is invalid — use DD/MM/YYYY format");
+
+                String amountRaw = str(row, 5);
+                BigDecimal amount = null;
+                if (amountRaw == null) {
+                    rowErrors.add("Amount is required");
+                } else {
+                    amount = decimal(row, 5);
+                    if (amount == null) rowErrors.add("Amount must be a valid number (entered: '" + amountRaw + "')");
+                    else if (amount.compareTo(BigDecimal.ZERO) <= 0) rowErrors.add("Amount must be greater than 0");
+                }
+
+                String notes = str(row, 6);
+
+                if (!rowErrors.isEmpty()) {
+                    result.setFailed(result.getFailed() + 1);
+                    for (String err : rowErrors) result.getErrors().add(new ImportResult.RowError(i + 1, err));
+                    continue;
+                }
+
+                var customerOpt = customerRepository.findByTenantIdAndPhoneAndActiveTrue(tenantId, phone);
+                if (customerOpt.isEmpty()) {
+                    result.setFailed(result.getFailed() + 1);
+                    result.getErrors().add(new ImportResult.RowError(i + 1, "Customer with phone '" + phone + "' not found — import customers first"));
+                    continue;
+                }
+
+                Customer customer = customerOpt.get();
+                if (!customer.getBusinessName().equals(customerName)) {
+                    result.setFailed(result.getFailed() + 1);
+                    result.getErrors().add(new ImportResult.RowError(i + 1,
+                        "Customer name mismatch for phone '" + phone + "' — expected '" + customer.getBusinessName() + "' but got '" + customerName + "'. Use the exact name from the downloaded template."));
+                    continue;
+                }
+
+                orderSeq++;
+                String orderNumber = String.format("OPN-%d-%05d", LocalDate.now().getYear(), orderSeq);
+                String orderNotes = notes != null ? "Opening balance | " + notes : "Opening balance";
+                Order openingOrder = Order.builder()
+                        .tenant(tenant).orderNumber(orderNumber).customer(customer)
+                        .salesPerson(adminUser).orderDate(entryDate)
+                        .status(Order.OrderStatus.DELIVERED)
+                        .subTotal(amount).totalGst(BigDecimal.ZERO)
+                        .totalAmount(amount).paidAmount(BigDecimal.ZERO)
+                        .balanceAmount(amount).deliveredAt(Instant.now())
+                        .notes(orderNotes).openingBalance(true)
+                        .build();
+                orderRepository.save(openingOrder);
+                result.setImported(result.getImported() + 1);
+            }
+        }
+        return result;
+    }
+
+    // ──────────────────────── Supplier Opening Balances Import ──
+
+    public ImportResult importSupplierOpeningBalances(MultipartFile file, UUID tenantId) throws IOException {
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow();
+        User adminUser = userRepository.findFirstByTenantIdAndRoleAndActiveTrue(tenantId, User.UserRole.ADMIN).orElseThrow();
+        ImportResult result = new ImportResult();
+        int entrySeq = purchaseEntryRepository.findMaxEntrySequence(tenantId);
+
+        try (Workbook wb = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = wb.getSheetAt(0);
+            validateHeaders(sheet, SUPPLIER_OUTSTANDING_HEADERS, "Supplier Outstanding");
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (isBlankRow(row)) continue;
+
+                // skip rows where date and amount are both blank (pre-filled supplier with no outstanding)
+                if (str(row, 2) == null && str(row, 3) == null) continue;
+
+                result.setTotalRows(result.getTotalRows() + 1);
+
+                List<String> rowErrors = new ArrayList<>();
+
+                String supplierName = collect(str(row, 0), "Supplier Name", rowErrors);
+
+                String rawPhone = collect(str(row, 1), "Supplier Phone", rowErrors);
+                String phone = null;
+                if (rawPhone != null) {
+                    String digits = rawPhone.replaceAll("[^0-9]", "");
+                    if (digits.length() != 10) rowErrors.add("Supplier Phone must be exactly 10 digits (entered: '" + rawPhone + "')");
+                    else phone = digits;
+                }
+
+                String dateRaw = str(row, 2);
+                LocalDate entryDate = date(row, 2);
+                if (dateRaw == null) rowErrors.add("Date is required");
+                else if (entryDate == null) rowErrors.add("Date '" + dateRaw + "' is invalid — use DD/MM/YYYY format");
+
+                String amountRaw = str(row, 3);
+                BigDecimal amount = null;
+                if (amountRaw == null) {
+                    rowErrors.add("Amount is required");
+                } else {
+                    amount = decimal(row, 3);
+                    if (amount == null) rowErrors.add("Amount must be a valid number (entered: '" + amountRaw + "')");
+                    else if (amount.compareTo(BigDecimal.ZERO) <= 0) rowErrors.add("Amount must be greater than 0");
+                }
+
+                String reference = str(row, 4);
+                String notes = str(row, 5);
+
+                if (!rowErrors.isEmpty()) {
+                    result.setFailed(result.getFailed() + 1);
+                    for (String err : rowErrors) result.getErrors().add(new ImportResult.RowError(i + 1, err));
+                    continue;
+                }
+
+                var supplierOpt = supplierRepository.findByTenantIdAndPhoneAndActiveTrue(tenantId, phone);
+                if (supplierOpt.isEmpty()) {
+                    result.setFailed(result.getFailed() + 1);
+                    result.getErrors().add(new ImportResult.RowError(i + 1, "Supplier with phone '" + phone + "' not found — import suppliers first"));
+                    continue;
+                }
+
+                Supplier supplier = supplierOpt.get();
+                if (!supplier.getName().equals(supplierName)) {
+                    result.setFailed(result.getFailed() + 1);
+                    result.getErrors().add(new ImportResult.RowError(i + 1,
+                        "Supplier name mismatch for phone '" + phone + "' — expected '" + supplier.getName() + "' but got '" + supplierName + "'. Use the exact name from the downloaded template."));
+                    continue;
+                }
+
+                entrySeq++;
+                String entryNumber = String.format("OPN-%d-%05d", LocalDate.now().getYear(), entrySeq);
+                PurchaseEntry entry = PurchaseEntry.builder()
+                        .tenant(tenant).entryNumber(entryNumber)
+                        .supplier(supplier).supplierName(supplier.getName())
+                        .purchaseDate(entryDate).invoiceNumber(reference)
+                        .totalAmount(amount).totalTaxable(amount)
+                        .totalCgst(BigDecimal.ZERO).totalSgst(BigDecimal.ZERO)
+                        .notes(notes != null ? "Opening balance | " + notes : "Opening balance")
+                        .openingBalance(true).createdBy(adminUser)
+                        .build();
+                purchaseEntryRepository.save(entry);
                 result.setImported(result.getImported() + 1);
             }
         }
@@ -672,6 +957,36 @@ public class ImportService {
         return val;
     }
 
+    private BigDecimal percentageDecimal(Row row, int col) {
+        if (row == null) return null;
+        Cell cell = row.getCell(col);
+        if (cell == null) return null;
+        CellType effective = cell.getCellType() == CellType.FORMULA
+                ? cell.getCachedFormulaResultType() : cell.getCellType();
+        if (effective == CellType.NUMERIC) {
+            String fmt = cell.getCellStyle().getDataFormatString();
+            if (fmt != null && fmt.contains("%")) {
+                return BigDecimal.valueOf(cell.getNumericCellValue() * 100).setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+        String s = str(row, col);
+        if (s == null) return null;
+        if (s.endsWith("%")) {
+            try { return new BigDecimal(s.replace("%", "").trim().replace(",", "")); }
+            catch (NumberFormatException e) { return null; }
+        }
+        try { return new BigDecimal(s.replace(",", "")); }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private BigDecimal collectPercentageDecimal(Row row, int col, String fieldName, List<String> errors) {
+        String raw = str(row, col);
+        if (raw == null) { errors.add(fieldName + " is required"); return null; }
+        BigDecimal val = percentageDecimal(row, col);
+        if (val == null) { errors.add(fieldName + " must be a valid number (entered: '" + raw + "')"); return null; }
+        return val;
+    }
+
     private BigDecimal requiredDecimal(Row row, int col, String fieldName, int rowIndex) {
         BigDecimal val = decimal(row, col);
         if (val == null)
@@ -687,22 +1002,24 @@ public class ImportService {
         return true;
     }
 
-    private String ensureMaster(UUID tenantId, Tenant tenant, String type, String name, String parentName) {
-        Optional<ProductMaster> existing = parentName != null
-                ? productMasterRepository.findFirstByTenantIdAndTypeAndNameIgnoreCaseAndParentNameIgnoreCaseAndActiveTrue(tenantId, type, name, parentName)
+    private MasterResult ensureMasterTracked(UUID tenantId, Tenant tenant, String type, String name, ProductMaster parentMaster) {
+        Optional<ProductMaster> existing = parentMaster != null
+                ? productMasterRepository.findFirstByTenantIdAndTypeAndNameAndParentId(tenantId, type, name, parentMaster.getId())
                 : productMasterRepository.findFirstByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(tenantId, type, name);
-        return existing.map(ProductMaster::getName)
-                .orElseGet(() -> productMasterRepository.save(ProductMaster.builder()
-                        .tenant(tenant).type(type).name(name).parentName(parentName).build()).getName());
+        if (existing.isPresent()) return new MasterResult(existing.get(), false);
+        return new MasterResult(productMasterRepository.save(ProductMaster.builder()
+                .tenant(tenant).type(type).name(name).parentMaster(parentMaster).build()), true);
     }
 
-    private void ensureTaxRate(UUID tenantId, Tenant tenant, BigDecimal rate) {
+    private boolean ensureTaxRateTracked(UUID tenantId, Tenant tenant, BigDecimal rate) {
         int pct = rate.setScale(0, RoundingMode.HALF_UP).intValue();
         String name = pct + "%";
         if (!productMasterRepository.existsByTenantIdAndTypeAndNameIgnoreCaseAndActiveTrue(tenantId, "TAX_RATE", name)) {
             productMasterRepository.save(ProductMaster.builder()
-                    .tenant(tenant).type("TAX_RATE").name(name).build());
+                    .tenant(tenant).type("TAX_RATE").name(name).value(String.valueOf(pct)).build());
+            return true;
         }
+        return false;
     }
 
     private static final String[] PRODUCT_HEADERS  = {
@@ -714,13 +1031,18 @@ public class ImportService {
     private static final String[] CUSTOMER_HEADERS = {
         "Business Name *", "Owner Name *", "Phone *", "Address",
         "GSTIN", "Route Name *", "Stop Name *", "Credit Allowed (YES/NO)",
-        "Credit Days", "Credit Limit (₹)", "Opening Balance (₹)"
+        "Credit Days", "Credit Limit (₹)"
     };
     private static final String[] SUPPLIER_HEADERS = {
         "Supplier Name *", "Phone *", "Contact Person *", "Alt Phone",
         "Email", "Address", "City", "State",
-        "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code",
-        "Opening Balance (₹)"
+        "GSTIN", "FSSAI License No.", "Bank Name", "Account Number", "IFSC Code"
+    };
+    private static final String[] CUSTOMER_OUTSTANDING_HEADERS = {
+        "Customer Name *", "Customer Phone *", "Route", "Stop", "Date (DD/MM/YYYY) *", "Amount (₹) *", "Notes"
+    };
+    private static final String[] SUPPLIER_OUTSTANDING_HEADERS = {
+        "Supplier Name *", "Supplier Phone *", "Date (DD/MM/YYYY) *", "Amount (₹) *", "Reference (Old Inv No)", "Notes"
     };
 
     private void validateHeaders(Sheet sheet, String[] expectedHeaders, String templateType) {

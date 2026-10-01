@@ -32,8 +32,10 @@ public class ProductMaster {
     @Column(length = 50)
     private String value; // for TAX_RATE stores the % value
 
-    @Column(length = 150)
-    private String parentName; // for SUB_CATEGORY: name of the parent CATEGORY
+    // FK to parent CATEGORY — null for top-level masters (BRAND, CATEGORY, UNIT, TAX_RATE)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private ProductMaster parentMaster;
 
     @Builder.Default
     private boolean active = true;
@@ -44,4 +46,12 @@ public class ProductMaster {
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
+
+    public String getParentName() {
+        return parentMaster != null ? parentMaster.getName() : null;
+    }
+
+    public UUID getParentId() {
+        return parentMaster != null ? parentMaster.getId() : null;
+    }
 }

@@ -5,6 +5,8 @@ import com.stockez.api.module.order.entity.Order;
 import com.stockez.api.module.order.entity.Payment;
 import com.stockez.api.module.order.repository.OrderRepository;
 import com.stockez.api.module.order.repository.PaymentRepository;
+import com.stockez.api.module.goodsreturn.entity.GoodsReturn;
+import com.stockez.api.module.goodsreturn.repository.GoodsReturnRepository;
 import com.stockez.api.module.route.entity.RouteAllocation;
 import com.stockez.api.module.route.repository.RouteAllocationRepository;
 import com.stockez.api.module.payment.entity.PaymentMethod;
@@ -34,6 +36,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final PaymentMethodRepository paymentMethodRepository;
     private final RouteAllocationRepository routeAllocationRepository;
+    private final GoodsReturnRepository goodsReturnRepository;
     private final AuditService auditService;
 
     public OrderDtos.PaymentResponse collectPayment(OrderDtos.CreatePaymentRequest req, UUID collectorId, UUID tenantId) {
@@ -42,6 +45,13 @@ public class PaymentService {
 
         User collector = userRepository.findByIdAndTenantId(collectorId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", collectorId.toString()));
+
+        if (!req.isAutoSubmit() && paymentRepository.existsByTenantIdAndCollectedByIdAndCollectionDateAndSubmittedTrue(
+                tenantId, collectorId, LocalDate.now())) {
+            throw new BusinessException(
+                "Day collections already submitted to accountant. No further payments can be collected today.",
+                "COLLECTIONS_SUBMITTED");
+        }
 
         if (req.getAmount().compareTo(order.getBalanceAmount()) > 0) {
             throw new BusinessException("Payment amount exceeds balance of " + order.getBalanceAmount(), "OVERPAYMENT");
@@ -60,30 +70,57 @@ public class PaymentService {
             throw new BusinessException("Payment mode is required", "MISSING_PAYMENT_MODE");
         }
 
+        // Collection date: field staff always record on today; office staff may back-date
+        // (the controller strips the date unless the caller is allowed to back-date).
+        LocalDate collectionDate = req.getCollectionDate() != null ? req.getCollectionDate() : LocalDate.now();
+        if (collectionDate.isAfter(LocalDate.now())) {
+            throw new BusinessException("Collection date cannot be in the future", "INVALID_COLLECTION_DATE");
+        }
+
+        boolean isInstrument = resolvedMode == Payment.PaymentMode.CHEQUE
+                || resolvedMode == Payment.PaymentMode.NEFT
+                || resolvedMode == Payment.PaymentMode.RTGS;
+
+        if (isInstrument && (req.getReferenceNumber() == null || req.getReferenceNumber().isBlank())) {
+            String label = resolvedMode == Payment.PaymentMode.CHEQUE ? "Cheque number" : "Transaction/UTR reference";
+            throw new BusinessException(label + " is required for " + resolvedMode.name() + " payments", "REFERENCE_REQUIRED");
+        }
+
         Payment payment = Payment.builder()
                 .tenant(order.getTenant())
                 .order(order)
+                .customer(order.getCustomer())
                 .collectedBy(collector)
                 .amount(req.getAmount())
                 .paymentMode(resolvedMode)
                 .paymentMethodName(resolvedMethodName)
                 .referenceNumber(req.getReferenceNumber())
-                .collectionDate(LocalDate.now())
+                .collectionDate(collectionDate)
+                .instrumentDate(isInstrument ? req.getInstrumentDate() : null)
+                .draweeBank(isInstrument ? req.getDraweeBank() : null)
+                .status(isInstrument ? Payment.PaymentStatus.PENDING : Payment.PaymentStatus.REALISED)
+                .realisedDate(isInstrument ? null : collectionDate)
+                .submitted(req.isAutoSubmit())
+                .submittedAt(req.isAutoSubmit() ? Instant.now() : null)
                 .notes(req.getNotes())
                 .build();
 
         Payment saved = paymentRepository.save(payment);
 
-        // Update order balances
-        order.setPaidAmount(order.getPaidAmount().add(req.getAmount()));
-        order.setBalanceAmount(order.getTotalAmount().subtract(order.getPaidAmount()));
-        orderRepository.save(order);
+        // Cash / UPI settle instantly → reduce the order balance now.
+        // Instruments (cheque, NEFT, RTGS) only reduce the balance once realised in the bank.
+        if (!isInstrument) {
+            order.setPaidAmount(order.getPaidAmount().add(req.getAmount()));
+            order.setBalanceAmount(order.getTotalAmount().subtract(order.getPaidAmount()));
+            orderRepository.save(order);
+        }
 
         auditService.record(order.getTenant().getId(), "ORDER", order.getId(), "PAYMENT_COLLECTED",
                 "Payment ₹" + req.getAmount().toPlainString() + " collected via " +
                 (resolvedMethodName != null ? resolvedMethodName : resolvedMode.name()) +
                 " by " + collector.getFullName() +
-                (req.getReferenceNumber() != null ? " (Ref: " + req.getReferenceNumber() + ")" : ""));
+                (req.getReferenceNumber() != null ? " (Ref: " + req.getReferenceNumber() + ")" : "") +
+                (isInstrument ? " — awaiting bank realisation" : ""));
 
         return toPaymentResponse(saved);
     }
@@ -184,6 +221,14 @@ public class PaymentService {
      * Sales/delivery person submits all today's unsubmitted collections to accountant.
      */
     public OrderDtos.MyDaySummaryResponse submitDayCollections(UUID personId, UUID tenantId) {
+        long unverifiedReturns = goodsReturnRepository.countByTenantIdAndCreatedByIdAndWarehouseStatus(
+                tenantId, personId, GoodsReturn.WarehouseStatus.PENDING_VERIFICATION);
+        if (unverifiedReturns > 0) {
+            throw new BusinessException(
+                "Nobody has verified your returns yet. Please ask the warehouse to verify the returned goods, then submit your collections.",
+                "RETURNS_NOT_VERIFIED");
+        }
+
         List<Payment> payments = paymentRepository
                 .findByTenantIdAndCollectedByIdAndCollectionDate(tenantId, personId, LocalDate.now());
 
@@ -278,14 +323,103 @@ public class PaymentService {
                 .map(this::toPaymentResponse).collect(Collectors.toList());
     }
 
+    // ─── Cheque / Bank instrument clearance ───────────────────────────────────
+
+    /** All cheque / NEFT / RTGS payments — the accountant's bank clearance worklist. */
+    @Transactional(readOnly = true)
+    public List<OrderDtos.PaymentResponse> getInstruments(UUID tenantId) {
+        return paymentRepository.findInstruments(tenantId).stream()
+                .map(this::toPaymentResponse).collect(Collectors.toList());
+    }
+
+    private Payment loadInstrument(UUID paymentId, UUID tenantId) {
+        Payment p = paymentRepository.findByIdInAndTenantId(List.of(paymentId), tenantId).stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId.toString()));
+        if (!p.isInstrument()) {
+            throw new BusinessException("Only cheque / bank transfers go through bank clearance", "NOT_AN_INSTRUMENT");
+        }
+        return p;
+    }
+
+    public OrderDtos.PaymentResponse depositInstrument(UUID paymentId, OrderDtos.DepositInstrumentRequest req, UUID tenantId) {
+        Payment p = loadInstrument(paymentId, tenantId);
+        if (p.getStatus() != Payment.PaymentStatus.PENDING) {
+            throw new BusinessException("Only pending instruments can be deposited", "INVALID_STATUS");
+        }
+        p.setStatus(Payment.PaymentStatus.DEPOSITED);
+        p.setDepositDate(req.getDepositDate() != null ? req.getDepositDate() : LocalDate.now());
+        p.setDepositBank(req.getDepositBank());
+        paymentRepository.save(p);
+
+        auditService.record(tenantId, "PAYMENT", p.getId(), "INSTRUMENT_DEPOSITED",
+                p.getPaymentMode().name() + " ₹" + p.getAmount().toPlainString() +
+                " (Ref: " + p.getReferenceNumber() + ") deposited" +
+                (p.getDepositBank() != null ? " to " + p.getDepositBank() : ""));
+        return toPaymentResponse(p);
+    }
+
+    /** Bank confirmed the money landed → reduce the order balance now. */
+    public OrderDtos.PaymentResponse realiseInstrument(UUID paymentId, OrderDtos.RealiseInstrumentRequest req, UUID tenantId) {
+        Payment p = loadInstrument(paymentId, tenantId);
+        if (p.getStatus() == Payment.PaymentStatus.REALISED) {
+            throw new BusinessException("Instrument already realised", "INVALID_STATUS");
+        }
+        if (p.getStatus() == Payment.PaymentStatus.BOUNCED) {
+            throw new BusinessException("Bounced instrument cannot be realised", "INVALID_STATUS");
+        }
+        p.setStatus(Payment.PaymentStatus.REALISED);
+        p.setRealisedDate(req.getRealisedDate() != null ? req.getRealisedDate() : LocalDate.now());
+        paymentRepository.save(p);
+
+        Order order = p.getOrder();
+        if (order != null) {
+            order.setPaidAmount(order.getPaidAmount().add(p.getAmount()));
+            order.setBalanceAmount(order.getTotalAmount().subtract(order.getPaidAmount()));
+            orderRepository.save(order);
+            auditService.record(tenantId, "ORDER", order.getId(), "PAYMENT_REALISED",
+                    p.getPaymentMode().name() + " ₹" + p.getAmount().toPlainString() +
+                    " (Ref: " + p.getReferenceNumber() + ") realised in bank");
+        }
+        return toPaymentResponse(p);
+    }
+
+    /** Bank returned the instrument. No balance was ever reduced, so nothing to reverse on the order. */
+    public OrderDtos.PaymentResponse bounceInstrument(UUID paymentId, OrderDtos.BounceInstrumentRequest req, UUID tenantId) {
+        Payment p = loadInstrument(paymentId, tenantId);
+        if (p.getStatus() == Payment.PaymentStatus.REALISED) {
+            throw new BusinessException("A realised instrument cannot be bounced", "INVALID_STATUS");
+        }
+        if (p.getStatus() == Payment.PaymentStatus.BOUNCED) {
+            throw new BusinessException("Instrument already marked bounced", "INVALID_STATUS");
+        }
+        p.setStatus(Payment.PaymentStatus.BOUNCED);
+        p.setBounceReason(req.getBounceReason());
+        p.setBankCharges(req.getBankCharges());
+        paymentRepository.save(p);
+
+        UUID orderId = p.getOrder() != null ? p.getOrder().getId() : p.getId();
+        auditService.record(tenantId, p.getOrder() != null ? "ORDER" : "PAYMENT", orderId, "PAYMENT_BOUNCED",
+                p.getPaymentMode().name() + " ₹" + p.getAmount().toPlainString() +
+                " (Ref: " + p.getReferenceNumber() + ") BOUNCED — " + req.getBounceReason() +
+                (req.getBankCharges() != null && req.getBankCharges().signum() > 0
+                        ? " | bank charges ₹" + req.getBankCharges().toPlainString() : "") +
+                " — customer balance remains due");
+        return toPaymentResponse(p);
+    }
+
     @Transactional(readOnly = true)
     public List<OrderDtos.CustomerOutstandingSummary> getCustomerOutstanding(UUID tenantId, UUID userId) {
         User user = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
 
         List<Order> orders;
-        boolean isAdminUser = user.getRole() == User.UserRole.ADMIN || user.getRole() == User.UserRole.SUPER_ADMIN;
-        if (!isAdminUser) {
+        // Field workers (salesman / delivery) see only their allocated routes.
+        // Admins and office staff see every customer's outstanding.
+        boolean isFieldWorker = user.getRole() == User.UserRole.SALES
+                || user.getRole() == User.UserRole.DELIVERY
+                || (user.getCustomRole() != null && user.getCustomRole().isFieldStaff());
+        if (isFieldWorker) {
             List<RouteAllocation> salesAllocations = routeAllocationRepository.findByTenantIdAndSalesPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
             List<RouteAllocation> deliveryAllocations = routeAllocationRepository.findByTenantIdAndDeliveryPersonIdAndAllocationDate(tenantId, userId, LocalDate.now());
             List<RouteAllocation> allocations = new ArrayList<>();
@@ -328,22 +462,107 @@ public class PaymentService {
             java.math.BigDecimal totalPaid    = cos.stream().map(Order::getPaidAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
             java.math.BigDecimal outstanding  = cos.stream().map(Order::getBalanceAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
             LocalDate lastOrderDate = cos.stream().map(Order::getOrderDate).max(Comparator.naturalOrder()).orElse(null);
+            LocalDate oldestUnpaidOrderDate = cos.stream().map(Order::getOrderDate).min(Comparator.naturalOrder()).orElse(null);
 
             OrderDtos.CustomerOutstandingSummary s = new OrderDtos.CustomerOutstandingSummary();
             s.setCustomerId(c.getId());
             s.setBusinessName(c.getBusinessName());
             s.setOwnerName(c.getOwnerName());
             s.setPhone(c.getPhone());
+            s.setRouteId(c.getRoute() != null ? c.getRoute().getId() : null);
             s.setRouteName(c.getRoute() != null ? c.getRoute().getName() : null);
+            s.setRoutePlaceId(c.getRoutePlace() != null ? c.getRoutePlace().getId() : null);
+            s.setRoutePlaceName(c.getRoutePlace() != null ? c.getRoutePlace().getName() : null);
             s.setTotalOrdered(totalOrdered);
             s.setTotalPaid(totalPaid);
             s.setOutstanding(outstanding);
             s.setLastOrderDate(lastOrderDate);
             s.setLastPaymentDate(lastPaymentMap.get(c.getId()));
+            s.setOldestUnpaidOrderDate(oldestUnpaidOrderDate);
             s.setOrderCount(cos.size());
             return s;
         })
         .sorted(Comparator.comparing(OrderDtos.CustomerOutstandingSummary::getOutstanding).reversed())
+        .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderDtos.RouteOutstandingGroup> getRouteOutstanding(UUID tenantId) {
+        List<Order> orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(
+                tenantId, Order.OrderStatus.CANCELLED, BigDecimal.ZERO);
+
+        Map<UUID, LocalDate> lastPaymentMap = paymentRepository.findLastPaymentDateByCustomer(tenantId)
+                .stream()
+                .collect(Collectors.toMap(
+                    r -> (UUID) r[0],
+                    r -> {
+                        Object d = r[1];
+                        return d instanceof LocalDate ? (LocalDate) d : ((java.sql.Date) d).toLocalDate();
+                    }
+                ));
+
+        Map<UUID, List<Order>> byCustomer = orders.stream()
+                .filter(o -> o.getCustomer() != null)
+                .collect(Collectors.groupingBy(o -> o.getCustomer().getId()));
+
+        Map<String, List<OrderDtos.CustomerOutstandingSummary>> byRouteName = new LinkedHashMap<>();
+        Map<String, UUID> routeNameToId = new LinkedHashMap<>();
+
+        byCustomer.entrySet().stream()
+            .map(e -> {
+                List<Order> cos = e.getValue();
+                Order sample = cos.get(0);
+                com.stockez.api.module.customer.entity.Customer c = sample.getCustomer();
+
+                BigDecimal totalOrdered = cos.stream().map(Order::getTotalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal totalPaid    = cos.stream().map(Order::getPaidAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal outstanding  = cos.stream().map(Order::getBalanceAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                LocalDate lastOrderDate         = cos.stream().map(Order::getOrderDate).max(Comparator.naturalOrder()).orElse(null);
+                LocalDate oldestUnpaidOrderDate = cos.stream().map(Order::getOrderDate).min(Comparator.naturalOrder()).orElse(null);
+
+                OrderDtos.CustomerOutstandingSummary s = new OrderDtos.CustomerOutstandingSummary();
+                s.setCustomerId(c.getId());
+                s.setBusinessName(c.getBusinessName());
+                s.setOwnerName(c.getOwnerName());
+                s.setPhone(c.getPhone());
+                s.setRouteName(c.getRoute() != null ? c.getRoute().getName() : null);
+                s.setTotalOrdered(totalOrdered);
+                s.setTotalPaid(totalPaid);
+                s.setOutstanding(outstanding);
+                s.setLastOrderDate(lastOrderDate);
+                s.setLastPaymentDate(lastPaymentMap.get(c.getId()));
+                s.setOldestUnpaidOrderDate(oldestUnpaidOrderDate);
+                s.setOrderCount(cos.size());
+
+                String routeKey  = c.getRoute() != null ? c.getRoute().getName() : "No Route";
+                UUID   routeId   = c.getRoute() != null ? c.getRoute().getId()   : null;
+                return new Object[]{ s, routeKey, routeId };
+            })
+            .sorted(Comparator.comparing(arr -> (String) arr[1]))
+            .forEach(arr -> {
+                OrderDtos.CustomerOutstandingSummary s = (OrderDtos.CustomerOutstandingSummary) arr[0];
+                String routeKey = (String) arr[1];
+                UUID   routeId  = (UUID)   arr[2];
+                byRouteName.computeIfAbsent(routeKey, k -> new ArrayList<>()).add(s);
+                routeNameToId.putIfAbsent(routeKey, routeId);
+            });
+
+        return byRouteName.entrySet().stream().map(e -> {
+            List<OrderDtos.CustomerOutstandingSummary> customers = e.getValue().stream()
+                    .sorted(Comparator.comparing(OrderDtos.CustomerOutstandingSummary::getOutstanding).reversed())
+                    .collect(Collectors.toList());
+            BigDecimal total = customers.stream().map(OrderDtos.CustomerOutstandingSummary::getOutstanding)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            OrderDtos.RouteOutstandingGroup g = new OrderDtos.RouteOutstandingGroup();
+            g.setRouteId(routeNameToId.get(e.getKey()));
+            g.setRouteName(e.getKey());
+            g.setCustomerCount(customers.size());
+            g.setTotalOutstanding(total);
+            g.setCustomers(customers);
+            return g;
+        })
+        .sorted(Comparator.comparing(OrderDtos.RouteOutstandingGroup::getTotalOutstanding).reversed())
         .collect(Collectors.toList());
     }
 
@@ -361,14 +580,71 @@ public class PaymentService {
                     s.setTotalAmount(o.getTotalAmount());
                     s.setPaidAmount(o.getPaidAmount());
                     s.setBalanceAmount(o.getBalanceAmount());
+                    s.setOpeningBalance(o.isOpeningBalance());
                     return s;
                 })
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
+    public List<OrderDtos.SalesmanCreditSummary> getSalesmanCreditOutstanding(UUID tenantId) {
+        List<Order> orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(
+                tenantId, Order.OrderStatus.CANCELLED, java.math.BigDecimal.ZERO);
+
+        Map<UUID, List<Order>> bySalesman = orders.stream()
+                .filter(o -> o.getSalesPerson() != null)
+                .collect(Collectors.groupingBy(o -> o.getSalesPerson().getId()));
+
+        return bySalesman.entrySet().stream().map(e -> {
+            List<Order> salesOrders = e.getValue();
+            com.stockez.api.module.user.entity.User salesperson = salesOrders.get(0).getSalesPerson();
+
+            java.math.BigDecimal totalCreditGiven = salesOrders.stream().map(Order::getTotalAmount)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal totalCollected = salesOrders.stream().map(Order::getPaidAmount)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal totalPending = salesOrders.stream().map(Order::getBalanceAmount)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            long customerCount = salesOrders.stream()
+                    .filter(o -> o.getCustomer() != null)
+                    .map(o -> o.getCustomer().getId())
+                    .distinct().count();
+
+            List<OrderDtos.SalesmanCreditOrderRow> orderRows = salesOrders.stream()
+                    .sorted(Comparator.comparing(Order::getOrderDate))
+                    .map(o -> {
+                        OrderDtos.SalesmanCreditOrderRow row = new OrderDtos.SalesmanCreditOrderRow();
+                        row.setOrderId(o.getId());
+                        row.setOrderNumber(o.getOrderNumber());
+                        row.setOrderDate(o.getOrderDate());
+                        row.setCustomerName(o.getCustomer() != null ? o.getCustomer().getBusinessName() : "");
+                        row.setRouteName(o.getCustomer() != null && o.getCustomer().getRoute() != null ? o.getCustomer().getRoute().getName() : "");
+                        row.setTotalAmount(o.getTotalAmount());
+                        row.setPaidAmount(o.getPaidAmount());
+                        row.setBalanceAmount(o.getBalanceAmount());
+                        row.setOpeningBalance(o.isOpeningBalance());
+                        return row;
+                    }).collect(Collectors.toList());
+
+            OrderDtos.SalesmanCreditSummary summary = new OrderDtos.SalesmanCreditSummary();
+            summary.setSalesPersonId(salesperson.getId());
+            summary.setSalesPersonName(salesperson.getFullName());
+            summary.setPhone(salesperson.getPhone());
+            summary.setOrderCount(salesOrders.size());
+            summary.setCustomerCount((int) customerCount);
+            summary.setTotalCreditGiven(totalCreditGiven);
+            summary.setTotalCollected(totalCollected);
+            summary.setTotalPending(totalPending);
+            summary.setOrders(orderRows);
+            return summary;
+        })
+        .sorted(Comparator.comparing(OrderDtos.SalesmanCreditSummary::getTotalPending).reversed())
+        .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public List<OrderDtos.PaymentResponse> getCustomerPaymentHistory(UUID customerId, UUID tenantId) {
-        return paymentRepository.findByTenantIdAndOrder_CustomerIdOrderByCollectionDateAsc(tenantId, customerId)
+        return paymentRepository.findByTenantIdAndCustomerIdOrderByCollectionDateAsc(tenantId, customerId)
                 .stream()
                 .map(this::toPaymentResponse)
                 .collect(Collectors.toList());
@@ -386,6 +662,17 @@ public class PaymentService {
         res.setClearedAt(p.getClearedAt());
         res.setSubmitted(p.isSubmitted());
         res.setSubmittedAt(p.getSubmittedAt());
+        res.setStatus(p.getStatus());
+        res.setInstrumentDate(p.getInstrumentDate());
+        res.setDepositDate(p.getDepositDate());
+        res.setRealisedDate(p.getRealisedDate());
+        res.setDraweeBank(p.getDraweeBank());
+        res.setDepositBank(p.getDepositBank());
+        res.setBounceReason(p.getBounceReason());
+        res.setBankCharges(p.getBankCharges());
+        if (p.getCustomer() != null) {
+            res.setCustomerName(p.getCustomer().getBusinessName());
+        }
         res.setNotes(p.getNotes());
         res.setCreatedAt(p.getCreatedAt());
 

@@ -17,6 +17,6 @@ public interface IncentiveCreditRepository extends JpaRepository<IncentiveCredit
     List<IncentiveCredit> findByTenantIdAndSalesPersonIdAndTargetMonthAndTargetYear(
             UUID tenantId, UUID salesPersonId, int targetMonth, int targetYear);
 
-    Optional<IncentiveCredit> findByTenantIdAndSalesPersonIdAndBrandAndTargetMonthAndTargetYear(
-            UUID tenantId, UUID salesPersonId, String brand, int targetMonth, int targetYear);
+    Optional<IncentiveCredit> findByTenantIdAndSalesPersonIdAndBrandMasterIdAndTargetMonthAndTargetYear(
+            UUID tenantId, UUID salesPersonId, UUID brandMasterId, int targetMonth, int targetYear);
 }

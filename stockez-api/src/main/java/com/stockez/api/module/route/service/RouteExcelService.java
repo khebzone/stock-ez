@@ -30,6 +30,14 @@ public class RouteExcelService {
         "Credit", "Credit Days", "Credit Limit (₹)"
     };
 
+    // Shared design palette — mirrors the frontend TableToolbar export (light header, thin grid).
+    private static final byte[] C_GRID   = {(byte) 208, (byte) 213, (byte) 221}; // thin borders
+    private static final byte[] C_HEADER = {(byte) 242, (byte) 244, (byte) 247}; // light grey header
+    private static final byte[] C_STOP   = {(byte) 233, (byte) 236, (byte) 239}; // stop group row
+    private static final byte[] C_INK    = {(byte) 17,  (byte) 24,  (byte) 39};  // header/title text
+    private static final byte[] C_BODY   = {(byte) 31,  (byte) 41,  (byte) 55};  // data text
+    private static final byte[] C_MUTE   = {(byte) 100, (byte) 116, (byte) 139}; // footer/hint text
+
     private final RouteRepository routeRepository;
     private final RoutePlaceRepository routePlaceRepository;
     private final CustomerRepository customerRepository;
@@ -240,17 +248,21 @@ public class RouteExcelService {
 
     // ── Style helpers ─────────────────────────────────────────────────────────
 
+    private void applyGrid(XSSFCellStyle s) {
+        XSSFColor g = new XSSFColor(C_GRID, null);
+        s.setBorderTop(BorderStyle.THIN);    s.setTopBorderColor(g);
+        s.setBorderBottom(BorderStyle.THIN); s.setBottomBorderColor(g);
+        s.setBorderLeft(BorderStyle.THIN);   s.setLeftBorderColor(g);
+        s.setBorderRight(BorderStyle.THIN);  s.setRightBorderColor(g);
+    }
+
     private CellStyle buildTitleStyle(XSSFWorkbook wb) {
         XSSFCellStyle s = wb.createCellStyle();
         XSSFFont f = wb.createFont();
         f.setBold(true); f.setFontHeightInPoints((short) 12);
-        f.setColor(new XSSFColor(new byte[]{(byte) 15, (byte) 23, (byte) 42}, null));
+        f.setColor(new XSSFColor(C_INK, null));
         s.setFont(f);
-        s.setFillForegroundColor(new XSSFColor(new byte[]{(byte) 236, (byte) 253, (byte) 245}, null));
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderBottom(BorderStyle.MEDIUM);
-        s.setBottomBorderColor(new XSSFColor(new byte[]{(byte) 5, (byte) 150, (byte) 105}, null));
         return s;
     }
 
@@ -258,14 +270,13 @@ public class RouteExcelService {
         XSSFCellStyle s = wb.createCellStyle();
         XSSFFont f = wb.createFont();
         f.setBold(true); f.setFontHeightInPoints((short) 10);
-        f.setColor(new XSSFColor(new byte[]{(byte) 255, (byte) 255, (byte) 255}, null));
+        f.setColor(new XSSFColor(C_INK, null));
         s.setFont(f);
-        s.setFillForegroundColor(new XSSFColor(new byte[]{(byte) 5, (byte) 150, (byte) 105}, null));
+        s.setFillForegroundColor(new XSSFColor(C_HEADER, null));
         s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         s.setAlignment(HorizontalAlignment.LEFT);
         s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderBottom(BorderStyle.THIN);
-        s.setBottomBorderColor(new XSSFColor(new byte[]{(byte) 3, (byte) 105, (byte) 73}, null));
+        applyGrid(s);
         return s;
     }
 
@@ -273,39 +284,35 @@ public class RouteExcelService {
         XSSFCellStyle s = wb.createCellStyle();
         XSSFFont f = wb.createFont();
         f.setBold(true); f.setFontHeightInPoints((short) 10);
-        f.setColor(new XSSFColor(new byte[]{(byte) 6, (byte) 95, (byte) 70}, null));
+        f.setColor(new XSSFColor(C_INK, null));
         s.setFont(f);
-        s.setFillForegroundColor(new XSSFColor(new byte[]{(byte) 209, (byte) 250, (byte) 229}, null));
+        s.setFillForegroundColor(new XSSFColor(C_STOP, null));
         s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderTop(BorderStyle.THIN);
-        s.setBorderBottom(BorderStyle.THIN);
-        s.setTopBorderColor(new XSSFColor(new byte[]{(byte) 110, (byte) 231, (byte) 183}, null));
-        s.setBottomBorderColor(new XSSFColor(new byte[]{(byte) 110, (byte) 231, (byte) 183}, null));
+        applyGrid(s);
         return s;
     }
 
     private CellStyle buildDataStyle(XSSFWorkbook wb) {
         XSSFCellStyle s = wb.createCellStyle();
-        XSSFFont f = wb.createFont(); f.setFontHeightInPoints((short) 10); s.setFont(f);
+        XSSFFont f = wb.createFont(); f.setFontHeightInPoints((short) 10);
+        f.setColor(new XSSFColor(C_BODY, null));
+        s.setFont(f);
         s.setVerticalAlignment(VerticalAlignment.CENTER);
-        s.setBorderBottom(BorderStyle.THIN);
-        s.setBottomBorderColor(new XSSFColor(new byte[]{(byte) 226, (byte) 232, (byte) 240}, null));
+        applyGrid(s);
         return s;
     }
 
     private CellStyle buildAltDataStyle(XSSFWorkbook wb) {
-        XSSFCellStyle s = (XSSFCellStyle) buildDataStyle(wb);
-        s.setFillForegroundColor(new XSSFColor(new byte[]{(byte) 248, (byte) 250, (byte) 252}, null));
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return s;
+        // No zebra striping — identical to the data style for a clean uniform grid.
+        return buildDataStyle(wb);
     }
 
     private CellStyle buildCreditStyle(XSSFWorkbook wb) {
         XSSFCellStyle s = (XSSFCellStyle) buildDataStyle(wb);
         XSSFFont f = wb.createFont();
         f.setBold(true); f.setFontHeightInPoints((short) 10);
-        f.setColor(new XSSFColor(new byte[]{(byte) 5, (byte) 150, (byte) 105}, null));
+        f.setColor(new XSSFColor(C_BODY, null));
         s.setFont(f);
         return s;
     }
@@ -314,7 +321,7 @@ public class RouteExcelService {
         XSSFCellStyle s = wb.createCellStyle();
         XSSFFont f = wb.createFont();
         f.setItalic(true); f.setFontHeightInPoints((short) 10);
-        f.setColor(new XSSFColor(new byte[]{(byte) 148, (byte) 163, (byte) 184}, null));
+        f.setColor(new XSSFColor(C_MUTE, null));
         s.setFont(f);
         return s;
     }
@@ -323,12 +330,12 @@ public class RouteExcelService {
         XSSFCellStyle s = wb.createCellStyle();
         XSSFFont f = wb.createFont();
         f.setBold(true); f.setFontHeightInPoints((short) 10);
-        f.setColor(new XSSFColor(new byte[]{(byte) 100, (byte) 116, (byte) 139}, null));
+        f.setColor(new XSSFColor(C_MUTE, null));
         s.setFont(f);
-        s.setFillForegroundColor(new XSSFColor(new byte[]{(byte) 248, (byte) 250, (byte) 252}, null));
+        s.setFillForegroundColor(new XSSFColor(C_HEADER, null));
         s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        s.setBorderTop(BorderStyle.MEDIUM);
-        s.setTopBorderColor(new XSSFColor(new byte[]{(byte) 226, (byte) 232, (byte) 240}, null));
+        s.setBorderTop(BorderStyle.THIN);
+        s.setTopBorderColor(new XSSFColor(C_GRID, null));
         s.setVerticalAlignment(VerticalAlignment.CENTER);
         return s;
     }

@@ -8,6 +8,7 @@ import {
   useGetExpiryAlertsQuery,
 } from '../../store/api/vehicleApi';
 import PageHeader from '../../components/PageHeader';
+import { hasPermission } from '../../utils/permissions';
 
 const VEHICLE_TYPES = ['VAN', 'TRUCK', 'MINI TRUCK', 'BIKE', 'AUTO', 'CAR', 'OTHER'];
 const DATE_FMT = 'DD MMM YYYY';
@@ -132,7 +133,7 @@ const VehiclesPage: React.FC = () => {
         subtitle="Fleet vehicles — TN compliance tracking (FC, Insurance, PUC, Goods Permit)"
         count={vehicles.filter((v: any) => v.active).length}
         countLabel="active vehicles"
-        action={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Vehicle</Button>}
+        action={hasPermission('VEHICLES_CREATE') ? <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Add Vehicle</Button> : null}
       />
 
       {expired.length > 0 && (
@@ -228,14 +229,18 @@ const VehiclesPage: React.FC = () => {
                     <span style={{ fontSize: 12, color: v.active ? '#15803d' : '#6b7280' }}>
                       {v.active ? 'Active' : 'Inactive'}
                     </span>
-                    <Tooltip title="Edit">
-                      <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(v)} />
-                    </Tooltip>
-                    <Popconfirm title="Deactivate this vehicle?" onConfirm={() => handleDelete(v.id)} okText="Yes" okButtonProps={{ danger: true }}>
-                      <Tooltip title="Deactivate">
-                        <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
+                    {hasPermission('VEHICLES_EDIT') && (
+                      <Tooltip title="Edit">
+                        <Button icon={<EditOutlined />} size="small" shape="circle" onClick={() => openEdit(v)} />
                       </Tooltip>
-                    </Popconfirm>
+                    )}
+                    {hasPermission('VEHICLES_EDIT') && (
+                      <Popconfirm title="Deactivate this vehicle?" onConfirm={() => handleDelete(v.id)} okText="Yes" okButtonProps={{ danger: true }}>
+                        <Tooltip title="Deactivate">
+                          <Button icon={<DeleteOutlined />} size="small" shape="circle" danger />
+                        </Tooltip>
+                      </Popconfirm>
+                    )}
                   </div>
                 </div>
 
