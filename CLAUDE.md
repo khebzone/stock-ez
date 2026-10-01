@@ -1,6 +1,6 @@
-# DistroIQ — Project Reference
+# StockEz — Project Reference
 
-## What is DistroIQ?
+## What is StockEz?
 A professional SaaS platform for FMCG distributors. The standard to match is **Zoho Books / Zoho Inventory** — clean, dense, data-first UI. No toy UI, no colorful dashboards for the sake of it. Every screen must look like it belongs in a real business application.
 
 ---
@@ -219,28 +219,32 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 ## File Structure (key paths)
 
 ```
-distroiq/
+StockEz/
 ├── start.bat                          ← double-click to run everything
-├── distroiq-api/
+├── deploy/                            ← prod compose, nginx, backup + runbooks
+├── stockez-common/                    ← exceptions, response wrappers
+├── stockez-api/
 │   └── src/main/
-│       ├── java/com/distroiq/api/module/
+│       ├── java/com/stockez/api/module/
 │       │   ├── product/               ← Product, ProductMaster
-│       │   ├── purchase/              ← PurchaseEntry, StockBatch
-│       │   ├── order/                 ← Order, OrderItem
-│       │   ├── payment/               ← Payment, PaymentMethod
+│       │   ├── purchase/              ← PurchaseEntry, StockBatch, SupplierPayment
+│       │   ├── order/                 ← Order, OrderItem, Payment
 │       │   ├── customer/              ← Customer
 │       │   ├── route/                 ← Route, RoutePlace, RouteAllocation
-│       │   ├── user/                  ← User
-│       │   ├── dayclosure/            ← DayClosure
-│       │   ├── goodsreturn/           ← GoodsReturn, GoodsReturnItem
-│       │   └── reports/               ← Report queries
+│       │   ├── goodsreturn/           ← GoodsReturn, debit note PDF
+│       │   ├── invoice/               ← invoice + receipt PDF services
+│       │   ├── report/                ← all report queries incl. GSTR-1
+│       │   ├── tenant/                ← Tenant, TenantSettings
+│       │   └── …                      ← attendance, expense, incentive, etc.
 │       └── resources/db/migration/
-│           ├── V1__init_schema.sql    ← ALL schema here
-│           └── V2__seed_data.sql      ← tenant + admin only
-└── distroiq-web/
+│           ├── V1__init_schema.sql    ← frozen; never edit (live since 2026-06-15)
+│           └── V25__…sql              ← latest; add a new file per change
+└── stockez-web/
     └── src/
         ├── pages/                     ← one folder per feature
+        ├── components/                ← shared UI incl. print views
         ├── store/api/                 ← RTK Query endpoints
-        ├── layouts/                   ← MainLayout, SalesLayout, DeliveryLayout
+        ├── utils/                     ← permissions, dates, shared enums
+        ├── layouts/                   ← MainLayout, FieldLayout
         └── App.tsx                    ← all routes
 ```
