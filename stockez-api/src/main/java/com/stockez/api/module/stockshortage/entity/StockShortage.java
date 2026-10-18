@@ -25,9 +25,9 @@ import java.util.UUID;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class StockShortage {
 
-    /** Where the shortage was discovered — both are "goods went out, less came back". */
+    /** Where the loss was discovered: goods went out and less came back, or came back damaged. */
     public enum SourceType {
-        SALES_RETURN, UNDELIVERED_ORDER
+        SALES_RETURN, UNDELIVERED_ORDER, SALES_RETURN_DAMAGED
     }
 
     @Id

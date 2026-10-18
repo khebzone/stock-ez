@@ -139,7 +139,6 @@ public class ProductService {
         product.setSgstPercent(halfGst);
         product.setDescription(req.getDescription());
         product.setImageUrl(req.getImageUrl());
-        if (req.getStockQuantity() != null) product.setStockQuantity(req.getStockQuantity());
         product.setActive(req.isActive());
         product.setMfgDate(req.getMfgDate());
         product.setExpiryDate(req.getExpiryDate());

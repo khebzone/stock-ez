@@ -59,7 +59,11 @@ export const goodsReturnApi = baseApi.injectEndpoints({
       query: () => '/goods-returns/pending-verification',
       providesTags: ['Order', 'Product'],
     }),
-    verifyGoodsReturn: builder.mutation<any, { id: string; items: { itemId: string; receivedQty: number }[] }>({
+    getWarehouseReturnHistory: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/goods-returns/warehouse-history?from=${from}&to=${to}`,
+      providesTags: ['Order', 'Product'],
+    }),
+    verifyGoodsReturn: builder.mutation<any, { id: string; items: { itemId: string; receivedQty: number; damagedQty?: number }[] }>({
       query: ({ id, items }) => ({ url: `/goods-returns/${id}/verify-receipt`, method: 'POST', body: { items } }),
       invalidatesTags: ['Order', 'Product'],
     }),
@@ -83,6 +87,7 @@ export const {
   useGetReturnedQtyByOrderQuery,
   useGetReturnsByOrderQuery,
   useGetPendingVerificationQuery,
+  useGetWarehouseReturnHistoryQuery,
   useVerifyGoodsReturnMutation,
   useCancelGoodsReturnMutation,
 } = goodsReturnApi;

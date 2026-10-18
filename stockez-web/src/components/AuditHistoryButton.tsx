@@ -20,6 +20,14 @@ const ACTION_COLOR: Record<string, string> = {
   CANCELLED: 'red',
   PAYMENT_COLLECTED: 'gold',
   PAYMENT_CLEARED: 'green',
+  RETURN_FILED: 'orange',
+  RETURN_VERIFIED: 'cyan',
+  RETURN_CANCELLED: 'red',
+  REFUND_INITIATED: 'gold',
+  REFUNDED: 'gold',
+  RETURN_TO_WAREHOUSE: 'orange',
+  RESTOCKED: 'cyan',
+  PRICE_ADJUSTED: 'purple',
 };
 
 interface Props {

@@ -111,6 +111,7 @@ public class TenantDtos {
         private String invoiceTerms;
         private String extraImageUrl;
         private String paymentQrImageUrl;
+        private String upiId;
         private String bankName;
         private String bankAccountName;
         private String bankAccountNumber;
@@ -152,6 +153,7 @@ public class TenantDtos {
         @Size(max = 2000)          private String invoiceTerms;
         @Size(max = 500)           private String extraImageUrl;
         @Size(max = 500)           private String paymentQrImageUrl;
+        @Size(max = 100) @Pattern(regexp = "^$|^[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9]{1,}$", message = "Invalid UPI ID (e.g. name@bank)") private String upiId;
         @Size(max = 120)           private String bankName;
         @Size(max = 120)           private String bankAccountName;
         @Size(max = 40)            private String bankAccountNumber;

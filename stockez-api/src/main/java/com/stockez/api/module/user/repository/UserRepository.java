@@ -26,9 +26,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByIdAndTenantId(UUID userId, UUID tenantId);
 
-    boolean existsByPhoneAndActiveTrue(String phone);
+    boolean existsByPhoneAndTenant_IdAndActiveTrue(String phone, UUID tenantId);
 
-    boolean existsByPhoneAndActiveTrueAndTenant_IdNot(String phone, UUID tenantId);
+    Optional<User> findByIdAndActiveTrue(UUID id);
 
     org.springframework.data.domain.Page<User> findByTenantIdAndActiveTrueAndRoleNot(UUID tenantId, User.UserRole excludeRole, org.springframework.data.domain.Pageable pageable);
     

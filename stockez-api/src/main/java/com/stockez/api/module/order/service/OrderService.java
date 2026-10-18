@@ -25,6 +25,10 @@ import com.stockez.api.module.tenant.repository.TenantSettingsRepository;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.api.module.audit.service.AuditService;
+import com.stockez.api.module.tracking.entity.CustomerVisit;
+import com.stockez.api.module.tracking.service.GeoContext;
+import com.stockez.api.module.tracking.service.VisitStamp;
+import com.stockez.api.module.tracking.service.VisitStampService;
 import com.stockez.common.exception.BusinessException;
 import com.stockez.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +68,8 @@ public class OrderService {
     private final StockBatchRepository stockBatchRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final AuditService auditService;
+    private final VisitStampService visitStampService;
+    private final GeoContext geoContext;
     private final StockShortageService stockShortageService;
     private final GoodsReturnRepository goodsReturnRepository;
     private final com.stockez.api.module.route.service.RouteAllocationService routeAllocationService;
@@ -222,13 +228,13 @@ public class OrderService {
             BigDecimal effectiveMax = !fifo.isEmpty() && fifo.get(0).getMaxSaleRate() != null
                 ? fifo.get(0).getMaxSaleRate() : product.getMaxSaleRate();
             checkCrossBatchConflict(product, fifo, itemReq.getQuantity());
-            if (effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0) {
+            if (!canOverridePriceRange() && effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0) {
                 throw new BusinessException(
                     "Price ₹" + unitPrice + " for '" + product.getName() + "' is below the minimum allowed rate of ₹" + effectiveMin,
                     "PRICE_BELOW_MINIMUM"
                 );
             }
-            if (effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0) {
+            if (!canOverridePriceRange() && effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0) {
                 throw new BusinessException(
                     "Price ₹" + unitPrice + " for '" + product.getName() + "' exceeds the maximum allowed rate of ₹" + effectiveMax,
                     "PRICE_ABOVE_MAXIMUM"
@@ -337,7 +343,31 @@ public class OrderService {
         stockBatchRepository.saveAll(batchesToSave);
         productRepository.saveAll(productMap.values());
 
+        stampVisit(tenantId, salesPersonId, customer.getId(),
+                CustomerVisit.Outcome.ORDER_PLACED, saved.getId(), null, null);
+
         return toResponse(saved);
+    }
+
+    /**
+     * Records where the biller was standing. Deliberately last and deliberately silent: tracking is
+     * an observation of the sale, never a precondition for it.
+     */
+    private void stampVisit(UUID tenantId, UUID userId, UUID customerId,
+                            CustomerVisit.Outcome outcome, UUID orderId, UUID paymentId, String reason) {
+        GeoContext.Position pos = geoContext.current();
+        visitStampService.stampQuietly(VisitStamp.builder()
+                .tenantId(tenantId)
+                .userId(userId)
+                .customerId(customerId)
+                .outcome(outcome)
+                .orderId(orderId)
+                .paymentId(paymentId)
+                .latitude(pos.latitude())
+                .longitude(pos.longitude())
+                .accuracyM(pos.accuracyM())
+                .reason(reason)
+                .build());
     }
 
     @Transactional(readOnly = true)
@@ -528,10 +558,10 @@ public class OrderService {
             BigDecimal effectiveMin = !fifo.isEmpty() && fifo.get(0).getMinSaleRate() != null ? fifo.get(0).getMinSaleRate() : product.getMinSaleRate();
             BigDecimal effectiveMax = !fifo.isEmpty() && fifo.get(0).getMaxSaleRate() != null ? fifo.get(0).getMaxSaleRate() : product.getMaxSaleRate();
             checkCrossBatchConflict(product, fifo, itemReq.getQuantity());
-            if (effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0) {
+            if (!canOverridePriceRange() && effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0) {
                 throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' is below the minimum allowed rate of ₹" + effectiveMin, "PRICE_BELOW_MINIMUM");
             }
-            if (effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0) {
+            if (!canOverridePriceRange() && effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0) {
                 throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' exceeds the maximum allowed rate of ₹" + effectiveMax, "PRICE_ABOVE_MAXIMUM");
             }
 
@@ -692,6 +722,10 @@ public class OrderService {
         Order saved = orderRepository.save(order);
         auditService.record(tenantId, "ORDER", saved.getId(), "DELIVERED",
                 "Order " + saved.getOrderNumber() + " delivered to " + order.getCustomer().getBusinessName());
+        if (order.getDeliveryPerson() != null) {
+            stampVisit(tenantId, order.getDeliveryPerson().getId(), order.getCustomer().getId(),
+                    CustomerVisit.Outcome.DELIVERED, saved.getId(), null, null);
+        }
         // Auto-complete the delivery run once its last dispatched order is delivered.
         if (order.getRouteAllocation() != null) {
             routeAllocationService.autoCompleteDeliveryIfDone(order.getRouteAllocation().getId(), tenantId);
@@ -738,10 +772,10 @@ public class OrderService {
                     ? item.getBatch().getMinSaleRate() : product.getMinSaleRate();
             BigDecimal effectiveMax = item.getBatch() != null && item.getBatch().getMaxSaleRate() != null
                     ? item.getBatch().getMaxSaleRate() : product.getMaxSaleRate();
-            if (effectiveMin != null && adj.getUnitPrice().compareTo(effectiveMin) < 0) {
+            if (!canOverridePriceRange() && effectiveMin != null && adj.getUnitPrice().compareTo(effectiveMin) < 0) {
                 throw new BusinessException("Price ₹" + adj.getUnitPrice() + " for '" + product.getName() + "' is below the minimum allowed rate of ₹" + effectiveMin, "PRICE_BELOW_MINIMUM");
             }
-            if (effectiveMax != null && adj.getUnitPrice().compareTo(effectiveMax) > 0) {
+            if (!canOverridePriceRange() && effectiveMax != null && adj.getUnitPrice().compareTo(effectiveMax) > 0) {
                 throw new BusinessException("Price ₹" + adj.getUnitPrice() + " for '" + product.getName() + "' exceeds the maximum allowed rate of ₹" + effectiveMax, "PRICE_ABOVE_MAXIMUM");
             }
 
@@ -878,6 +912,10 @@ public class OrderService {
         validateStatus(order, Order.OrderStatus.DISPATCHED);
         auditService.record(tenantId, "ORDER", order.getId(), "SHOP_CLOSED",
                 "Order " + order.getOrderNumber() + " — shop closed / unavailable, delivery person will retry today");
+        if (order.getDeliveryPerson() != null) {
+            stampVisit(tenantId, order.getDeliveryPerson().getId(), order.getCustomer().getId(),
+                    CustomerVisit.Outcome.SHOP_CLOSED, order.getId(), null, "Shop closed / unavailable");
+        }
         return toResponse(order);
     }
 
@@ -942,9 +980,9 @@ public class OrderService {
             BigDecimal effectiveMin = !fifo.isEmpty() && fifo.get(0).getMinSaleRate() != null ? fifo.get(0).getMinSaleRate() : product.getMinSaleRate();
             BigDecimal effectiveMax = !fifo.isEmpty() && fifo.get(0).getMaxSaleRate() != null ? fifo.get(0).getMaxSaleRate() : product.getMaxSaleRate();
             checkCrossBatchConflict(product, fifo, itemReq.getQuantity());
-            if (effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0)
+            if (!canOverridePriceRange() && effectiveMin != null && unitPrice.compareTo(effectiveMin) < 0)
                 throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' is below minimum ₹" + effectiveMin, "PRICE_BELOW_MINIMUM");
-            if (effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0)
+            if (!canOverridePriceRange() && effectiveMax != null && unitPrice.compareTo(effectiveMax) > 0)
                 throw new BusinessException("Price ₹" + unitPrice + " for '" + product.getName() + "' exceeds maximum ₹" + effectiveMax, "PRICE_ABOVE_MAXIMUM");
 
             BigDecimal counterMrp = !fifo.isEmpty() && fifo.get(0).getMrp() != null ? fifo.get(0).getMrp() : product.getMrp();
@@ -1122,6 +1160,9 @@ public class OrderService {
             pr.setCollectedBy(toPerson(staff));
             result.setPayment(pr);
         }
+
+        stampVisit(tenantId, userId, customer.getId(),
+                CustomerVisit.Outcome.COUNTER_SALE, saved.getId(), null, null);
 
         return result;
     }
@@ -1550,6 +1591,14 @@ public class OrderService {
         }
     }
 
+    /** Only admins may price outside a batch's min/max (e.g. negotiated supermarket rates). */
+    private boolean canOverridePriceRange() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
+    }
+
     private void checkCrossBatchConflict(Product product, List<StockBatch> fifo, int qty) {
         if (fifo.size() < 2 || fifo.get(0).getQuantityAvailable() >= qty) return;
         StockBatch next = fifo.get(1);
@@ -1646,6 +1695,41 @@ public class OrderService {
         p.setFullName(u.getFullName());
         p.setPhone(u.getPhone());
         return p;
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderDtos.WarehouseReturnHistoryRow> getWarehouseReturnHistory(UUID tenantId, LocalDate from, LocalDate to) {
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        List<com.stockez.api.module.audit.entity.AuditLog> events = auditService.getWarehouseReturnEvents(
+                tenantId, from.atStartOfDay(zone).toInstant(), to.plusDays(1).atStartOfDay(zone).toInstant());
+        Map<UUID, Order> orders = orderRepository.findAllById(
+                events.stream().map(com.stockez.api.module.audit.entity.AuditLog::getEntityId).distinct().collect(Collectors.toList()))
+                .stream().filter(o -> o.getTenant().getId().equals(tenantId))
+                .collect(Collectors.toMap(Order::getId, o -> o));
+
+        return events.stream().filter(e -> orders.containsKey(e.getEntityId())).map(e -> {
+            Order o = orders.get(e.getEntityId());
+            OrderDtos.WarehouseReturnHistoryRow row = new OrderDtos.WarehouseReturnHistoryRow();
+            row.setOrderId(o.getId());
+            row.setOrderNumber(o.getOrderNumber());
+            row.setCustomerName(o.getCustomer().getBusinessName());
+            row.setRouteName(o.getCustomer().getRoute() != null ? o.getCustomer().getRoute().getName() : null);
+            row.setDeliveryPersonName(o.getDeliveryPerson() != null ? o.getDeliveryPerson().getFullName() : null);
+            row.setTotalAmount(o.getTotalAmount());
+            row.setOutcome(switch (e.getAction()) {
+                case "RESTOCKED" -> "Received in full";
+                case "RESTOCKED_SHORTAGE" -> "Received with shortage";
+                default -> "Order cancelled";
+            });
+            String d = e.getDescription();
+            int dash = d.indexOf(" — ");
+            row.setDetail(e.getAction().equals("RESTOCKED_SHORTAGE") && dash >= 0
+                    ? d.substring(dash + 3).replace(" — flagged for review", "")
+                    : null);
+            row.setPerformedBy(e.getPerformedBy());
+            row.setPerformedAt(e.getPerformedAt());
+            return row;
+        }).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

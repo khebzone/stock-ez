@@ -31,9 +31,13 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     List<Payment> findByTenantIdAndCollectedByIdAndCollectionDate(UUID tenantId, UUID collectedById, LocalDate date);
 
+    List<Payment> findByTenantIdAndCollectedByIdAndSubmittedFalse(UUID tenantId, UUID collectedById);
+
     boolean existsByTenantIdAndCollectedByIdAndCollectionDateAndSubmittedTrue(UUID tenantId, UUID collectedById, LocalDate date);
 
     List<Payment> findByTenantIdAndSubmittedTrueAndClearedFalse(UUID tenantId);
+
+    List<Payment> findByTenantIdAndSubmittedFalse(UUID tenantId);
 
     @Query("SELECT p FROM Payment p " +
            "JOIN FETCH p.customer LEFT JOIN FETCH p.collectedBy LEFT JOIN FETCH p.order o " +

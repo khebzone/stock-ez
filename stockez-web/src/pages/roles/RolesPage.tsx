@@ -48,7 +48,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { module: 'Purchases',          actions: [{ perm: 'PURCHASES_VIEW', label: 'View' }, { perm: 'PURCHASES_CREATE', label: 'Create' }, { perm: 'PURCHASES_EDIT', label: 'Edit' }] },
       { module: 'Stock Batches',      actions: [{ perm: 'STOCK_VIEW', label: 'View' }] },
       { module: 'Closing Stock',      actions: [{ perm: 'CLOSING_STOCK_VIEW', label: 'View' }] },
-      { module: 'Goods Return',       actions: [{ perm: 'RETURNS_VIEW', label: 'View' }, { perm: 'RETURNS_CREATE', label: 'Create' }, { perm: 'RETURNS_APPROVE', label: 'Approve' }] },
+      { module: 'Goods Return',       actions: [{ perm: 'RETURNS_VIEW', label: 'View' }, { perm: 'RETURNS_CREATE', label: 'Create' }, { perm: 'RETURNS_DAMAGE', label: 'Damage / Loss' }, { perm: 'RETURNS_APPROVE', label: 'Approve' }] },
       { module: 'Gate Pass',          actions: [{ perm: 'GATE_PASS_VIEW', label: 'View' }, { perm: 'GATE_PASS_CREATE', label: 'Create' }] },
       { module: 'Warehouse Picklist', actions: [{ perm: 'PICKLIST_VIEW', label: 'View' }, { perm: 'PICKLIST_UPDATE', label: 'Update' }] },
       { module: 'Stock Adjustment',  actions: [{ perm: 'STOCK_ADJUSTMENT_VIEW', label: 'View' }, { perm: 'STOCK_ADJUSTMENT_CREATE', label: 'Adjust' }] },
@@ -78,6 +78,44 @@ const MODULE_GROUPS: ModuleGroup[] = [
     ],
   },
 ];
+
+const FIELD_APP_GROUPS: ModuleGroup[] = [
+  {
+    group: 'Sales App',
+    modules: [
+      { module: 'Sales Orders', actions: [{ perm: 'ORDERS_VIEW', label: 'View' }, { perm: 'ORDERS_CREATE', label: 'Create' }, { perm: 'ORDERS_EDIT', label: 'Edit' }, { perm: 'ORDERS_CANCEL', label: 'Cancel' }] },
+      { module: 'Counter Sale', actions: [{ perm: 'COUNTER_SALE_VIEW', label: 'Access' }] },
+      { module: 'My Route',     actions: [{ perm: 'ROUTES_VIEW', label: 'View' }] },
+    ],
+  },
+  {
+    group: 'Delivery App',
+    modules: [
+      { module: 'Deliveries', actions: [{ perm: 'DELIVERY_VIEW', label: 'View' }, { perm: 'DELIVERY_UPDATE', label: 'Update Status' }] },
+    ],
+  },
+  {
+    group: 'Warehouse App',
+    modules: [
+      { module: 'Route Pick List', actions: [{ perm: 'PICKLIST_VIEW', label: 'View' }, { perm: 'PICKLIST_UPDATE', label: 'Update' }] },
+      { module: 'Gate Pass',       actions: [{ perm: 'GATE_PASS_VIEW', label: 'View' }, { perm: 'GATE_PASS_CREATE', label: 'Create' }] },
+      { module: 'Stock Batches',   actions: [{ perm: 'STOCK_VIEW', label: 'View' }] },
+    ],
+  },
+  {
+    group: 'Common',
+    modules: [
+      { module: 'Customer Payments',    actions: [{ perm: 'PAYMENTS_VIEW', label: 'View' }, { perm: 'PAYMENTS_CREATE', label: 'Collect' }] },
+      { module: 'Customer Outstanding', actions: [{ perm: 'CUSTOMER_OUTSTANDING_VIEW', label: 'View' }] },
+      { module: 'Goods Return',         actions: [{ perm: 'RETURNS_VIEW', label: 'View' }, { perm: 'RETURNS_CREATE', label: 'Create' }, { perm: 'RETURNS_DAMAGE', label: 'Damage / Loss' }] },
+      { module: 'Customers',            actions: [{ perm: 'CUSTOMERS_VIEW', label: 'View' }, { perm: 'CUSTOMERS_CREATE', label: 'Create' }, { perm: 'CUSTOMERS_EDIT', label: 'Edit' }] },
+      { module: 'Products',             actions: [{ perm: 'PRODUCTS_VIEW', label: 'View' }] },
+      { module: 'Attendance',           actions: [{ perm: 'ATTENDANCE_VIEW', label: 'View' }, { perm: 'ATTENDANCE_CHECKIN', label: 'Check In/Out' }] },
+      { module: 'Incentives',           actions: [{ perm: 'INCENTIVES_VIEW', label: 'View' }] },
+    ],
+  },
+];
+const FIELD_APP_PERMISSIONS = new Set(FIELD_APP_GROUPS.flatMap(g => g.modules.flatMap(m => m.actions.map(a => a.perm))));
 
 const ALL_MODULES: Module[] = MODULE_GROUPS.flatMap(g => g.modules);
 const ALL_PERMISSIONS = Array.from(new Set(ALL_MODULES.flatMap(m => m.actions.map(a => a.perm))));
@@ -132,6 +170,7 @@ const RolesPage: React.FC = () => {
   const [roleName, setRoleName] = useState('');
   const [roleNameError, setRoleNameError] = useState('');
   const [fieldStaff, setFieldStaff] = useState(false);
+  const [showAllPerms, setShowAllPerms] = useState(false);
 
   const roles = data?.data || [];
 
@@ -141,6 +180,7 @@ const RolesPage: React.FC = () => {
     setRoleNameError('');
     setCheckedPerms(new Set());
     setFieldStaff(false);
+    setShowAllPerms(false);
     setDrawerOpen(true);
   };
 
@@ -150,6 +190,7 @@ const RolesPage: React.FC = () => {
     setRoleNameError('');
     setCheckedPerms(new Set(role.permissions || []));
     setFieldStaff(!!role.fieldStaff);
+    setShowAllPerms(!!role.fieldStaff && (role.permissions || []).some((p: string) => !FIELD_APP_PERMISSIONS.has(p)));
     setDrawerOpen(true);
   };
 
@@ -292,9 +333,14 @@ const RolesPage: React.FC = () => {
     },
   ];
 
+  const fieldAppView = fieldStaff && !showAllPerms;
+  const visibleGroups = fieldAppView ? FIELD_APP_GROUPS : MODULE_GROUPS;
+  const visiblePermissions = fieldAppView ? Array.from(FIELD_APP_PERMISSIONS) : ALL_PERMISSIONS;
+  const visibleChecked = visiblePermissions.filter(p => checkedPerms.has(p)).length;
+
   const permissionMatrix = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {MODULE_GROUPS.map(group => {
+      {visibleGroups.map(group => {
         const groupPerms = group.modules.flatMap(m => m.actions.map(a => a.perm));
         const groupChecked = groupPerms.filter(p => checkedPerms.has(p)).length;
         const groupTotal = groupPerms.length;
@@ -480,10 +526,10 @@ const RolesPage: React.FC = () => {
             gap: isMobile ? 10 : 0,
           }}>
             <Space wrap>
-              <Button size="small" onClick={() => setCheckedPerms(new Set(ALL_PERMISSIONS))}>Select All</Button>
-              <Button size="small" onClick={() => setCheckedPerms(new Set())}>Clear All</Button>
+              <Button size="small" onClick={() => setCheckedPerms(prev => new Set([...prev, ...visiblePermissions]))}>Select All</Button>
+              <Button size="small" onClick={() => setCheckedPerms(prev => { const next = new Set(prev); visiblePermissions.forEach(p => next.delete(p)); return next; })}>Clear All</Button>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {checkedPerms.size} / {ALL_PERMISSIONS.length} permissions
+                {visibleChecked} / {visiblePermissions.length} permissions
               </Text>
             </Space>
             <Space style={isMobile ? { display: 'flex', justifyContent: 'flex-end' } : {}}>
@@ -526,7 +572,7 @@ const RolesPage: React.FC = () => {
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                     {fieldStaff
-                      ? 'Salesman / delivery person. Gets the mobile field screen.'
+                      ? 'Salesman / delivery / warehouse staff. Gets the mobile field screen.'
                       : 'Office staff. Gets the full admin dashboard and sidebar.'}
                   </div>
                 </div>
@@ -536,8 +582,15 @@ const RolesPage: React.FC = () => {
           </Form.Item>
         </Form>
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
-          Permissions
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 1, textTransform: 'uppercase' }}>
+            {fieldAppView ? 'What can this role do in the mobile app?' : 'Permissions'}
+          </div>
+          {fieldStaff && (
+            <Checkbox checked={showAllPerms} onChange={e => setShowAllPerms(e.target.checked)}>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>Show all permissions</span>
+            </Checkbox>
+          )}
         </div>
 
         {permissionMatrix}

@@ -69,7 +69,7 @@ const emptyLine = (id: number): ReturnLine => ({
 const BatchSelect: React.FC<{
   productId: string | null;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (v: string, avail?: number) => void;
 }> = ({ productId, value, onChange }) => {
   const { data } = useGetBatchesByProductQuery(productId!, { skip: !productId });
   const batches: any[] = data?.data || [];
@@ -79,14 +79,15 @@ const BatchSelect: React.FC<{
       style={{ width: '100%' }}
       placeholder="Select batch..."
       value={value || undefined}
-      onChange={v => onChange(v ?? '')}
+      onChange={(v, opt: any) => onChange(v ?? '', opt?.avail)}
       onClear={() => onChange('')}
       allowClear
       showSearch
       filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
       disabled={!productId}
-      options={batches.map((b: any) => ({
+      options={batches.filter((b: any) => Number(b.quantityAvailable) > 0).map((b: any) => ({
         value: b.batchNumber,
+        avail: b.quantityAvailable,
         label: `${b.batchNumber}${b.expiryDate ? ` · exp ${dayjs(b.expiryDate).format('DD MMM YY')}` : ''} · ${b.quantityAvailable} avail`,
       }))}
     />
@@ -100,7 +101,8 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   // Purchase Return (goods back to a supplier) is a warehouse/procurement action —
   // hide it from field roles (sales/delivery) who never deal with suppliers at all.
   const visibleTypes = Object.entries(TYPE_CONFIG).filter(([key]) =>
-    key !== 'PURCHASE_RETURN' || hasPermission('PURCHASES_VIEW')
+    (key !== 'PURCHASE_RETURN' || hasPermission('PURCHASES_VIEW'))
+    && (key !== 'DAMAGE' || hasPermission('RETURNS_DAMAGE'))
   );
   // A delivery-only person (no office-level order visibility) should only be able to
   // file a return against an order they themselves delivered — not the whole tenant's
@@ -140,13 +142,20 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     const p = purchaseDetail.data || purchaseDetail;
     if (p?.supplierName) setSupplier(p.supplierName);
     if (p?.items?.length > 0) {
-      const autoLines: ReturnLine[] = p.items.map((item: any, idx: number) => ({
+      const autoLines: ReturnLine[] = p.items.filter((item: any) => (item.quantityAvailable ?? item.quantity) > 0).map((item: any, idx: number) => ({
         id: idx + 1,
         productId: item.product?.id || null,
         batchNumber: item.batchNumber || '',
-        quantity: item.quantity || null,
+        quantity: Math.min(item.quantity || 0, item.quantityAvailable ?? item.quantity ?? 0) || null,
+        maxQuantity: item.quantityAvailable ?? item.quantity ?? undefined,
         unitRate: item.purchaseRate != null ? Number(item.purchaseRate) : null,
       }));
+      if (autoLines.length === 0) {
+        message.warning('No stock is left from this purchase to return');
+        setLines([emptyLine(1)]);
+        setNextId(2);
+        return;
+      }
       setLines(autoLines);
       setNextId(autoLines.length + 1);
     }
@@ -227,8 +236,17 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           updated.cost = prod.purchaseRate != null ? Number(prod.purchaseRate) : null;
         }
         updated.batchNumber = '';
+        updated.maxQuantity = undefined;
       }
       return updated;
+    }));
+  };
+
+  const setBatch = (id: number, batchNumber: string, avail?: number) => {
+    setLines(p => p.map(l => {
+      if (l.id !== id) return l;
+      const max = batchNumber && avail != null ? avail : undefined;
+      return { ...l, batchNumber, maxQuantity: max, quantity: max != null && l.quantity && l.quantity > max ? max : l.quantity };
     }));
   };
 
@@ -316,7 +334,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const cfg = TYPE_CONFIG[type];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 860 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* Type selector */}
       <div style={{ display: 'grid', gridTemplateColumns: isSmall ? '1fr' : `repeat(${visibleTypes.length}, 1fr)`, gap: 12 }}>
@@ -536,7 +554,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 5 }}>Qty *</div>
-                        <InputNumber size="large" style={{ width: '100%' }} min={1} precision={0}
+                        <InputNumber size="large" style={{ width: '100%' }} min={1} max={line.maxQuantity || undefined} precision={0}
                           value={line.quantity || undefined}
                           onChange={v => updateLine(line.id, 'quantity', v)} />
                       </div>
@@ -604,7 +622,7 @@ const NewReturnForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                       <BatchSelect
                         productId={line.productId}
                         value={line.batchNumber}
-                        onChange={v => updateLine(line.id, 'batchNumber', v)}
+                        onChange={(v, avail) => setBatch(line.id, v, avail)}
                       />
                     </div>
                     <div style={{ minWidth: 0 }}>

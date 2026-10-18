@@ -60,6 +60,22 @@ public class TenantSettings {
     @Column(nullable = false)
     private boolean showPurchaseRateToSales = true;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean locationTrackingEnabled = false;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private int locationPingIntervalSeconds = 90;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean trackOnlyWhenCheckedIn = true;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private int locationRetentionDays = 90;
+
     @LastModifiedDate
     private Instant updatedAt;
 

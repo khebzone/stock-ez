@@ -4,7 +4,9 @@ import com.stockez.api.module.order.entity.Order;
 import com.stockez.api.module.order.entity.OrderItem;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.Instant;
@@ -19,6 +21,10 @@ import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     Optional<Order> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id AND o.tenant.id = :tenantId")
+    Optional<Order> findByIdAndTenantIdForUpdate(@Param("id") UUID id, @Param("tenantId") UUID tenantId);
 
     Page<Order> findByTenantIdAndStatus(UUID tenantId, Order.OrderStatus status, Pageable pageable);
 
@@ -256,7 +262,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
            "LEFT JOIN FETCH o.routeAllocation ra " +
            "LEFT JOIN FETCH ra.deliveryPerson " +
            "JOIN FETCH o.customer " +
-           "WHERE o.tenant.id = :tenantId AND o.orderDate = :date AND o.status IN :statuses " +
+           "WHERE o.tenant.id = :tenantId AND o.status IN :statuses " +
+           "AND ((ra IS NOT NULL AND ra.allocationDate = :date) OR (ra IS NULL AND o.orderDate = :date)) " +
            "AND (o.deliveryPerson IS NOT NULL OR ra.deliveryPerson IS NOT NULL) AND o.openingBalance = false " +
            "ORDER BY o.orderNumber ASC")
     List<Order> findDailyDeliveryOrders(@Param("tenantId") UUID tenantId, @Param("date") LocalDate date, @Param("statuses") List<Order.OrderStatus> statuses);

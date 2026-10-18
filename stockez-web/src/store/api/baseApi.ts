@@ -1,5 +1,9 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
+import { getGeoFix } from '../../utils/geoPosition';
+import { CLIENT_ID } from '../../utils/clientId';
+
+export const API_TAG_TYPES = ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'PurchaseEntry', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive', 'StockAdjustment', 'Notification', 'Tracking', 'TrackingSettings'] as const;
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: `${import.meta.env.VITE_API_URL || ''}/api/v1`,
@@ -10,6 +14,16 @@ const rawBaseQuery = fetchBaseQuery({
     if (token)    headers.set('authorization', `Bearer ${token}`);
     if (tenantId) headers.set('X-Tenant-Id', tenantId);
     if (userId)   headers.set('X-User-Id', userId);
+    headers.set('X-Client-Id', CLIENT_ID);
+
+    // Carried on every request so billing, collection and delivery endpoints record where the
+    // staff member was without each one needing a coordinate field in its payload.
+    const fix = getGeoFix();
+    if (fix) {
+      headers.set('X-Geo-Lat', String(fix.latitude));
+      headers.set('X-Geo-Lng', String(fix.longitude));
+      if (fix.accuracyM != null) headers.set('X-Geo-Acc', String(fix.accuracyM));
+    }
     return headers;
   },
 });
@@ -67,6 +81,6 @@ export const baseApi = createApi({
   baseQuery: baseQueryWithReauth,
   refetchOnFocus: false,
   refetchOnReconnect: false,
-  tagTypes: ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'PurchaseEntry', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive', 'StockAdjustment', 'Notification'],
+  tagTypes: [...API_TAG_TYPES],
   endpoints: () => ({}),
 });

@@ -193,6 +193,7 @@ public class TenantService {
         tenant.setInvoiceTerms(req.getInvoiceTerms());
         tenant.setExtraImageUrl(req.getExtraImageUrl());
         tenant.setPaymentQrImageUrl(req.getPaymentQrImageUrl());
+        tenant.setUpiId(req.getUpiId() == null || req.getUpiId().isBlank() ? null : req.getUpiId().trim());
         tenant.setBankName(req.getBankName());
         tenant.setBankAccountName(req.getBankAccountName());
         tenant.setBankAccountNumber(req.getBankAccountNumber());
@@ -297,6 +298,7 @@ public class TenantService {
         res.setInvoiceTerms(t.getInvoiceTerms());
         res.setExtraImageUrl(t.getExtraImageUrl());
         res.setPaymentQrImageUrl(t.getPaymentQrImageUrl());
+        res.setUpiId(t.getUpiId());
         res.setBankName(t.getBankName());
         res.setBankAccountName(t.getBankAccountName());
         res.setBankAccountNumber(t.getBankAccountNumber());

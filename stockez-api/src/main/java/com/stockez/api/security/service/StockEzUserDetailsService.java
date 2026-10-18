@@ -8,6 +8,7 @@ import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Loads user from DB for Spring Security authentication.
@@ -22,7 +23,16 @@ public class StockEzUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String phone) throws UsernameNotFoundException {
         User user = userRepository.findByPhoneAndActiveTrue(phone)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + phone));
+        return toUserDetails(user);
+    }
 
+    public UserDetails loadByUserId(UUID userId) throws UsernameNotFoundException {
+        User user = userRepository.findByIdAndActiveTrue(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + userId));
+        return toUserDetails(user);
+    }
+
+    private UserDetails toUserDetails(User user) {
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getId().toString())
                 .password(user.getPasswordHash())

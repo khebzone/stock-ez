@@ -1055,6 +1055,7 @@ public class ReportService {
                             p.getPurchaseGstPercent().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
                     BigDecimal rateExclGst = p.getPurchaseRate().divide(gstFactor, 2, RoundingMode.HALF_UP);
                     BigDecimal stockValue = rateExclGst.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal stockValueInclGst = p.getPurchaseRate().multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
                     return ReportDtos.ClosingStockRow.builder()
                             .productId(p.getId())
                             .productName(p.getName())
@@ -1065,12 +1066,16 @@ public class ReportService {
                             .hsnCode(p.getHsnCode())
                             .stockQty(qty)
                             .purchaseRateExclGst(rateExclGst)
+                            .purchaseRateInclGst(p.getPurchaseRate())
                             .stockValue(stockValue)
+                            .stockValueInclGst(stockValueInclGst)
                             .build();
                 })
                 .collect(Collectors.toList());
 
         BigDecimal totalValue = rows.stream().map(ReportDtos.ClosingStockRow::getStockValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalValueInclGst = rows.stream().map(ReportDtos.ClosingStockRow::getStockValueInclGst)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         int outOfStock = (int) rows.stream().filter(r -> r.getStockQty() == 0).count();
         int lowStock   = (int) rows.stream().filter(r -> r.getStockQty() > 0 && r.getStockQty() <= 10).count();
@@ -1081,6 +1086,7 @@ public class ReportService {
                 .outOfStockCount(outOfStock)
                 .lowStockCount(lowStock)
                 .totalStockValue(totalValue)
+                .totalStockValueInclGst(totalValueInclGst)
                 .build();
     }
 

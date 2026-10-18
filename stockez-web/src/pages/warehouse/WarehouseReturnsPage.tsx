@@ -6,6 +6,7 @@ import { hasPermission } from '../../utils/permissions';
 import { useGetWarehouseReturnsQuery, useConfirmWarehouseReturnMutation, useCancelOrderMutation } from '../../store/api/orderApi';
 import { useGetPendingVerificationQuery, useVerifyGoodsReturnMutation, useCancelGoodsReturnMutation } from '../../store/api/goodsReturnApi';
 import PageHeader from '../../components/PageHeader';
+import WarehouseReturnHistory from './WarehouseReturnHistory';
 
 const { Panel } = Collapse;
 
@@ -31,6 +32,7 @@ const WarehouseReturnsPage: React.FC = () => {
 
   const [verifyTarget, setVerifyTarget] = useState<any | null>(null);
   const [received, setReceived] = useState<Record<string, number>>({});
+  const [damaged, setDamaged] = useState<Record<string, number>>({});
 
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -44,18 +46,24 @@ const WarehouseReturnsPage: React.FC = () => {
     const init: Record<string, number> = {};
     (ret.items || []).forEach((it: any) => { init[it.id] = it.quantity; });
     setReceived(init);
+    setDamaged({});
     setVerifyTarget(ret);
   };
 
   const submitVerify = async () => {
     if (!verifyTarget) return;
     try {
-      const items = (verifyTarget.items || []).map((it: any) => ({ itemId: it.id, receivedQty: received[it.id] ?? 0 }));
-      await verifyReturn({ id: verifyTarget.id, items }).unwrap();
+      const items = (verifyTarget.items || []).map((it: any) => ({
+        itemId: it.id, receivedQty: received[it.id] ?? 0, damagedQty: damaged[it.id] ?? 0,
+      }));
+      const res: any = await verifyReturn({ id: verifyTarget.id, items }).unwrap();
       const shortfall = (verifyTarget.items || []).reduce((s: number, it: any) => s + (it.quantity - (received[it.id] ?? 0)), 0);
-      message.success(shortfall > 0
-        ? `${verifyTarget.returnNumber} verified — ${shortfall} unit(s) short, recorded`
-        : `${verifyTarget.returnNumber} verified — stock restored`);
+      const damagedTotal = (verifyTarget.items || []).reduce((s: number, it: any) => s + (damaged[it.id] ?? 0), 0);
+      const notes: string[] = [];
+      if (shortfall > 0) notes.push(`${shortfall} unit(s) short, recorded`);
+      if (damagedTotal > 0) notes.push(`${damagedTotal} damaged, written off`);
+      if (res?.data?.refundStatus === 'PENDING') notes.push(`refund of ${fmt(res.data.refundAmount)} queued for finance`);
+      message.success(`${verifyTarget.returnNumber} verified${notes.length ? ' — ' + notes.join('; ') : ' — stock restored'}`);
       setVerifyTarget(null);
       refetchPv();
     } catch (err: any) {
@@ -166,7 +174,7 @@ const WarehouseReturnsPage: React.FC = () => {
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
       ) : groups.length === 0 ? (
-        <Empty description="No orders pending warehouse return" style={{ marginTop: 60 }} />
+        <Empty description="No orders pending warehouse return" style={{ margin: '24px 0' }} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {groups.map((group: any) => (
@@ -243,6 +251,8 @@ const WarehouseReturnsPage: React.FC = () => {
         </div>
       )}
 
+      <WarehouseReturnHistory />
+
       <Modal
         open={!!verifyTarget}
         title={verifyTarget ? `Verify Receipt — ${verifyTarget.returnNumber}` : ''}
@@ -259,19 +269,20 @@ const WarehouseReturnsPage: React.FC = () => {
               {verifyTarget.referenceOrderRouteName ? ` · ${verifyTarget.referenceOrderRouteName}` : ''}
             </div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
-              Enter how many units of each product physically reached the warehouse. Any shortfall is recorded against this return.
+              Enter how many units of each product physically reached the warehouse, and how many of those are damaged. Damaged units are credited to the customer but not put back into stock.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 80px', gap: 8, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, padding: '0 0 6px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 100px 100px 60px', gap: 8, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, padding: '0 0 6px' }}>
               <div>Product</div>
               <div style={{ textAlign: 'right' }}>Filed</div>
               <div style={{ textAlign: 'right' }}>Received</div>
+              <div style={{ textAlign: 'right' }}>Damaged</div>
               <div style={{ textAlign: 'right' }}>Short</div>
             </div>
             {(verifyTarget.items || []).map((it: any) => {
               const rec = received[it.id] ?? 0;
               const short = it.quantity - rec;
               return (
-                <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 110px 80px', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: '1px solid #f1f5f9' }}>
+                <div key={it.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 100px 100px 60px', gap: 8, alignItems: 'center', padding: '8px 0', borderTop: '1px solid #f1f5f9' }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
                       {it.productName}{it.productBrand ? ` — ${it.productBrand}` : ''}
@@ -285,8 +296,22 @@ const WarehouseReturnsPage: React.FC = () => {
                       min={0}
                       max={it.quantity}
                       value={rec}
-                      onChange={(v) => setReceived((prev) => ({ ...prev, [it.id]: Number(v ?? 0) }))}
-                      style={{ width: 100 }}
+                      onChange={(v) => {
+                        const n = Number(v ?? 0);
+                        setReceived((prev) => ({ ...prev, [it.id]: n }));
+                        setDamaged((prev) => ({ ...prev, [it.id]: Math.min(prev[it.id] ?? 0, n) }));
+                      }}
+                      style={{ width: 90 }}
+                    />
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <InputNumber
+                      size="small"
+                      min={0}
+                      max={rec}
+                      value={damaged[it.id] ?? 0}
+                      onChange={(v) => setDamaged((prev) => ({ ...prev, [it.id]: Number(v ?? 0) }))}
+                      style={{ width: 90 }}
                     />
                   </div>
                   <div style={{ textAlign: 'right', fontWeight: 700, fontSize: 13, color: short > 0 ? '#dc2626' : '#059669' }}>

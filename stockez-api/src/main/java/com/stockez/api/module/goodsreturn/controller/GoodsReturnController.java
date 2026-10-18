@@ -129,6 +129,16 @@ public class GoodsReturnController {
         return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getPendingVerification(tenantId)));
     }
 
+    @GetMapping("/warehouse-history")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_VIEW','RETURNS_APPROVE','PICKLIST_VIEW')")
+    @Operation(summary = "Customer sales returns already handled by the warehouse — verified or cancelled")
+    public ResponseEntity<ApiResponse<List<GoodsReturnDtos.GoodsReturnResponse>>> warehouseHistory(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getWarehouseHistory(tenantId, from, to)));
+    }
+
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('RETURNS_CREATE')")
     @Operation(summary = "Void a return that's still awaiting warehouse verification — nothing has moved yet, so this is a plain cancel")

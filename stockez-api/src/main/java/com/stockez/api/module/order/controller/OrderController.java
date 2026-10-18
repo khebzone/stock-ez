@@ -210,6 +210,16 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(orderService.getWarehouseReturns(tenantId)));
     }
 
+    @GetMapping("/warehouse-returns/history")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PICKLIST_VIEW')")
+    @Operation(summary = "Undelivered orders already handled by the warehouse — confirmed back or cancelled")
+    public ResponseEntity<ApiResponse<java.util.List<OrderDtos.WarehouseReturnHistoryRow>>> getWarehouseReturnHistory(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getWarehouseReturnHistory(tenantId, from, to)));
+    }
+
     @PostMapping("/{id}/return-to-warehouse")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELIVERY_UPDATE')")
     @Operation(summary = "Return dispatched order back to warehouse — genuine handback, done for the day")

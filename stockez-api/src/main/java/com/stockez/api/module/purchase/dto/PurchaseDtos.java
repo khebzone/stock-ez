@@ -150,6 +150,17 @@ public class PurchaseDtos {
     }
 
     @Data
+    public static class UpdateBatchRatesRequest {
+        @NotNull(message = "Min sale rate is required")
+        @DecimalMin(value = "0.01", message = "Min sale rate must be greater than 0")
+        private BigDecimal minSaleRate;
+
+        @NotNull(message = "Max sale rate is required")
+        @DecimalMin(value = "0.01", message = "Max sale rate must be greater than 0")
+        private BigDecimal maxSaleRate;
+    }
+
+    @Data
     public static class StockBatchResponse {
         private UUID id;
         private ProductInfo product;

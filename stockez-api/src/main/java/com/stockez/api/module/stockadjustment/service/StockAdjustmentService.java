@@ -37,7 +37,6 @@ public class StockAdjustmentService {
         Product product = productRepository.findByIdAndTenantId(productId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product", productId.toString()));
         return stockBatchRepository.findByTenantAndProduct(tenantId, productId).stream()
-                .filter(StockBatch::isActive)
                 .map(b -> StockAdjustmentDtos.BatchForAdjustment.builder()
                         .batchId(b.getId())
                         .batchNumber(b.getBatchNumber())

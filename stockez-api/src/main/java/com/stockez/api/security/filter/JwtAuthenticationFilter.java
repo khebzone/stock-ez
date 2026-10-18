@@ -19,6 +19,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -48,10 +49,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        final String phone = jwtService.extractPhone(token);
+        final String tokenTenantId = jwtService.extractTenantId(token);
+        final String headerTenantId = request.getHeader("X-Tenant-Id");
+        if (tokenTenantId != null
+                && headerTenantId != null && !headerTenantId.isBlank()
+                && !"SUPER_ADMIN".equals(jwtService.extractRole(token))
+                && !tokenTenantId.equalsIgnoreCase(headerTenantId.trim())) {
+            log.warn("Tenant mismatch: token tenant {} but header tenant {} on {} {}",
+                    tokenTenantId, headerTenantId, request.getMethod(), request.getRequestURI());
+            sendError(response, HttpServletResponse.SC_FORBIDDEN,
+                    "TENANT_MISMATCH", "You do not have access to this company's data.");
+            return;
+        }
 
-        if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(phone);
+        final String phone = jwtService.extractPhone(token);
+        final String userId = jwtService.extractUserId(token);
+
+        if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = userDetailsService.loadByUserId(UUID.fromString(userId));
             List<SimpleGrantedAuthority> authorities = buildAuthorities(token);
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(userDetails, null, authorities);

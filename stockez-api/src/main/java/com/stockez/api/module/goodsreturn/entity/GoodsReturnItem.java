@@ -33,6 +33,11 @@ public class GoodsReturnItem {
     @Column(name = "received_qty")
     private Integer receivedQty; // actual qty warehouse physically received at verification (may be < quantity)
 
+    // Of the received units, how many were damaged: refunded to the customer, but not restocked.
+    @Column(name = "damaged_qty", nullable = false)
+    @Builder.Default
+    private Integer damagedQty = 0;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitRate;
 

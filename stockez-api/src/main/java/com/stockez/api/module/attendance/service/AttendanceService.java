@@ -73,24 +73,31 @@ public class AttendanceService {
     // ── Check In ─────────────────────────────────────────────────────────────
 
     public AttendanceDtos.AttendanceResponse checkIn(AttendanceDtos.CheckInRequest req, UUID tenantId, UUID userId) {
-        AttendanceSettings settings = settingsRepository.findByTenantId(tenantId)
-                .orElseThrow(() -> new BusinessException(
-                        "Attendance location not configured. Please contact your admin.", "SETTINGS_NOT_CONFIGURED"));
+        User user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
 
-        if (settings.getOfficeLatitude() == null || settings.getOfficeLongitude() == null) {
-            throw new BusinessException(
-                    "Office location not set. Please contact your admin.", "OFFICE_LOCATION_NOT_SET");
-        }
+        AttendanceSettings settings = settingsRepository.findByTenantId(tenantId).orElse(null);
 
-        double distanceM = haversineMeters(
-                req.getLatitude(), req.getLongitude(),
-                settings.getOfficeLatitude(), settings.getOfficeLongitude());
+        if (!canCheckInFromAnywhere(user)) {
+            if (settings == null) {
+                throw new BusinessException(
+                        "Attendance location not configured. Please contact your admin.", "SETTINGS_NOT_CONFIGURED");
+            }
+            if (settings.getOfficeLatitude() == null || settings.getOfficeLongitude() == null) {
+                throw new BusinessException(
+                        "Office location not set. Please contact your admin.", "OFFICE_LOCATION_NOT_SET");
+            }
 
-        if (distanceM > settings.getGeofenceRadiusM()) {
-            throw new BusinessException(
-                    String.format("You are %.0f m away from the office. Must be within %d m to check in.",
-                            distanceM, settings.getGeofenceRadiusM()),
-                    "OUTSIDE_GEOFENCE");
+            double distanceM = haversineMeters(
+                    req.getLatitude(), req.getLongitude(),
+                    settings.getOfficeLatitude(), settings.getOfficeLongitude());
+
+            if (distanceM > settings.getGeofenceRadiusM()) {
+                throw new BusinessException(
+                        String.format("You are %.0f m away from the office. Must be within %d m to check in.",
+                                distanceM, settings.getGeofenceRadiusM()),
+                        "OUTSIDE_GEOFENCE");
+            }
         }
 
         LocalDate today = LocalDate.now();
@@ -103,12 +110,10 @@ public class AttendanceService {
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
-        User user = userRepository.findByIdAndTenantId(userId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
-
         java.time.Instant now = java.time.Instant.now();
         LocalTime checkInLocalTime = now.atZone(ZoneOffset.UTC).toLocalTime();
-        Attendance.Status status = checkInLocalTime.isAfter(settings.getLateThresholdTime())
+        LocalTime lateThreshold = settings != null ? settings.getLateThresholdTime() : LocalTime.of(9, 0);
+        Attendance.Status status = checkInLocalTime.isAfter(lateThreshold)
                 ? Attendance.Status.LATE : Attendance.Status.PRESENT;
 
         Attendance attendance = existing.orElse(Attendance.builder().tenant(tenant).user(user).attendanceDate(today).build());
@@ -118,6 +123,10 @@ public class AttendanceService {
         attendance.setStatus(status);
 
         return toResponse(attendanceRepository.save(attendance));
+    }
+
+    private boolean canCheckInFromAnywhere(User user) {
+        return user.getRole() == User.UserRole.SALES;
     }
 
     // ── Check Out ────────────────────────────────────────────────────────────
@@ -192,6 +201,8 @@ public class AttendanceService {
                 .map(s -> s.getOfficeLatitude() != null)
                 .orElse(false);
         res.setConfigured(configured);
+        res.setCheckInAnywhere(userRepository.findByIdAndTenantId(userId, tenantId)
+                .map(this::canCheckInFromAnywhere).orElse(false));
 
         attendanceRepository.findByTenantIdAndUserIdAndAttendanceDate(tenantId, userId, LocalDate.now())
                 .ifPresent(a -> {

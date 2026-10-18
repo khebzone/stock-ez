@@ -10,6 +10,10 @@ import { useGetMyAllocationQuery } from '../../store/api/salesApi';
 import { useGetMyOrdersQuery } from '../../store/api/orderApi';
 import { useCreateCustomerMutation, useUpdateCustomerMutation } from '../../store/api/customerApi';
 import { useGetRoutePlanQuery } from '../../store/api/routeApi';
+import {
+  useGetMyVisitsTodayQuery, useGetTrackingSettingsQuery, useLogNoOrderVisitMutation,
+} from '../../store/api/trackingApi';
+import { getGeoFix } from '../../utils/geoPosition';
 import { hasPermission } from '../../utils/permissions';
 
 const { useBreakpoint } = Grid;
@@ -20,7 +24,16 @@ const STATUS_CFG = {
   not_visited:       { color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0',  label: 'Not Visited',       dot: '#cbd5e1' },
   order_placed:      { color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe',  label: 'Order Placed',      dot: '#8b5cf6' },
   payment_collected: { color: P,         bg: '#ecfdf5', border: '#a7f3d0',  label: 'Payment Collected', dot: P         },
+  no_order:          { color: '#b45309', bg: '#fffbeb', border: '#fde68a',  label: 'Visited · No Order', dot: '#d97706' },
 };
+
+const NO_ORDER_REASONS = [
+  'Shop closed',
+  'Owner not available',
+  'Stock still available',
+  'Payment pending — refused credit',
+  'Not interested today',
+];
 
 const SalesRoutePage: React.FC = () => {
   const navigate = useNavigate();
@@ -51,9 +64,49 @@ const SalesRoutePage: React.FC = () => {
   const customerOrderMap: Record<string, any> = {};
   orders.forEach((o: any) => { if (o.customer?.id) customerOrderMap[o.customer.id] = o; });
 
+  const { data: trackingSettings } = useGetTrackingSettingsQuery();
+  const trackingOn = Boolean(trackingSettings?.data?.locationTrackingEnabled);
+  const { data: visitsData, refetch: refetchVisits } =
+    useGetMyVisitsTodayQuery(undefined, { skip: !trackingOn });
+  const [logNoOrderVisit, { isLoading: loggingVisit }] = useLogNoOrderVisitMutation();
+  const visitedIds: string[] = visitsData?.data || [];
+
+  const [noOrderFor, setNoOrderFor] = useState<any>(null);
+  const [noOrderReason, setNoOrderReason] = useState<string | undefined>();
+  const [noOrderNote, setNoOrderNote] = useState('');
+
+  const closeNoOrder = () => {
+    setNoOrderFor(null);
+    setNoOrderReason(undefined);
+    setNoOrderNote('');
+  };
+
+  const submitNoOrderVisit = async () => {
+    if (!noOrderFor) return;
+    const fix = getGeoFix();
+    const reason = [noOrderReason, noOrderNote.trim()].filter(Boolean).join(' — ');
+    try {
+      await logNoOrderVisit({
+        customerId: noOrderFor.id,
+        routeAllocationId: allocation?.id,
+        latitude: fix?.latitude,
+        longitude: fix?.longitude,
+        accuracyM: fix?.accuracyM,
+        reason: reason || undefined,
+      }).unwrap();
+      message.success('Visit recorded');
+      closeNoOrder();
+      refetchVisits();
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Could not record the visit');
+    }
+  };
+
   const getStatus = (id: string) => {
     const o = customerOrderMap[id];
-    if (!o) return 'not_visited';
+    // A logged visit with no order is a real outcome, not an absence — without this the shop looks
+    // identical to one the salesman never went to.
+    if (!o) return visitedIds.includes(id) ? 'no_order' : 'not_visited';
     if ((o.paidAmount || 0) > 0 && (o.balanceAmount || 0) <= 0) return 'payment_collected';
     return 'order_placed';
   };
@@ -223,7 +276,9 @@ const SalesRoutePage: React.FC = () => {
         </div>
         {/* Legend */}
         <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
-          {Object.entries(STATUS_CFG).map(([k, v]) => (
+          {Object.entries(STATUS_CFG)
+            .filter(([k]) => trackingOn || k !== 'no_order')
+            .map(([k, v]) => (
             <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: v.dot, flexShrink: 0 }} />
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{v.label}</span>
@@ -415,6 +470,22 @@ const SalesRoutePage: React.FC = () => {
                               <PlusOutlined style={{ fontSize: 12 }} />New Order
                             </button>
                           </div>
+                        )}
+
+                        {!order && trackingOn && status !== 'no_order' && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setNoOrderFor(c); }}
+                            style={{
+                              marginTop: 8, width: '100%',
+                              display: 'flex', alignItems: 'center', gap: 5,
+                              fontSize: 12, color: '#b45309', border: '1px solid #fde68a',
+                              background: '#fffbeb', borderRadius: 8,
+                              padding: isSmall ? '10px 12px' : '6px 12px',
+                              cursor: 'pointer', fontWeight: 600, justifyContent: 'center', minHeight: 36,
+                            }}
+                          >
+                            <CloseCircleOutlined style={{ fontSize: 12 }} />Visited — No Order
+                          </button>
                         )}
                       </div>
                     </div>
@@ -672,6 +743,35 @@ const SalesRoutePage: React.FC = () => {
           </Form.Item>
 
         </Form>
+      </Modal>
+
+      <Modal
+        title={noOrderFor ? `No order — ${noOrderFor.businessName}` : 'No order'}
+        open={!!noOrderFor}
+        onCancel={closeNoOrder}
+        onOk={submitNoOrderVisit}
+        okText="Record Visit"
+        confirmLoading={loggingVisit}
+        destroyOnClose
+      >
+        <div style={{ fontSize: 13, color: '#475569', marginBottom: 14 }}>
+          This records that you visited the shop, so it is not counted as skipped.
+        </div>
+        <Select
+          style={{ width: '100%' }}
+          placeholder="Why was there no order?"
+          value={noOrderReason}
+          onChange={setNoOrderReason}
+          options={NO_ORDER_REASONS.map(r => ({ value: r, label: r }))}
+        />
+        <Input.TextArea
+          style={{ marginTop: 10 }}
+          rows={2}
+          maxLength={150}
+          placeholder="Anything else (optional)"
+          value={noOrderNote}
+          onChange={e => setNoOrderNote(e.target.value)}
+        />
       </Modal>
     </div>
   );

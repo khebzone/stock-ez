@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, DatePicker, Tag } from 'antd';
+import { Table, DatePicker, Tag, Tabs } from 'antd';
 import {
   ShoppingOutlined, WalletOutlined, CarOutlined, CheckCircleOutlined,
 } from '@ant-design/icons';
@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import { noFutureDates } from '../../utils/date';
 import { useGetFieldActivityQuery } from '../../store/api/routeAllocationApi';
 import PageHeader from '../../components/PageHeader';
+import LiveMapTab from './LiveMapTab';
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: 'default', SUBMITTED: 'blue', APPROVED: 'cyan',
@@ -114,6 +115,11 @@ const FieldMonitorPage: React.FC = () => {
         }
       />
 
+      <Tabs
+        defaultActiveKey="activity"
+        items={[
+          { key: 'activity', label: 'Activity', children: (
+            <div>
       {/* KPI row */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <KpiCard icon={<ShoppingOutlined />}    label="Total Orders"    value={String(totalOrders)} />
@@ -163,6 +169,11 @@ const FieldMonitorPage: React.FC = () => {
           }}
         />
       </div>
+            </div>
+          ) },
+          { key: 'map', label: 'Live Map', children: <LiveMapTab date={selectedDate} /> },
+        ]}
+      />
     </div>
   );
 };

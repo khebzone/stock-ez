@@ -65,7 +65,7 @@ const DeliveryOrdersPage: React.FC = () => {
   const [collectPayment, { isLoading: collecting }]  = useCollectPaymentMutation();
 
   const orders: any[] = deliveriesData?.data || [];
-  const methods: any[] = methodsData?.data || [];
+  const methods: any[] = (methodsData?.data || []).filter((m: any) => m.mode !== 'CREDIT');
 
   const selectedMethodId = Form.useWatch('paymentMethodId', form);
   const selectedMethod   = methods.find(m => m.id === selectedMethodId);
@@ -495,7 +495,7 @@ const DeliveryOrdersPage: React.FC = () => {
               >
                 <InputNumber
                   style={{ width: '100%' }} size="large"
-                  min={0.01} max={selectedOrder?.balanceAmount}
+                  min={0.01}
                   precision={2} prefix="₹" placeholder="0.00"
                 />
               </Form.Item>

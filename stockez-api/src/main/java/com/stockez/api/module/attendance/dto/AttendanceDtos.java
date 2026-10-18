@@ -65,6 +65,7 @@ public class AttendanceDtos {
     @Data
     public static class TodayStatusResponse {
         private boolean configured;
+        private boolean checkInAnywhere;
         private boolean checkedIn;
         private boolean checkedOut;
         private Instant checkInTime;

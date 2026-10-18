@@ -5,6 +5,7 @@ import com.stockez.api.module.goodsreturn.entity.GoodsReturn;
 import com.stockez.api.module.goodsreturn.entity.GoodsReturnItem;
 import com.stockez.api.module.goodsreturn.repository.GoodsReturnRepository;
 import com.stockez.api.module.order.entity.Order;
+import com.stockez.api.module.order.entity.OrderItem;
 import com.stockez.api.module.order.entity.Payment;
 import com.stockez.api.module.order.repository.OrderRepository;
 import com.stockez.api.module.order.repository.PaymentRepository;
@@ -55,6 +56,128 @@ public class GoodsReturnService {
     private final AuditService auditService;
     private final StockShortageService stockShortageService;
 
+    /**
+     * A return can never be bigger than what is physically there to return:
+     *   sales return     - sold on the order, minus what earlier returns already took back
+     *   purchase return  - in stock (in the named batch, when one is named) and on the referenced bill
+     *   damage           - in stock (in the named batch, when one is named)
+     * The screens pre-cap these, but the server is the last line of defence.
+     */
+    private boolean canFileDamage() {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPER_ADMIN")
+                        || a.getAuthority().equals("RETURNS_DAMAGE"));
+    }
+
+    private void validateReturnQuantities(GoodsReturn.ReturnType type, GoodsReturnDtos.CreateGoodsReturnRequest req,
+                                          Order referenceOrder, PurchaseEntry referencePurchaseEntry, UUID tenantId) {
+        java.util.Map<UUID, Integer> askedByProduct = new java.util.LinkedHashMap<>();
+        for (GoodsReturnDtos.GoodsReturnItemRequest it : req.getItems()) {
+            askedByProduct.merge(it.getProductId(), it.getQuantity(), Integer::sum);
+        }
+
+        if (type == GoodsReturn.ReturnType.SALES_RETURN && referenceOrder != null) {
+            java.util.Map<UUID, Integer> sold = new java.util.HashMap<>();
+            for (OrderItem oi : referenceOrder.getItems()) {
+                sold.merge(oi.getProduct().getId(), oi.getQuantity(), Integer::sum);
+            }
+            java.util.Map<String, Integer> returned = getReturnedQtyByOrder(referenceOrder.getId(), tenantId);
+            for (var e : askedByProduct.entrySet()) {
+                String name = productName(e.getKey(), tenantId);
+                Integer soldQty = sold.get(e.getKey());
+                if (soldQty == null) {
+                    throw new BusinessException("'" + name + "' is not on order " + referenceOrder.getOrderNumber(),
+                            "PRODUCT_NOT_ON_ORDER");
+                }
+                int already = returned.getOrDefault(e.getKey().toString(), 0);
+                if (e.getValue() > soldQty - already) {
+                    throw new BusinessException(String.format(
+                            "Only %d unit(s) of '%s' can still be returned on this order (sold %d, already returned %d)",
+                            Math.max(soldQty - already, 0), name, soldQty, already), "RETURN_QTY_EXCEEDS_SOLD");
+                }
+            }
+        }
+
+        if (type == GoodsReturn.ReturnType.PURCHASE_RETURN || type == GoodsReturn.ReturnType.DAMAGE) {
+            java.util.Map<String, Integer> askedByBatch = new java.util.LinkedHashMap<>();
+            java.util.Map<String, UUID> batchProduct = new java.util.HashMap<>();
+            for (GoodsReturnDtos.GoodsReturnItemRequest it : req.getItems()) {
+                if (it.getBatchNumber() != null && !it.getBatchNumber().isBlank()) {
+                    String bn = it.getBatchNumber().trim();
+                    askedByBatch.merge(bn, it.getQuantity(), Integer::sum);
+                    batchProduct.put(bn, it.getProductId());
+                }
+            }
+            for (var e : askedByBatch.entrySet()) {
+                String bn = e.getKey();
+                UUID productId = batchProduct.get(bn);
+                StockBatch batch = stockBatchRepository.findByTenantAndBatchNumber(tenantId, bn)
+                        .orElseThrow(() -> new BusinessException("Batch " + bn + " was not found", "BATCH_NOT_FOUND"));
+                if (!batch.getProduct().getId().equals(productId)) {
+                    throw new BusinessException("Batch " + bn + " does not belong to '"
+                            + productName(productId, tenantId) + "'", "BATCH_PRODUCT_MISMATCH");
+                }
+                if (e.getValue() > batch.getQuantityAvailable()) {
+                    throw new BusinessException(String.format(
+                            "Batch %s of '%s' has only %d unit(s) in stock - cannot return %d",
+                            bn, productName(productId, tenantId), batch.getQuantityAvailable(), e.getValue()),
+                            "RETURN_QTY_EXCEEDS_STOCK");
+                }
+            }
+            for (var e : askedByProduct.entrySet()) {
+                Integer inStock = stockBatchRepository.sumAvailableByProduct(tenantId, e.getKey());
+                int available = inStock != null ? inStock : 0;
+                if (e.getValue() > available) {
+                    throw new BusinessException(String.format(
+                            "Only %d unit(s) of '%s' in stock - cannot return %d",
+                            available, productName(e.getKey(), tenantId), e.getValue()), "RETURN_QTY_EXCEEDS_STOCK");
+                }
+            }
+        }
+
+        // Against a bill: no more than was bought on it, net of earlier returns. Opening-balance
+        // bills carry no item lines, so there is nothing to compare against.
+        if (type == GoodsReturn.ReturnType.PURCHASE_RETURN && referencePurchaseEntry != null
+                && !referencePurchaseEntry.getItems().isEmpty()) {
+            java.util.Map<UUID, Integer> bought = new java.util.HashMap<>();
+            for (var pi : referencePurchaseEntry.getItems()) {
+                bought.merge(pi.getProduct().getId(), pi.getQuantity(), Integer::sum);
+            }
+            java.util.Map<UUID, Integer> returned = new java.util.HashMap<>();
+            for (Object[] row : goodsReturnRepository.sumReturnedQtyByPurchaseEntry(tenantId, referencePurchaseEntry.getId())) {
+                returned.put((UUID) row[0], ((Number) row[1]).intValue());
+            }
+            for (var e : askedByProduct.entrySet()) {
+                String name = productName(e.getKey(), tenantId);
+                Integer boughtQty = bought.get(e.getKey());
+                if (boughtQty == null) {
+                    throw new BusinessException("'" + name + "' is not on purchase " + referencePurchaseEntry.getEntryNumber(),
+                            "PRODUCT_NOT_ON_PURCHASE");
+                }
+                int already = returned.getOrDefault(e.getKey(), 0);
+                if (e.getValue() > boughtQty - already) {
+                    throw new BusinessException(String.format(
+                            "Only %d unit(s) of '%s' can still be returned on this purchase (bought %d, already returned %d)",
+                            Math.max(boughtQty - already, 0), name, boughtQty, already), "RETURN_QTY_EXCEEDS_PURCHASED");
+                }
+            }
+        }
+    }
+
+    /** Mirror a return/refund event onto the sales order it belongs to, so the order's own audit history tells the whole story. */
+    private void recordOnOrder(GoodsReturn gr, String action, String description) {
+        if (gr.getReferenceOrder() == null) return;
+        auditService.record(gr.getTenant().getId(), "ORDER", gr.getReferenceOrder().getId(), action, description);
+    }
+
+    private String productName(UUID productId, UUID tenantId) {
+        return productRepository.findByIdAndTenantId(productId, tenantId)
+                .map(Product::getName).orElse("product");
+    }
+
     @Transactional
     public GoodsReturnDtos.GoodsReturnResponse createReturn(
             GoodsReturnDtos.CreateGoodsReturnRequest req, UUID userId, UUID tenantId) {
@@ -71,6 +194,10 @@ public class GoodsReturnService {
             throw new BusinessException(
                     "Invalid return type: " + req.getType() + ". Must be SALES_RETURN, PURCHASE_RETURN, or DAMAGE",
                     "INVALID_RETURN_TYPE");
+        }
+
+        if (returnType == GoodsReturn.ReturnType.DAMAGE && !canFileDamage()) {
+            throw new BusinessException("You do not have permission to file damage / loss entries", "DAMAGE_NOT_ALLOWED");
         }
 
         // Each return type carries its own self-describing number series:
@@ -161,6 +288,8 @@ public class GoodsReturnService {
                         ? GoodsReturn.WarehouseStatus.PENDING_VERIFICATION
                         : GoodsReturn.WarehouseStatus.VERIFIED)
                 .build();
+
+        validateReturnQuantities(returnType, req, referenceOrder, referencePurchaseEntry, tenantId);
 
         BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -259,7 +388,23 @@ public class GoodsReturnService {
                 }
 
                 case PURCHASE_RETURN, DAMAGE -> {
-                    // FIFO deduction — remove stock starting from oldest batch
+                    String namedBatch = item.getBatchNumber() != null ? item.getBatchNumber().trim() : "";
+                    if (!namedBatch.isEmpty()) {
+                        // The batch the user picked is the stock that physically goes; availability was checked up front.
+                        StockBatch batch = stockBatchRepository.findByTenantAndBatchNumber(tenantId, namedBatch)
+                                .orElseThrow(() -> new BusinessException(
+                                        "Batch " + namedBatch + " was not found", "BATCH_NOT_FOUND"));
+                        batch.setQuantityAvailable(batch.getQuantityAvailable() - item.getQuantity());
+                        if (batch.getQuantityAvailable() == 0) {
+                            batch.setActive(false);
+                        }
+                        stockBatchRepository.save(batch);
+                        Integer batchStock = stockBatchRepository.sumAvailableByProduct(tenantId, productId);
+                        product.setStockQuantity(batchStock != null ? batchStock : 0);
+                        productRepository.save(product);
+                        continue;
+                    }
+                    // No batch named: FIFO deduction, oldest batch first
                     List<StockBatch> fifoBatches = stockBatchRepository.findFifoByProduct(tenantId, productId);
                     int remaining = item.getQuantity();
 
@@ -330,6 +475,8 @@ public class GoodsReturnService {
         auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "CREATED",
                 "Return " + saved.getReturnNumber() + " (" + returnType.name() + ") — " +
                 req.getItems().size() + " item(s), ₹" + saved.getTotalAmount().toPlainString());
+        recordOnOrder(saved, "RETURN_FILED", "Return " + saved.getReturnNumber() + " filed against this order \u2014 "
+                + req.getItems().size() + " item(s), ₹" + saved.getTotalAmount().toPlainString());
         return toResponse(saved);
     }
 
@@ -387,6 +534,12 @@ public class GoodsReturnService {
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<GoodsReturnDtos.GoodsReturnResponse> getWarehouseHistory(UUID tenantId, java.time.LocalDate from, java.time.LocalDate to) {
+        return goodsReturnRepository.findSalesReturnHistory(tenantId, from, to)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
     /** Void a return that's still awaiting warehouse verification — safe because nothing has
      *  touched stock, the customer's balance, or any payment yet at this stage (that only
      *  happens in verifyWarehouseReceipt). Once verified, this is no longer available; a
@@ -416,6 +569,8 @@ public class GoodsReturnService {
         auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "CANCELLED",
                 "Return " + saved.getReturnNumber() + " cancelled by " + cancelledBy.getFullName()
                         + " — " + req.getReason());
+        recordOnOrder(saved, "RETURN_CANCELLED", "Return " + saved.getReturnNumber() + " cancelled by "
+                + cancelledBy.getFullName() + " — " + req.getReason());
         return toResponse(saved);
     }
 
@@ -439,6 +594,8 @@ public class GoodsReturnService {
                 .collect(Collectors.toMap(
                         GoodsReturnDtos.VerifyReceiptItem::getItemId,
                         GoodsReturnDtos.VerifyReceiptItem::getReceivedQty));
+        java.util.Map<UUID, Integer> damagedByItem = new java.util.HashMap<>();
+        req.getItems().forEach(i -> damagedByItem.put(i.getItemId(), i.getDamagedQty() != null ? i.getDamagedQty() : 0));
 
         Order referenceOrder = gr.getReferenceOrder();
         UUID routeId = resolveRouteId(referenceOrder);
@@ -449,6 +606,7 @@ public class GoodsReturnService {
 
         int totalFiled = 0;
         int totalReceived = 0;
+        int totalDamaged = 0;
 
         for (GoodsReturnItem item : gr.getItems()) {
             Integer received = receivedByItem.get(item.getId());
@@ -464,9 +622,19 @@ public class GoodsReturnService {
                         "RECEIVED_QTY_TOO_HIGH");
             }
 
+            int damaged = damagedByItem.getOrDefault(item.getId(), 0);
+            if (damaged > received) {
+                throw new BusinessException(
+                        "Damaged quantity cannot exceed the received quantity for product: "
+                                + item.getProduct().getName(),
+                        "DAMAGED_QTY_TOO_HIGH");
+            }
+
             item.setReceivedQty(received);
+            item.setDamagedQty(damaged);
             totalFiled += item.getQuantity();
             totalReceived += received;
+            totalDamaged += damaged;
 
             Product product = item.getProduct();
             UUID productId = product.getId();
@@ -479,7 +647,16 @@ public class GoodsReturnService {
                         routeId, routeName, responsiblePerson, verifiedBy, gr.getReturnDate());
             }
 
-            if (received > 0) {
+            // Damaged units came back but cannot be sold: refunded to the customer, written off here.
+            if (damaged > 0) {
+                stockShortageService.record(
+                        gr.getTenant(), product, item.getBatchNumber(), damaged, item.getUnitRate(),
+                        StockShortage.SourceType.SALES_RETURN_DAMAGED, gr.getReturnNumber(), gr.getId(),
+                        routeId, routeName, null, verifiedBy, gr.getReturnDate());
+            }
+
+            int sellable = received - damaged;
+            if (sellable > 0) {
                 StockBatch targetBatch;
                 if (item.getBatchNumber() != null && !item.getBatchNumber().isBlank()) {
                     targetBatch = stockBatchRepository
@@ -496,7 +673,7 @@ public class GoodsReturnService {
                             .orElseThrow(() -> new BusinessException(
                                     "No stock batch found for product: " + product.getName(), "BATCH_NOT_FOUND"));
                 }
-                targetBatch.setQuantityAvailable(targetBatch.getQuantityAvailable() + received);
+                targetBatch.setQuantityAvailable(targetBatch.getQuantityAvailable() + sellable);
                 targetBatch.setActive(true);
                 stockBatchRepository.save(targetBatch);
 
@@ -507,9 +684,11 @@ public class GoodsReturnService {
         }
 
         // ── Financial settlement — based on the quantity actually received ──
-        // The customer's bill is reduced by the value of goods confirmed back. If they had
-        // already paid more than the reduced bill, the excess is refunded in cash right now
-        // (no separate "process refund" step). Otherwise their outstanding simply drops.
+        // The customer's bill is reduced by the value of goods confirmed back (damaged included: the
+        // customer is credited either way). If they had already paid more than the reduced bill, the
+        // excess becomes a PENDING refund that finance pays out from Refunds & Claims with the real
+        // payment mode and date; no cash is recorded as leaving until then. Otherwise their
+        // outstanding simply drops.
         BigDecimal receivedValue = BigDecimal.ZERO;
         for (GoodsReturnItem item : gr.getItems()) {
             Integer rec = item.getReceivedQty();
@@ -519,7 +698,6 @@ public class GoodsReturnService {
         }
 
         if (referenceOrder != null && receivedValue.compareTo(BigDecimal.ZERO) > 0) {
-            Instant now = Instant.now();
             BigDecimal newTotal = referenceOrder.getTotalAmount().subtract(receivedValue);
             if (newTotal.compareTo(BigDecimal.ZERO) < 0) newTotal = BigDecimal.ZERO;
 
@@ -527,32 +705,11 @@ public class GoodsReturnService {
             BigDecimal refundAmt = paidSoFar.subtract(newTotal); // positive = customer overpaid vs new total
 
             if (refundAmt.compareTo(BigDecimal.ZERO) > 0) {
-                // Negative payment = cash going out of the business back to the customer
-                Payment refundPayment = Payment.builder()
-                        .tenant(gr.getTenant())
-                        .order(referenceOrder)
-                        .customer(referenceOrder.getCustomer())
-                        .collectedBy(verifiedBy)
-                        .amount(refundAmt.negate())
-                        .paymentMode(Payment.PaymentMode.CASH)
-                        .collectionDate(gr.getReturnDate())
-                        .cleared(true)
-                        .clearedAt(now)
-                        .submitted(true)
-                        .submittedAt(now)
-                        .notes("Refund for " + gr.getReturnNumber())
-                        .build();
-                paymentRepository.save(refundPayment);
-
                 referenceOrder.setPaidAmount(newTotal);
                 referenceOrder.setBalanceAmount(BigDecimal.ZERO);
 
-                gr.setRefundStatus(GoodsReturn.RefundStatus.PROCESSED);
+                gr.setRefundStatus(GoodsReturn.RefundStatus.PENDING);
                 gr.setRefundAmount(refundAmt);
-                gr.setRefundDate(gr.getReturnDate());
-                gr.setRefundMode("CASH");
-                gr.setRefundProcessedBy(verifiedBy);
-                gr.setRefundProcessedAt(now);
             } else {
                 referenceOrder.setBalanceAmount(newTotal.subtract(paidSoFar));
             }
@@ -567,19 +724,28 @@ public class GoodsReturnService {
 
         int shortage = totalFiled - totalReceived;
         String detail = "Return " + saved.getReturnNumber() + " verified by " + verifiedBy.getFullName()
-                + " — received " + totalReceived + " of " + totalFiled + " filed unit(s), stock restored";
+                + " — received " + totalReceived + " of " + totalFiled + " filed unit(s), "
+                + (totalReceived - totalDamaged) + " restocked";
+        if (totalDamaged > 0) {
+            detail += ", " + totalDamaged + " damaged (written off, not restocked)";
+        }
         if (shortage > 0) {
             detail += ". SHORTAGE: " + shortage + " unit(s) filed but not received.";
         }
         auditService.record(tenantId, "GOODS_RETURN", saved.getId(),
                 shortage > 0 ? "WAREHOUSE_VERIFIED_SHORTAGE" : "WAREHOUSE_VERIFIED", detail);
+        recordOnOrder(saved, "RETURN_VERIFIED", detail);
 
-        if (saved.getRefundStatus() == GoodsReturn.RefundStatus.PROCESSED
+        if (saved.getRefundStatus() == GoodsReturn.RefundStatus.PENDING
                 && saved.getRefundAmount() != null && saved.getRefundAmount().compareTo(BigDecimal.ZERO) > 0) {
-            auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "REFUND_PROCESSED",
-                    "₹" + saved.getRefundAmount().toPlainString() + " refunded in CASH to "
-                            + (referenceOrder.getCustomer() != null ? referenceOrder.getCustomer().getBusinessName() : "customer")
-                            + " on receipt verification by " + verifiedBy.getFullName());
+            String customerName = referenceOrder.getCustomer() != null
+                    ? referenceOrder.getCustomer().getBusinessName() : "customer";
+            auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "REFUND_INITIATED",
+                    "₹" + saved.getRefundAmount().toPlainString() + " refund due to " + customerName
+                            + " — awaiting payout by finance (Refunds & Claims)");
+            recordOnOrder(saved, "REFUND_INITIATED", "₹" + saved.getRefundAmount().toPlainString()
+                    + " refund due to the customer for return " + saved.getReturnNumber()
+                    + " — awaiting payout by finance");
         }
         return toResponse(saved);
     }
@@ -753,6 +919,10 @@ public class GoodsReturnService {
                 supplierOwed ? "SUPPLIER_CLAIM_SETTLED" : "REFUND_PROCESSED",
                 "₹" + goodsReturn.getRefundAmount().toPlainString() + " " + how
                 + " by " + processedBy.getFullName());
+        if (!supplierOwed) {
+            recordOnOrder(updated, "REFUNDED", "₹" + goodsReturn.getRefundAmount().toPlainString() + " refunded " + how
+                    + " for return " + updated.getReturnNumber() + " by " + processedBy.getFullName());
+        }
 
         return toResponse(updated);
     }
@@ -870,6 +1040,8 @@ public class GoodsReturnService {
         GoodsReturn saved = goodsReturnRepository.save(gr);
         auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "REFUND_INITIATED",
                 "Refund of ₹" + amount.toPlainString() + " queued for cancelled order " + order.getOrderNumber());
+        recordOnOrder(saved, "REFUND_INITIATED", "Refund of ₹" + amount.toPlainString()
+                + " queued for this cancelled order (" + saved.getReturnNumber() + ")");
     }
 
     /**
@@ -1082,6 +1254,7 @@ public class GoodsReturnService {
             ir.setBatchNumber(item.getBatchNumber());
             ir.setQuantity(item.getQuantity());
             ir.setReceivedQty(item.getReceivedQty());
+            ir.setDamagedQty(item.getDamagedQty());
             ir.setUnitRate(item.getUnitRate());
             ir.setAmount(item.getAmount());
             ir.setGstPercent(item.getGstPercent());

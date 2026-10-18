@@ -6,6 +6,9 @@ import {
   useGetWorkflowSettingsQuery, useUpdateWorkflowSettingsMutation,
   useUploadCompanyLogoMutation,
 } from '../../store/api/supplierApi';
+import {
+  useGetTrackingSettingsQuery, useSaveTrackingSettingsMutation,
+} from '../../store/api/trackingApi';
 import PageHeader from '../../components/PageHeader';
 
 const { Text } = Typography;
@@ -66,7 +69,8 @@ const CompanySettingsPage: React.FC = () => {
   const [form] = Form.useForm();
   const { data, isLoading } = useGetCompanyProfileQuery();
   const [updateProfile, { isLoading: saving }] = useUpdateCompanyProfileMutation();
-  const [uploadLogo, { isLoading: uploadingLogo }] = useUploadCompanyLogoMutation();
+  const [uploadLogo] = useUploadCompanyLogoMutation();
+  const [uploadingSlot, setUploadingSlot] = useState<'logo' | 'extra' | 'qr' | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [extraImageUrl, setExtraImageUrl] = useState<string | null>(null);
   const [paymentQrImageUrl, setPaymentQrImageUrl] = useState<string | null>(null);
@@ -83,6 +87,28 @@ const CompanySettingsPage: React.FC = () => {
     discountType: 'PERCENT' as 'PERCENT' | 'AMOUNT',
     showPurchaseRateToSales: true,
   });
+
+  const { data: trackingData } = useGetTrackingSettingsQuery();
+  const [saveTrackingSettings] = useSaveTrackingSettingsMutation();
+
+  const [ts, setTs] = useState({
+    locationTrackingEnabled: false,
+    locationPingIntervalSeconds: 90,
+    trackOnlyWhenCheckedIn: true,
+    locationRetentionDays: 90,
+  });
+
+  useEffect(() => {
+    if (trackingData?.data) {
+      const t = trackingData.data;
+      setTs({
+        locationTrackingEnabled: t.locationTrackingEnabled ?? false,
+        locationPingIntervalSeconds: t.locationPingIntervalSeconds ?? 90,
+        trackOnlyWhenCheckedIn: t.trackOnlyWhenCheckedIn ?? true,
+        locationRetentionDays: t.locationRetentionDays ?? 90,
+      });
+    }
+  }, [trackingData]);
 
   useEffect(() => {
     if (settingsData?.data) {
@@ -103,6 +129,7 @@ const CompanySettingsPage: React.FC = () => {
   const handleSaveWorkflow = async () => {
     try {
       await updateWorkflowSettings(ws).unwrap();
+      await saveTrackingSettings(ts).unwrap();
       message.success('Workflow settings saved');
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to save settings');
@@ -132,7 +159,7 @@ const CompanySettingsPage: React.FC = () => {
         invoiceTerms: p.invoiceTerms, stateCode: p.stateCode,
         bankName: p.bankName, bankAccountName: p.bankAccountName,
         bankAccountNumber: p.bankAccountNumber, bankBranch: p.bankBranch,
-        bankIfsc: p.bankIfsc, invoiceFooterNote: p.invoiceFooterNote,
+        bankIfsc: p.bankIfsc, invoiceFooterNote: p.invoiceFooterNote, upiId: p.upiId,
       });
       setLogoUrl(p.logoUrl || null);
       setExtraImageUrl(p.extraImageUrl || null);
@@ -140,22 +167,25 @@ const CompanySettingsPage: React.FC = () => {
     }
   }, [data, form]);
 
-  const uploadImage = (setter: (url: string) => void, label: string) => async (file: File) => {
+  const uploadImage = (slot: 'logo' | 'extra' | 'qr', setter: (url: string) => void, label: string) => async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
+    setUploadingSlot(slot);
     try {
       const result = await uploadLogo(formData).unwrap();
       setter(result.data.url);
       message.success(`${label} uploaded`);
     } catch {
       message.error(`Failed to upload ${label.toLowerCase()}`);
+    } finally {
+      setUploadingSlot(null);
     }
     return false;
   };
 
-  const handleLogoUpload = uploadImage((u) => setLogoUrl(u), 'Logo');
-  const handleExtraUpload = uploadImage((u) => setExtraImageUrl(u), 'Image');
-  const handleQrUpload = uploadImage((u) => setPaymentQrImageUrl(u), 'QR code');
+  const handleLogoUpload = uploadImage('logo', (u) => setLogoUrl(u), 'Logo');
+  const handleExtraUpload = uploadImage('extra', (u) => setExtraImageUrl(u), 'Image');
+  const handleQrUpload = uploadImage('qr', (u) => setPaymentQrImageUrl(u), 'QR code');
 
   const handleSave = async () => {
     try {
@@ -311,14 +341,14 @@ const CompanySettingsPage: React.FC = () => {
                     />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <Upload accept="image/*" showUploadList={false} beforeUpload={handleLogoUpload}>
-                        <Button size="small" icon={<UploadOutlined />} loading={uploadingLogo}>Change</Button>
+                        <Button size="small" icon={<UploadOutlined />} loading={uploadingSlot === 'logo'}>Change</Button>
                       </Upload>
-                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogoUrl(null)}>Remove</Button>
+                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => { setLogoUrl(null); message.info('Logo removed. Click Save to apply.'); }}>Remove</Button>
                     </div>
                   </div>
                 ) : (
                   <Upload accept="image/*" showUploadList={false} beforeUpload={handleLogoUpload}>
-                    <Button icon={<UploadOutlined />} loading={uploadingLogo}>Upload Logo</Button>
+                    <Button icon={<UploadOutlined />} loading={uploadingSlot === 'logo'}>Upload Logo</Button>
                   </Upload>
                 )}
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
@@ -332,20 +362,26 @@ const CompanySettingsPage: React.FC = () => {
                   hint="Optional second image on the invoice header — a deity, founder portrait or emblem."
                   url={extraImageUrl}
                   onUpload={handleExtraUpload}
-                  onRemove={() => setExtraImageUrl(null)}
-                  uploading={uploadingLogo}
+                  onRemove={() => { setExtraImageUrl(null); message.info('Image removed. Click Save to apply.'); }}
+                  uploading={uploadingSlot === 'extra'}
                 />
 
                 <Divider style={{ margin: '20px 0' }} />
 
-                <ImageField
-                  label="Payment QR Code"
-                  hint="GPay / PhonePe / UPI QR, printed beside the bank details so customers can pay from the bill."
+                <Form.Item name="upiId" label="UPI ID"
+                  tooltip="Each bill with a balance due gets a QR for this UPI ID. The customer enters the amount."
+                  rules={[{ pattern: /^$|^[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9]{1,}$/, message: 'Invalid UPI ID (e.g. name@bank)' }]}>
+                  <Input placeholder="e.g. santhitraders@okaxis" maxLength={100} />
+                </Form.Item>
+
+                {paymentQrImageUrl && <ImageField
+                  label="Old uploaded QR (remove it - the UPI ID makes the QR now)"
+                  hint="Used only when no UPI ID is set, or when the bill has no balance due."
                   url={paymentQrImageUrl}
                   onUpload={handleQrUpload}
-                  onRemove={() => setPaymentQrImageUrl(null)}
-                  uploading={uploadingLogo}
-                />
+                  onRemove={() => { setPaymentQrImageUrl(null); message.info('QR code removed. Click Save to apply.'); }}
+                  uploading={uploadingSlot === 'qr'}
+                />}
               </Section>
 
               <Divider style={{ margin: '8px 0 20px' }} />
@@ -578,6 +614,69 @@ const CompanySettingsPage: React.FC = () => {
                   <Switch
                     checked={ws.showPurchaseRateToSales}
                     onChange={v => setWs(prev => ({ ...prev, showPurchaseRateToSales: v }))}
+                  />
+                }
+              />
+
+              <Divider style={{ margin: '20px 0 16px' }} />
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                Field Tracking
+              </div>
+
+              <SettingRow
+                label="Record Staff Location"
+                description="When ON, sales and delivery staff phones report their position while the StockEz app is open, and every order, collection and delivery is stamped with where it was made. Tell your staff before turning this on."
+                control={
+                  <Switch
+                    checked={ts.locationTrackingEnabled}
+                    onChange={v => setTs(prev => ({ ...prev, locationTrackingEnabled: v }))}
+                  />
+                }
+              />
+              <SettingRow
+                label="Only While Checked In"
+                description="When ON, nothing is recorded before the staff member checks in or after they check out. Turn OFF only if your staff bill without using attendance."
+                control={
+                  <Switch
+                    disabled={!ts.locationTrackingEnabled}
+                    checked={ts.trackOnlyWhenCheckedIn}
+                    onChange={v => setTs(prev => ({ ...prev, trackOnlyWhenCheckedIn: v }))}
+                  />
+                }
+              />
+              <SettingRow
+                label="Reporting Interval"
+                description="How often a moving phone reports its position. Shorter gives a finer trail and uses more battery."
+                control={
+                  <Select
+                    disabled={!ts.locationTrackingEnabled}
+                    style={{ width: 150 }}
+                    value={ts.locationPingIntervalSeconds}
+                    onChange={v => setTs(prev => ({ ...prev, locationPingIntervalSeconds: v }))}
+                    options={[
+                      { value: 60,  label: 'Every 1 minute' },
+                      { value: 90,  label: 'Every 90 seconds' },
+                      { value: 180, label: 'Every 3 minutes' },
+                      { value: 300, label: 'Every 5 minutes' },
+                    ]}
+                  />
+                }
+              />
+              <SettingRow
+                label="Keep Location Trail For"
+                description="Position history is deleted after this many days. Shop visit records are kept permanently — only the movement trail between shops is trimmed."
+                control={
+                  <Select
+                    disabled={!ts.locationTrackingEnabled}
+                    style={{ width: 150 }}
+                    value={ts.locationRetentionDays}
+                    onChange={v => setTs(prev => ({ ...prev, locationRetentionDays: v }))}
+                    options={[
+                      { value: 30,  label: '30 days' },
+                      { value: 90,  label: '90 days' },
+                      { value: 180, label: '6 months' },
+                      { value: 365, label: '1 year' },
+                    ]}
                   />
                 }
               />

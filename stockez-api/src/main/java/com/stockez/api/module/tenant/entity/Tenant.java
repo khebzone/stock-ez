@@ -20,7 +20,7 @@ public class Tenant {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(nullable = false, unique = true, length = 50)
@@ -97,6 +97,9 @@ public class Tenant {
 
     @Column(name = "payment_qr_image_url", length = 500)
     private String paymentQrImageUrl;
+
+    @Column(name = "upi_id", length = 100)
+    private String upiId;
 
     @Column(name = "bank_name", length = 120)
     private String bankName;

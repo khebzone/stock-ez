@@ -20,6 +20,8 @@ import { hasPermission, isAdmin } from '../utils/permissions';
 import { hasPlan, type RequiredPlan } from '../utils/planGate';
 import DailyKural from '../components/DailyKural';
 import WelcomeGift from '../components/WelcomeGift';
+import { useExportBranding } from '../utils/exportBranding';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const { Header, Sider, Content } = Layout;
 
@@ -200,6 +202,8 @@ const BREADCRUMBS: Record<string, string[]> = {
 };
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useExportBranding();
+  useRealtimeSync();
   const location = useLocation();
   const navigate = useNavigate();
   const screens = Grid.useBreakpoint();

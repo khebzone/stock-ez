@@ -45,8 +45,9 @@ public class AuthService {
                     .orElse(null);
         } else {
             // No slug — super admin login only (stockez.in)
-            user = userRepository.findByPhoneAndActiveTrue(identifier)
+            user = userRepository.findAllByPhoneAndActiveTrue(identifier).stream()
                     .filter(u -> u.getRole() == User.UserRole.SUPER_ADMIN)
+                    .findFirst()
                     .orElse(null);
             if (user == null) {
                 user = userRepository.findByEmailAndActiveTrue(identifier)

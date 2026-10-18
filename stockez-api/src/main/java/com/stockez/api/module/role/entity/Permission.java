@@ -28,7 +28,7 @@ public enum Permission {
     // Stock Adjustment
     STOCK_ADJUSTMENT_VIEW, STOCK_ADJUSTMENT_CREATE,
     // Goods Return
-    RETURNS_VIEW, RETURNS_CREATE, RETURNS_APPROVE,
+    RETURNS_VIEW, RETURNS_CREATE, RETURNS_APPROVE, RETURNS_DAMAGE,
     // Gate Pass
     GATE_PASS_VIEW, GATE_PASS_CREATE,
     // Warehouse Picklist

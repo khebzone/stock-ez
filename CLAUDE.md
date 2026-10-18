@@ -76,7 +76,7 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 
 ### Orders
 - States: DRAFT → APPROVED → PREPARED → DISPATCHED → DELIVERED
-- FIFO stock deducted at APPROVED stage
+- FIFO stock deducted when the order is created (status SUBMITTED, or APPROVED if invoice approval is off) — not at approval; cancelling restores it
 - Each order item records `batchNumber` and `batchExpiryDate`
 
 ---

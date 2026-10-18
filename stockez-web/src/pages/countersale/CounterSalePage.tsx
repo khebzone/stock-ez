@@ -71,7 +71,8 @@ const CounterSalePage: React.FC = () => {
   const [productPage, setProductPage]         = useState(1);
 
   const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery(undefined, { refetchOnMountOrArgChange: true });
-  const { data: productsData }        = useGetAllProductsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: productsData, refetch: refetchProducts } =
+    useGetAllProductsQuery(undefined, { refetchOnMountOrArgChange: true, pollingInterval: 60_000, refetchOnFocus: true });
   const { data: paymentMethodsData }  = useGetPaymentMethodsQuery();
   const [counterSale, { isLoading: submitting }] = useCounterSaleMutation();
   const [createCustomer, { isLoading: creatingCust }] = useCreateCustomerMutation();
@@ -348,6 +349,7 @@ const CounterSalePage: React.FC = () => {
       setProductPage(1);
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to complete sale');
+      if (/insufficient stock/i.test(err?.data?.message || '')) refetchProducts();
     }
   };
 

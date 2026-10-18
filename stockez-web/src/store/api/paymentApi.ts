@@ -6,6 +6,18 @@ export const paymentApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/payments', method: 'POST', body }),
       invalidatesTags: ['Payment', 'Order'],
     }),
+    voidPayment: builder.mutation<any, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({ url: `/payments/${id}/void`, method: 'POST', body: { reason } }),
+      invalidatesTags: ['Payment', 'Order'],
+    }),
+    editPayment: builder.mutation<any, { id: string } & Record<string, any>>({
+      query: ({ id, ...body }) => ({ url: `/payments/${id}`, method: 'PUT', body }),
+      invalidatesTags: ['Payment', 'Order'],
+    }),
+    getPaymentChanges: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/payments/changes?from=${from}&to=${to}`,
+      providesTags: ['Payment'],
+    }),
     getDailySummary: builder.query<any, { date?: string; personId?: string }>({
       query: ({ date, personId } = {}) => {
         const params = new URLSearchParams();
@@ -33,6 +45,14 @@ export const paymentApi = baseApi.injectEndpoints({
     }),
     submitDayCollections: builder.mutation<any, void>({
       query: () => ({ url: '/payments/submit-day', method: 'POST' }),
+      invalidatesTags: ['Payment'],
+    }),
+    getAwaitingSubmission: builder.query<any, void>({
+      query: () => '/payments/awaiting-submission',
+      providesTags: ['Payment'],
+    }),
+    submitDayForPerson: builder.mutation<any, string>({
+      query: (personId) => ({ url: `/payments/submit-day/${personId}`, method: 'POST' }),
       invalidatesTags: ['Payment'],
     }),
     getPendingVerifications: builder.query<any, void>({
@@ -80,12 +100,17 @@ export const paymentApi = baseApi.injectEndpoints({
 
 export const {
   useCollectPaymentMutation,
+  useVoidPaymentMutation,
+  useEditPaymentMutation,
+  useGetPaymentChangesQuery,
   useGetDailySummaryQuery,
   useGetUnclearedPaymentsQuery,
   useClearPaymentsMutation,
   useGetOrderPaymentsQuery,
   useGetMyDayCollectionsQuery,
   useSubmitDayCollectionsMutation,
+  useGetAwaitingSubmissionQuery,
+  useSubmitDayForPersonMutation,
   useGetPendingVerificationsQuery,
   useGetOutstandingSummaryQuery,
   useGetCustomerOrdersQuery,

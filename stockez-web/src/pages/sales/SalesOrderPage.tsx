@@ -245,7 +245,8 @@ const SalesOrderPage: React.FC = () => {
   const [newCustomerForm]                     = Form.useForm();
 
   const { data: customersData, isLoading: custLoading, refetch: refetchCustomers } = useGetMyCustomersQuery();
-  const { data: productsData,  isLoading: prodLoading  } = useGetAllProductsQuery();
+  const { data: productsData,  isLoading: prodLoading, refetch: refetchProducts } =
+    useGetAllProductsQuery(undefined, { pollingInterval: 60_000, refetchOnFocus: true });
   const [createOrder, { isLoading: creating }]           = useCreateOrderMutation();
   const [createCustomer, { isLoading: creatingCust }]    = useCreateCustomerMutation();
   const { data: outstandingData } = useGetCustomerOutstandingQuery(selectedCustomer?.id ?? 'skip', { skip: !selectedCustomer?.id , refetchOnMountOrArgChange: true });
@@ -545,6 +546,7 @@ const SalesOrderPage: React.FC = () => {
       navigate('/sales/route');
     } catch (err: any) {
       message.error(err?.data?.message || 'Failed to place order');
+      if (err?.data?.code === 'INSUFFICIENT_STOCK' || /insufficient stock/i.test(err?.data?.message || '')) refetchProducts();
     }
   };
 

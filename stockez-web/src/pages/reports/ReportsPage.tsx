@@ -384,7 +384,8 @@ const ShortageTab: React.FC = () => {
   const byRoute: any[] = report?.byRoute || [];
   const byPerson: any[] = report?.byPerson || [];
 
-  const sourceLabel = (v: string) => v === 'SALES_RETURN' ? 'Sales Return' : 'Undelivered Order';
+  const sourceLabel = (v: string) => v === 'SALES_RETURN' ? 'Sales Return'
+    : v === 'SALES_RETURN_DAMAGED' ? 'Damaged Return' : 'Undelivered Order';
 
   const exportCols = [
     { title: 'Date',        key: 'shortageDate',    dataIndex: 'shortageDate' },

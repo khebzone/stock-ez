@@ -41,9 +41,9 @@ const uploadImage = async (file: File, token: string): Promise<string> => {
 };
 
 const LocationPicker: React.FC<{
-  lat?: number; lng?: number;
+  lat?: number; lng?: number; required?: boolean;
   onChange: (lat: number, lng: number) => void;
-}> = ({ lat, lng, onChange }) => {
+}> = ({ lat, lng, required, onChange }) => {
   const [mapLink, setMapLink] = useState('');
   const [resolving, setResolving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -139,8 +139,11 @@ const LocationPicker: React.FC<{
           </a>
         </div>
       ) : (
-        <div style={{ background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>
-          No location set yet
+        <div style={{
+          background: required ? '#fef2f2' : '#fafafa', border: `1px solid ${required ? '#fecaca' : '#e5e7eb'}`,
+          borderRadius: 8, padding: '10px 14px', fontSize: 12, color: required ? '#dc2626' : '#9ca3af', textAlign: 'center',
+        }}>
+          {required ? 'Location required - capture it to continue' : 'No location set yet'}
         </div>
       )}
     </div>
@@ -542,8 +545,16 @@ const CustomersPage: React.FC = () => {
     4: ['creditAllowed', 'creditDays', 'creditLimit'],
   };
 
+  // A salesman adding a shop in the field must capture where it is; office staff may leave it for later.
+  const locationRequired = isFieldView && !editingCustomer;
+  const hasLocation = !!(lat && lng);
+
   const handleNext = async () => {
     try {
+      if (currentStep === 2 && locationRequired && !hasLocation) {
+        message.error('Capture the shop location first: use GPS while standing at the shop, or paste a Google Maps link.');
+        return;
+      }
       await form.validateFields(stepFields[currentStep]);
       setCurrentStep(s => s + 1);
     } catch {
@@ -553,6 +564,11 @@ const CustomersPage: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
+      if (locationRequired && !hasLocation) {
+        setCurrentStep(2);
+        message.error('Shop location is required before the customer can be added.');
+        return;
+      }
       await form.validateFields();
       const allValues = form.getFieldsValue(true);
       const payload = { ...allValues, latitude: lat, longitude: lng, ownerImageUrl, shopImageUrl };
@@ -682,9 +698,11 @@ const CustomersPage: React.FC = () => {
     2: (
       <div>
         <div style={{ background: '#f9fafb', borderRadius: 8, padding: '12px 14px', marginBottom: 20, border: '1px solid #e5e7eb', fontSize: 12, color: '#374151', lineHeight: 1.6 }}>
-          The delivery person sees this shop on the map during delivery. Use GPS to capture the exact location.
+          {locationRequired
+            ? 'Shop location is required. Stand at the shop and tap Capture GPS, or paste a Google Maps link. The delivery person sees this shop on the map.'
+            : 'The delivery person sees this shop on the map during delivery. Use GPS to capture the exact location.'}
         </div>
-        <LocationPicker lat={lat} lng={lng} onChange={(la, lo) => { setLat(la); setLng(lo); }} />
+        <LocationPicker lat={lat} lng={lng} required={locationRequired} onChange={(la, lo) => { setLat(la); setLng(lo); }} />
       </div>
     ),
     3: (

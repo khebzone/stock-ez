@@ -77,7 +77,7 @@ const AttendanceSelfCheckIn: React.FC<AttendanceSelfCheckInProps> = ({ compact }
 
   const busy = locating || checkingIn || checkingOut;
 
-  if (!status?.configured) {
+  if (!status?.configured && !status?.checkInAnywhere) {
     return (
       <Alert
         type="warning"
@@ -113,7 +113,7 @@ const AttendanceSelfCheckIn: React.FC<AttendanceSelfCheckInProps> = ({ compact }
               Not checked in
             </div>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              Your location will be verified when you check in
+              {status?.checkInAnywhere ? 'You can check in from anywhere' : 'Your location will be verified when you check in'}
             </div>
           </>
         ) : (
@@ -191,7 +191,7 @@ const AttendanceSelfCheckIn: React.FC<AttendanceSelfCheckInProps> = ({ compact }
       {!status?.checkedIn && (
         <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <EnvironmentOutlined />
-          You must be at the office to check in
+          {status?.checkInAnywhere ? 'Your location is recorded when you check in' : 'You must be at the office to check in'}
         </div>
       )}
     </div>

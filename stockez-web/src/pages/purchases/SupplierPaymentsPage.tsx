@@ -92,6 +92,7 @@ const SupplierPaymentsPage: React.FC = () => {
             summaries.map((s: any) => ({
               supplier: s.supplierName,
               purchased: s.totalPurchased,
+              returns: s.returnCredit,
               paid: s.totalPaid,
               outstanding: s.outstanding,
               lastPurchase: s.lastPurchaseDate ? dayjs(s.lastPurchaseDate).format('DD MMM YYYY') : '',
@@ -100,6 +101,7 @@ const SupplierPaymentsPage: React.FC = () => {
             [
               { title: 'Supplier',       key: 'supplier',    dataIndex: 'supplier' },
               { title: 'Total Purchased', key: 'purchased',  dataIndex: 'purchased' },
+              { title: 'Returns Credit',  key: 'returns',    dataIndex: 'returns' },
               { title: 'Total Paid',      key: 'paid',       dataIndex: 'paid' },
               { title: 'Outstanding',     key: 'outstanding', dataIndex: 'outstanding' },
               { title: 'Last Purchase',   key: 'lastPurchase', dataIndex: 'lastPurchase' },
@@ -117,8 +119,8 @@ const SupplierPaymentsPage: React.FC = () => {
 
         {/* Supplier Summary Table */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 20px' }}>
-            {['Supplier', 'Purchased', 'Paid', 'Outstanding'].map(h => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr)', columnGap: 10, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 20px' }}>
+            {['Supplier', 'Purchased', 'Returns', 'Paid', 'Outstanding'].map(h => (
               <div key={h} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
             ))}
           </div>
@@ -135,7 +137,7 @@ const SupplierPaymentsPage: React.FC = () => {
                 key={s.supplierName}
                 onClick={() => setSelectedSupplier(isSelected ? null : s.supplierName)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                  display: 'grid', gridTemplateColumns: 'minmax(130px, 1.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr)', columnGap: 10,
                   padding: '13px 20px', alignItems: 'center',
                   borderBottom: i < summaries.length - 1 ? '1px solid #f1f5f9' : 'none',
                   background: isSelected ? '#eff6ff' : '#fff',
@@ -159,6 +161,7 @@ const SupplierPaymentsPage: React.FC = () => {
                   </div>
                 </div>
                 <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{formatINR(s.totalPurchased)}</div>
+                <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{Number(s.returnCredit) > 0 ? `− ${formatINR(s.returnCredit)}` : '—'}</div>
                 <div style={{ fontWeight: 600, color: '#059669', fontSize: 13 }}>{formatINR(s.totalPaid)}</div>
                 <div style={{ fontWeight: 800, color: hasOutstanding ? '#dc2626' : '#059669', fontSize: 13 }}>
                   {formatINR(s.outstanding)}
@@ -186,6 +189,7 @@ const SupplierPaymentsPage: React.FC = () => {
                   <div style={{ display: 'flex', gap: 20 }}>
                     {[
                       { label: 'Purchased', value: formatINR(selected.totalPurchased), color: '#0f172a' },
+                      { label: 'Returns',   value: Number(selected.returnCredit) > 0 ? `− ${formatINR(selected.returnCredit)}` : '—', color: '#0f172a' },
                       { label: 'Paid',      value: formatINR(selected.totalPaid),      color: '#059669' },
                       { label: 'Pending',   value: formatINR(selected.outstanding),    color: Number(selected.outstanding) > 0 ? '#dc2626' : '#059669' },
                     ].map(stat => (

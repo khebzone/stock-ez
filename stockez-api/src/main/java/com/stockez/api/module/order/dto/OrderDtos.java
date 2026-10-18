@@ -262,6 +262,32 @@ public class OrderDtos {
 
     // Payment DTOs
     @Data
+    public static class VoidPaymentRequest {
+        @jakarta.validation.constraints.NotBlank(message = "Reason is required")
+        @jakarta.validation.constraints.Size(min = 3, max = 300, message = "Reason must be 3 to 300 characters")
+        private String reason;
+    }
+
+    @Data
+    public static class PaymentChangeEntry {
+        private Instant at;
+        private String action;
+        private String orderNumber;
+        private String performedBy;
+        private String description;
+    }
+
+    @Data
+    public static class EditPaymentRequest {
+        @NotNull @DecimalMin("0.01") private BigDecimal amount;
+        @NotNull private UUID paymentMethodId;
+        @Size(max = 200) private String referenceNumber;
+        private LocalDate instrumentDate;
+        @Size(max = 150) private String draweeBank;
+        @Size(max = 300) private String reason;
+    }
+
+    @Data
     public static class CreatePaymentRequest {
         @NotNull private UUID orderId;
         @NotNull @DecimalMin("0.01") private BigDecimal amount;
@@ -509,6 +535,7 @@ public class OrderDtos {
         private String invoiceTerms;
         private String extraImageUrl;
         private String paymentQrImageUrl;
+        private String upiId;
         private String bankName;
         private String bankAccountName;
         private String bankAccountNumber;
@@ -585,6 +612,20 @@ public class OrderDtos {
         private int quantity;
         private BigDecimal unitPrice;
         private Integer returnReceivedQuantity;
+    }
+
+    @Data
+    public static class WarehouseReturnHistoryRow {
+        private UUID orderId;
+        private String orderNumber;
+        private String customerName;
+        private String routeName;
+        private String deliveryPersonName;
+        private BigDecimal totalAmount;
+        private String outcome;
+        private String detail;
+        private String performedBy;
+        private Instant performedAt;
     }
 
     @Data

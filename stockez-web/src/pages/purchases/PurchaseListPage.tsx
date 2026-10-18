@@ -825,7 +825,7 @@ const PurchaseListPage: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '0 16px' }}>
             <Form.Item name="supplierId" label="Supplier">
               <Select
-                showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())} allowClear
+                showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} allowClear
                 placeholder="Select supplier"
                 options={suppliers.map((s: any) => ({ value: s.id, label: s.name }))}
               />
@@ -1034,7 +1034,7 @@ const PurchaseListPage: React.FC = () => {
                     title: 'Product', width: 180,
                     render: (_: any, ni: any, i: number) => (
                       <Select
-                        size="small" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())} placeholder="Select product"
+                        size="small" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} placeholder="Select product"
                         style={{ width: '100%' }}
                         value={ni.productId}
                         onChange={v => setNewPurchaseItems(prev => prev.map((x, j) => j === i ? { ...x, productId: v } : x))}

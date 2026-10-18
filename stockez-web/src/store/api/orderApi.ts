@@ -150,6 +150,10 @@ export const orderApi = baseApi.injectEndpoints({
       query: () => `/orders/warehouse-returns`,
       providesTags: ['Order'],
     }),
+    getUndeliveredReturnHistory: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/orders/warehouse-returns/history?from=${from}&to=${to}`,
+      providesTags: ['Order'],
+    }),
   }),
 });
 
@@ -188,4 +192,5 @@ export const {
   useCounterSaleMutation,
   useGetCustomerLastPricesQuery,
   useGetWarehouseReturnsQuery,
+  useGetUndeliveredReturnHistoryQuery,
 } = orderApi;

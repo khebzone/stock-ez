@@ -83,6 +83,10 @@ public class GoodsReturnDtos {
         @NotNull(message = "Received quantity is required")
         @Min(value = 0, message = "Received quantity cannot be negative")
         private Integer receivedQty;
+
+        // Units among those received that are damaged and must not go back into saleable stock.
+        @Min(value = 0, message = "Damaged quantity cannot be negative")
+        private Integer damagedQty;
     }
 
     @Data
@@ -164,6 +168,7 @@ public class GoodsReturnDtos {
         private String batchNumber;
         private Integer quantity;
         private Integer receivedQty;
+        private Integer damagedQty;
         private BigDecimal unitRate;
         private BigDecimal amount;
         private BigDecimal gstPercent;

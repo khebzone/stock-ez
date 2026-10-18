@@ -52,11 +52,23 @@ public interface GoodsReturnRepository extends JpaRepository<GoodsReturn, UUID> 
            "GROUP BY i.product.id")
     List<Object[]> sumReturnedQtyByOrder(@Param("tenantId") UUID tenantId, @Param("orderId") UUID orderId, @Param("type") GoodsReturn.ReturnType type);
 
+    @Query("SELECT i.product.id, SUM(i.quantity) FROM GoodsReturn gr JOIN gr.items i " +
+           "WHERE gr.tenant.id = :tenantId AND gr.referencePurchaseEntry.id = :entryId AND gr.type = 'PURCHASE_RETURN' " +
+           "AND gr.warehouseStatus <> 'CANCELLED' " +
+           "GROUP BY i.product.id")
+    List<Object[]> sumReturnedQtyByPurchaseEntry(@Param("tenantId") UUID tenantId, @Param("entryId") UUID entryId);
+
     @Query("SELECT COUNT(g) FROM GoodsReturn g WHERE g.tenant.id = :tenantId AND g.warehouseStatus = 'PENDING_VERIFICATION'")
     long countPendingWarehouseVerification(@Param("tenantId") UUID tenantId);
 
     List<GoodsReturn> findByTenantIdAndWarehouseStatusOrderByReturnDateDescCreatedAtDesc(
             UUID tenantId, GoodsReturn.WarehouseStatus warehouseStatus);
+
+    @Query("SELECT g FROM GoodsReturn g WHERE g.tenant.id = :tenantId AND g.type = 'SALES_RETURN' " +
+           "AND g.warehouseStatus IN ('VERIFIED','CANCELLED') AND g.returnDate BETWEEN :from AND :to " +
+           "ORDER BY g.returnDate DESC, g.createdAt DESC")
+    List<GoodsReturn> findSalesReturnHistory(@Param("tenantId") UUID tenantId,
+                                             @Param("from") LocalDate from, @Param("to") LocalDate to);
 
     long countByTenantIdAndCreatedByIdAndWarehouseStatus(
             UUID tenantId, UUID createdById, GoodsReturn.WarehouseStatus warehouseStatus);

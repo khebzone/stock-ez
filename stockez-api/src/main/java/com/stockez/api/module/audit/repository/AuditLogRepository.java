@@ -15,11 +15,30 @@ import java.util.UUID;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
+    @Query("SELECT a FROM AuditLog a WHERE a.tenantId = :tenantId AND a.action IN :actions " +
+           "AND a.performedAt >= :from AND a.performedAt < :to ORDER BY a.performedAt DESC")
+    List<AuditLog> findByActionsBetween(
+            @Param("tenantId") UUID tenantId,
+            @Param("actions") List<String> actions,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
+
     @Query("SELECT a FROM AuditLog a WHERE a.tenantId = :tenantId AND a.entityType = :entityType AND a.entityId = :entityId ORDER BY a.performedAt DESC")
     List<AuditLog> findByTenantAndEntity(
             @Param("tenantId") UUID tenantId,
             @Param("entityType") String entityType,
             @Param("entityId") UUID entityId);
+
+    @Query("SELECT a FROM AuditLog a WHERE a.tenantId = :tenantId AND a.entityType = :entityType " +
+           "AND a.action IN :actions AND (a.action <> 'CANCELLED' OR a.description LIKE :cancelledLike) " +
+           "AND a.performedAt >= :from AND a.performedAt < :to ORDER BY a.performedAt DESC")
+    List<AuditLog> findWarehouseReturnEvents(
+            @Param("tenantId") UUID tenantId,
+            @Param("entityType") String entityType,
+            @Param("actions") List<String> actions,
+            @Param("cancelledLike") String cancelledLike,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 
     @Query("SELECT a FROM AuditLog a WHERE a.tenantId = :tenantId " +
            "AND (:entityType IS NULL OR a.entityType = :entityType) " +

@@ -12,8 +12,11 @@ import {
   UploadOutlined, HistoryOutlined, AppstoreOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useExportBranding } from '../utils/exportBranding';
 import { hasPermission } from '../utils/permissions';
 import { useGetMyTodayAllocationQuery } from '../store/api/routeAllocationApi';
+import { useLocationReporting } from '../hooks/useLocationReporting';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const { useBreakpoint } = Grid;
 
@@ -24,6 +27,7 @@ const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif
 
 
 const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useExportBranding();
   const location = useLocation();
   const navigate = useNavigate();
   const screens  = useBreakpoint();
@@ -37,6 +41,10 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { data: allocationData, isLoading: allocationLoading } = useGetMyTodayAllocationQuery();
   const myAllocation = allocationData?.data;
 
+  // Field staff only — the admin layout never reports a position.
+  useLocationReporting(true);
+  useRealtimeSync();
+
   // Fallback to permission-based if API hasn't responded yet
   const permSales    = hasPermission('ORDERS_VIEW') || hasPermission('ORDERS_CREATE');
   const permDelivery = hasPermission('DELIVERY_VIEW') || hasPermission('DELIVERY_UPDATE');
@@ -46,6 +54,8 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const hasSales    = myAllocation != null ? (myAllocation.isSales    ?? myAllocation.sales    ?? permSales)    : permSales;
   const hasDelivery = myAllocation != null ? (myAllocation.isDelivery ?? myAllocation.delivery ?? permDelivery) : permDelivery;
   const allocated   = myAllocation != null ? myAllocation.allocated : null;
+  const hasWarehouse = myAllocation != null ? (myAllocation.isWarehouse ?? myAllocation.warehouse ?? false) : false;
+  const activeScope: Record<string, boolean> = { sales: hasSales, delivery: hasDelivery, warehouse: hasWarehouse };
 
   // Single-role users: always follow permission.
   // Dual-role users: let allocation decide (hasSales already incorporates the fallback above).
@@ -61,11 +71,11 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     : hasSales ? '/sales/history' : '/delivery/history';
   const historyPermission = historyKey === '/sales/history' ? 'ORDERS_VIEW' : 'DELIVERY_VIEW';
 
-  const ALL_NAV = [
+  const ALL_NAV: { key: string; icon: React.ReactNode; label: string; permission: string | null; scope?: string }[] = [
     { key: dashboardKey,                   icon: <DashboardOutlined />,      label: 'Dashboard',        permission: null },
-    { key: '/sales/route',                 icon: <EnvironmentOutlined />,    label: 'My Route',         permission: 'ROUTES_VIEW' },
-    { key: '/sales/order',                 icon: <PlusCircleOutlined />,     label: 'New Order',        permission: 'ORDERS_CREATE' },
-    { key: '/delivery/orders',             icon: <UnorderedListOutlined />,  label: 'Deliveries',       permission: 'DELIVERY_VIEW' },
+    { key: '/sales/route',                 icon: <EnvironmentOutlined />,    label: 'My Route',         permission: 'ROUTES_VIEW',   scope: 'sales' },
+    { key: '/sales/order',                 icon: <PlusCircleOutlined />,     label: 'New Order',        permission: 'ORDERS_CREATE',  scope: 'sales' },
+    { key: '/delivery/orders',             icon: <UnorderedListOutlined />,  label: 'Deliveries',       permission: 'DELIVERY_VIEW', scope: 'delivery' },
     { key: paymentsKey,                    icon: <WalletOutlined />,         label: 'Payments',         permission: 'PAYMENTS_CREATE' },
     { key: '/sales/goods-return',          icon: <RollbackOutlined />,       label: 'Returns',          permission: 'RETURNS_CREATE' },
     { key: '/sales/customers',             icon: <TeamOutlined />,           label: 'Customers',        permission: 'CUSTOMERS_VIEW' },
@@ -77,7 +87,7 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     { key: '/sales/expenses',              icon: <FileTextOutlined />,       label: 'Expenses',         permission: 'EXPENSES_VIEW' },
     { key: '/sales/day-closure',           icon: <CalculatorOutlined />,     label: 'Day Counter',      permission: 'DAY_CLOSURE_VIEW' },
     { key: '/sales/invoice/approver',      icon: <AuditOutlined />,          label: 'Approve Orders',   permission: 'INVOICE_VIEW' },
-    { key: '/sales/warehouse/picklist',    icon: <InboxOutlined />,          label: 'Route Pick List',  permission: 'PICKLIST_VIEW' },
+    { key: '/sales/warehouse/picklist',    icon: <InboxOutlined />,          label: 'Route Pick List',  permission: 'PICKLIST_VIEW',  scope: 'warehouse' },
     { key: '/sales/gate-pass',             icon: <EyeOutlined />,            label: 'Gate Pass',        permission: 'GATE_PASS_VIEW' },
     { key: '/sales/field-monitor',         icon: <GlobalOutlined />,         label: 'Field Monitor',    permission: 'FIELD_MONITOR_VIEW' },
     { key: '/sales/vehicles',              icon: <CarOutlined />,            label: 'Vehicles',         permission: 'VEHICLES_VIEW' },
@@ -88,8 +98,11 @@ const FieldLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     { key: attendanceKey,                  icon: <ClockCircleOutlined />,    label: 'Attendance',       permission: 'ATTENDANCE_CHECKIN' },
   ];
 
+  // Work-specific items follow today's open allocation; with none open, permissions alone decide.
+  const anyActiveAllocation = allocated === true;
   const NAV = ALL_NAV.filter(item =>
-    item.permission === null || hasPermission(item.permission)
+    (item.permission === null || hasPermission(item.permission)) &&
+    (!item.scope || !anyActiveAllocation || activeScope[item.scope])
   );
 
   const handleLogout = () => { localStorage.clear(); navigate('/login'); };

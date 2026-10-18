@@ -16,6 +16,7 @@ import {
 } from '../../store/api/paymentApi';
 import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
 import dayjs from 'dayjs';
+import PaymentActions from '../../components/PaymentActions';
 
 const { useBreakpoint } = Grid;
 
@@ -60,7 +61,7 @@ const DeliveryPaymentsPage: React.FC = () => {
   );
   const unpaidOrders: any[] = ordersData?.data || [];
   const paymentHistory: any[] = historyData?.data || [];
-  const methods: any[] = methodsData?.data || [];
+  const methods: any[] = (methodsData?.data || []).filter((m: any) => m.mode !== 'CREDIT');
   const daySummary = dayData?.data;
   const selected = allCustomers.find(c => c.customerId === selectedCustomerId);
 
@@ -231,15 +232,15 @@ const DeliveryPaymentsPage: React.FC = () => {
       {historyLoading ? <Skeleton active paragraph={{ rows: 2 }} /> : (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 16px', minWidth: 450 }}>
-              {['Date', 'Amount', 'Method', 'Order', 'Status'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px 40px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '12px 16px', minWidth: 490 }}>
+              {['Date', 'Amount', 'Method', 'Order', 'Status', ''].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
               ))}
             </div>
             {paymentHistory.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>No payments recorded</div>
             ) : paymentHistory.slice().reverse().map((p: any, i: number) => (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px', padding: '12px 16px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 450 }}>
+              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '100px 90px 1fr 90px 80px 40px', padding: '12px 16px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 490 }}>
                 <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(p.collectionDate).format('DD MMM YYYY')}</div>
                 <div style={{ fontWeight: 800, color: '#059669', fontSize: 13 }}>{formatINR(p.amount)}</div>
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280', width: 'fit-content' }}>
@@ -249,6 +250,7 @@ const DeliveryPaymentsPage: React.FC = () => {
                 <div style={{ fontSize: 10, color: p.cleared ? '#059669' : p.submitted ? '#0891b2' : '#d97706', fontWeight: 700 }}>
                   {p.cleared ? 'Cleared' : p.submitted ? 'Submitted' : 'Pending'}
                 </div>
+                <div>{!p.submitted && <PaymentActions payment={p} />}</div>
               </div>
             ))}
           </div>
@@ -325,6 +327,7 @@ const DeliveryPaymentsPage: React.FC = () => {
                   <span style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${MODE_COLOR[p.paymentMode] || '#6b7280'}18`, color: MODE_COLOR[p.paymentMode] || '#6b7280' }}>
                     {p.paymentMethodName || p.paymentMode}
                   </span>
+                  {!p.submitted && <PaymentActions payment={p} />}
                 </div>
               ))}
             </>
@@ -471,7 +474,7 @@ const DeliveryPaymentsPage: React.FC = () => {
                   { validator: (_, v) => v && v > (selectedOrder?.balanceAmount || 0) ? Promise.reject('Cannot exceed balance amount') : Promise.resolve() },
                 ]}
               >
-                <InputNumber style={{ width: '100%' }} size="large" min={0.01} max={selectedOrder?.balanceAmount} precision={2} prefix="₹" placeholder="0.00" controls={false} />
+                <InputNumber style={{ width: '100%' }} size="large" min={0.01} precision={2} prefix="₹" placeholder="0.00" controls={false} />
               </Form.Item>
 
               {isPartial && (

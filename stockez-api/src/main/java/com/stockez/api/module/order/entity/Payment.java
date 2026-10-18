@@ -5,6 +5,7 @@ import com.stockez.api.module.tenant.entity.Tenant;
 import com.stockez.api.module.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.SQLRestriction;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -29,6 +30,7 @@ import java.util.UUID;
     }
 )
 @EntityListeners(AuditingEntityListener.class)
+@SQLRestriction("voided = false")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Payment {
 
@@ -106,6 +108,19 @@ public class Payment {
 
     @Column(length = 500)
     private String notes;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean voided = false;
+
+    private Instant voidedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voided_by_id")
+    private User voidedBy;
+
+    @Column(length = 300)
+    private String voidReason;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)

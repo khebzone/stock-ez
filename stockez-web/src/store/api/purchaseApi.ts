@@ -34,6 +34,10 @@ export const purchaseApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `/purchases/${id}/void`, method: 'POST' }),
       invalidatesTags: ['Purchase', 'Product', 'SupplierPayment'],
     }),
+    updateBatchRates: builder.mutation<any, { id: string; minSaleRate: number; maxSaleRate: number }>({
+      query: ({ id, ...body }) => ({ url: `/purchases/batches/${id}/rates`, method: 'PUT', body }),
+      invalidatesTags: ['Purchase', 'Product'],
+    }),
     getBatchesByProduct: builder.query<any, string>({
       query: (productId) => `/purchases/batches/product/${productId}`,
       providesTags: ['Purchase', 'Product'],
@@ -83,6 +87,7 @@ export const purchaseApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useUpdateBatchRatesMutation,
   useGetUnpaidPurchaseEntriesQuery,
   useGetAllPurchasesQuery,
   useGetPurchasesQuery,

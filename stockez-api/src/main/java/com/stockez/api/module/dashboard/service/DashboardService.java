@@ -1,6 +1,7 @@
 package com.stockez.api.module.dashboard.service;
 
 import com.stockez.api.module.customer.repository.CustomerRepository;
+import com.stockez.api.module.goodsreturn.repository.GoodsReturnRepository;
 import com.stockez.api.module.dashboard.dto.DashboardDtos;
 import com.stockez.api.module.order.entity.Order;
 import com.stockez.api.module.order.repository.OrderRepository;
@@ -37,6 +38,7 @@ public class DashboardService {
     private final RouteRepository routeRepository;
     private final PurchaseEntryRepository purchaseEntryRepository;
     private final SupplierPaymentRepository supplierPaymentRepository;
+    private final GoodsReturnRepository goodsReturnRepository;
 
     public DashboardDtos.AdminDashboardStats getAdminStats(UUID tenantId) {
         LocalDate today = LocalDate.now();
@@ -116,10 +118,13 @@ public class DashboardService {
         }).sorted(Comparator.comparing(DashboardDtos.RouteCollectionStat::getOutstanding).reversed())
                 .collect(Collectors.toList()));
 
-        // Total vendor payable = total purchased - total paid to suppliers
+        // Total vendor payable = total purchased - total paid - open return credit (same rule as the supplier summaries)
         BigDecimal totalPurchased = purchaseEntryRepository.sumTotalPurchasedByTenant(tenantId);
         BigDecimal totalPaidToSuppliers = supplierPaymentRepository.sumTotalPaidByTenant(tenantId);
-        stats.setTotalVendorPayable(totalPurchased.subtract(totalPaidToSuppliers).max(BigDecimal.ZERO));
+        BigDecimal totalReturnCredit = goodsReturnRepository.sumOpenSupplierCreditGrouped(tenantId).stream()
+                .map(row -> (BigDecimal) row[1])
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        stats.setTotalVendorPayable(totalPurchased.subtract(totalPaidToSuppliers).subtract(totalReturnCredit).max(BigDecimal.ZERO));
 
         return stats;
     }

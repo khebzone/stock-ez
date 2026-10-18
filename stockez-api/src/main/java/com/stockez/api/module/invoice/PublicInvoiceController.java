@@ -170,6 +170,7 @@ public class PublicInvoiceController {
         info.setInvoiceTerms(t.getInvoiceTerms());
         info.setExtraImageUrl(t.getExtraImageUrl());
         info.setPaymentQrImageUrl(t.getPaymentQrImageUrl());
+        info.setUpiId(t.getUpiId());
         info.setBankName(t.getBankName());
         info.setBankAccountName(t.getBankAccountName());
         info.setBankAccountNumber(t.getBankAccountNumber());

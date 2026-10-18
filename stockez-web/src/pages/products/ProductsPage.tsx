@@ -638,10 +638,11 @@ const ProductsPage: React.FC = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item name="stockQuantity" label="Opening Stock" initialValue={0}>
+                <Form.Item name="stockQuantity" label="Opening Stock" initialValue={0}
+                  tooltip={editingProduct ? 'To change stock, use Inventory → Stock Adjustment.' : undefined}>
                   <InputNumber
                     style={{ width: '100%' }} min={0} precision={0}
-                    size="large" addonAfter="units"
+                    size="large" addonAfter="units" disabled={!!editingProduct}
                   />
                 </Form.Item>
               </Col>

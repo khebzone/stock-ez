@@ -422,7 +422,9 @@ public class ReportDtos {
         private String hsnCode;
         private Integer stockQty;
         private BigDecimal purchaseRateExclGst;
+        private BigDecimal purchaseRateInclGst;
         private BigDecimal stockValue;
+        private BigDecimal stockValueInclGst;
     }
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
@@ -432,6 +434,7 @@ public class ReportDtos {
         private int outOfStockCount;
         private int lowStockCount;
         private BigDecimal totalStockValue;
+        private BigDecimal totalStockValueInclGst;
     }
 
     // ─── Dead Stock ──────────────────────────────────────────────────────────

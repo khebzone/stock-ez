@@ -239,8 +239,18 @@ public class RouteAllocationService {
         // could include orders packed later that were never Assigned to this delivery person.
         List<Order> packed = orderRepository.findByTenantIdAndStatusAndRouteAllocationId(
                 tenantId, Order.OrderStatus.PACKED, allocationId);
-        packed.forEach(o -> o.setStatus(Order.OrderStatus.DISPATCHED));
-        if (!packed.isEmpty()) orderRepository.saveAll(packed);
+        java.time.Instant now = java.time.Instant.now();
+        packed.forEach(o -> {
+            o.setStatus(Order.OrderStatus.DISPATCHED);
+            o.setDispatchedAt(now);
+        });
+        if (!packed.isEmpty()) {
+            orderRepository.saveAll(packed);
+            String driver = allocation.getDeliveryPerson().getFullName();
+            String routeName = allocation.getRoute().getName();
+            packed.forEach(o -> auditService.record(tenantId, "ORDER", o.getId(), "DISPATCHED",
+                    "Order " + o.getOrderNumber() + " dispatched with the delivery run on " + routeName + " \u2014 " + driver));
+        }
         return packed.size();
     }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Form, Input, InputNumber, Select, Modal, Skeleton, message, Grid, Table, Popconfirm, DatePicker } from 'antd';
 import { FileExcelOutlined, WalletOutlined, ArrowLeftOutlined, SearchOutlined, TeamOutlined, UserOutlined, EnvironmentOutlined, DownloadOutlined, PrinterOutlined, InboxOutlined, DeleteOutlined, ProfileOutlined } from '@ant-design/icons';
@@ -16,6 +16,7 @@ import { useGetPaymentMethodsQuery } from '../../store/api/paymentMethodApi';
 import { useGetRoutesQuery } from '../../store/api/routeApi';
 import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
+import PaymentActions from '../../components/PaymentActions';
 import { hasAnyPermission, hasPermission } from '../../utils/permissions';
 
 const canRecordPayment = hasAnyPermission('PAYMENTS_CREATE', 'DELIVERY_UPDATE');
@@ -511,6 +512,7 @@ const CustomerOutstandingPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'customer' | 'salesman' | 'route'>('customer');
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [collectModal, setCollectModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [search, setSearch] = useState('');
@@ -546,7 +548,7 @@ const CustomerOutstandingPage: React.FC = () => {
   const paymentHistory: any[] = historyData?.data || [];
 
   const { data: methodsData } = useGetPaymentMethodsQuery();
-  const methods: any[] = methodsData?.data || [];
+  const methods: any[] = (methodsData?.data || []).filter((m: any) => m.mode !== 'CREDIT');
 
   const [collectPayment, { isLoading: collecting }] = useCollectPaymentMutation();
   const [deleteOpeningBalance] = useDeleteOpeningBalanceMutation();
@@ -795,7 +797,10 @@ const CustomerOutstandingPage: React.FC = () => {
             ) : summaries.map((s: any, i: number) => {
               const isSelected = s.customerId === selectedCustomerId;
               return (
-                <div key={s.customerId} onClick={() => setSelectedCustomerId(isSelected && !isMobile ? null : s.customerId)}
+                <div key={s.customerId} onClick={() => {
+                  setSelectedCustomerId(isSelected && !isMobile ? null : s.customerId);
+                  if (!isSelected) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                }}
                   style={{ ...tableRowStyle(isSelected), borderBottom: i < summaries.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <div style={{ width: 34, height: 34, borderRadius: 9, background: isSelected ? '#fff' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#475569', fontSize: 13, flexShrink: 0 }}>
@@ -823,7 +828,7 @@ const CustomerOutstandingPage: React.FC = () => {
 
         {/* Detail Panel — fixed 440px on the right */}
         {shouldShowDetail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div ref={detailRef} style={{ display: 'flex', flexDirection: 'column', gap: 16, scrollMarginTop: 80 }}>
             {selected && (
               <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
@@ -906,15 +911,15 @@ const CustomerOutstandingPage: React.FC = () => {
             <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, marginTop: 4, marginLeft: 4 }}>Payment History</div>
             {historyLoading ? <Skeleton active paragraph={{ rows: 3 }} /> : (
               <div style={{ ...tableContainerStyle, overflowX: 'auto' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 14px', minWidth: 0 }}>
-                  {['Date', 'Amount', 'Method', 'Order', 'Status'].map(h => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr 40px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 14px', minWidth: 0 }}>
+                  {['Date', 'Amount', 'Method', 'Order', 'Status', ''].map(h => (
                     <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{h}</div>
                   ))}
                 </div>
                 {paymentHistory.length === 0 ? (
                   <div style={{ padding: '24px 14px', textAlign: 'center', color: '#94a3b8' }}>No payments recorded</div>
                 ) : paymentHistory.slice().reverse().map((p: any, i: number) => (
-                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr', padding: '10px 14px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 0 }}>
+                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.4fr 1.6fr 1fr 40px', padding: '10px 14px', alignItems: 'center', borderBottom: i < paymentHistory.length - 1 ? '1px solid #f1f5f9' : 'none', minWidth: 0 }}>
                     <div style={{ fontSize: 11, color: '#64748b' }}>{dayjs(p.collectionDate).format('DD MMM YYYY')}</div>
                     <div style={{ fontWeight: 800, color: '#059669', fontSize: 12 }}>{formatINR(p.amount)}</div>
                     <div>
@@ -926,6 +931,7 @@ const CustomerOutstandingPage: React.FC = () => {
                     <div style={{ fontSize: 11, color: p.cleared ? '#059669' : p.submitted ? '#0891b2' : '#d97706', fontWeight: 700 }}>
                       {p.cleared ? 'Cleared' : p.submitted ? 'Submitted' : 'Pending'}
                     </div>
+                    <div>{Number(p.amount) > 0 && <PaymentActions payment={p} />}</div>
                   </div>
                 ))}
               </div>
@@ -978,7 +984,7 @@ const CustomerOutstandingPage: React.FC = () => {
                   { validator: (_, v) => v && v > (selectedOrder?.balanceAmount || 0) ? Promise.reject('Cannot exceed balance') : Promise.resolve() },
                 ]}
               >
-                <InputNumber style={{ width: '100%' }} min={0.01} max={selectedOrder?.balanceAmount} precision={2} prefix="₹" placeholder="0.00" size="large" controls={false} />
+                <InputNumber style={{ width: '100%' }} min={0.01} precision={2} prefix="₹" placeholder="0.00" size="large" controls={false} />
               </Form.Item>
 
               {isPartial && (

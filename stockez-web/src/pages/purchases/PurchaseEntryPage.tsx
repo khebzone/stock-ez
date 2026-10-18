@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { InputNumber, DatePicker, Select, Button, message, Modal, Drawer, Grid } from 'antd';
+import React, { useState, useRef, useEffect } from 'react';
+import { InputNumber, DatePicker, Select, Button, message, Modal, Drawer, Grid, Alert } from 'antd';
 import { WarningOutlined, PlusOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -103,6 +103,36 @@ const labelStyle: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5,
 };
 
+interface PurchaseDraft {
+  savedAt: string;
+  supplierId: string | null;
+  purchaseDate: string | null;
+  invoiceNo: string;
+  lines: BatchLine[];
+}
+
+const draftKey = () => {
+  const u = JSON.parse(localStorage.getItem('user') || '{}');
+  return `stockez.purchaseDraft.${u.tenantId || ''}.${u.id || u.phone || ''}`;
+};
+
+const readDraft = (): PurchaseDraft | null => {
+  try {
+    const raw = localStorage.getItem(draftKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
+const writeDraft = (d: PurchaseDraft | null) => {
+  try {
+    if (d) localStorage.setItem(draftKey(), JSON.stringify(d));
+    else localStorage.removeItem(draftKey());
+  } catch { /* storage unavailable — draft is best-effort */ }
+};
+
+const draftHasContent = (d: { supplierId: string | null; invoiceNo: string; lines: BatchLine[] }) =>
+  !!d.supplierId || !!d.invoiceNo.trim() || d.lines.some(l => !!l.productId);
+
 interface Props {
   onClose?: () => void;
   onSaved?: () => void;
@@ -121,6 +151,10 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
   const [mobileEditId, setMobileEditId] = useState<number | null>(null);
   const [drawerProdSearch, setDrawerProdSearch] = useState('');
   const [prodSearchMap, setProdSearchMap] = useState<Record<number, string>>({});
+  const [pendingDraft, setPendingDraft] = useState<PurchaseDraft | null>(() => {
+    const d = readDraft();
+    return d && draftHasContent(d) ? d : null;
+  });
 
   const { data: prodData,  isLoading: prodLoading } = useGetAllProductsQuery(undefined, { refetchOnMountOrArgChange: true });
   const { data: suppData }                           = useGetSuppliersQuery(undefined, { refetchOnMountOrArgChange: true });
@@ -161,6 +195,44 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
     if (e.key !== 'Tab' || e.shiftKey) return;
     e.preventDefault();
     tabNext(lineId, field, linesSnap);
+  };
+
+  useEffect(() => {
+    if (pendingDraft) return;
+    const t = setTimeout(() => {
+      if (draftHasContent({ supplierId, invoiceNo, lines })) {
+        writeDraft({
+          savedAt: new Date().toISOString(),
+          supplierId,
+          purchaseDate: purchaseDate ? dayjs(purchaseDate).toISOString() : null,
+          invoiceNo,
+          lines,
+        });
+      } else {
+        writeDraft(null);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [pendingDraft, supplierId, purchaseDate, invoiceNo, lines]);
+
+  const resumeDraft = () => {
+    if (!pendingDraft) return;
+    const restored = pendingDraft.lines.map(l => ({
+      ...l,
+      mfgDate: l.mfgDate ? dayjs(l.mfgDate) : null,
+      expiryDate: l.expiryDate ? dayjs(l.expiryDate) : null,
+    }));
+    setSupplier(pendingDraft.supplierId);
+    setDate(pendingDraft.purchaseDate ? dayjs(pendingDraft.purchaseDate) : dayjs());
+    setInvoiceNo(pendingDraft.invoiceNo);
+    setLines(restored.length ? restored : [emptyLine(1)]);
+    setNextId(Math.max(0, ...restored.map(l => l.id)) + 1);
+    setPendingDraft(null);
+  };
+
+  const discardDraft = () => {
+    writeDraft(null);
+    setPendingDraft(null);
   };
 
   const addLine = () => { setLines(p => [...p, emptyLine(nextId)]); setNextId(n => n + 1); };
@@ -279,6 +351,8 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
         }),
       }).unwrap();
       message.success('Purchase entry saved — stock updated!');
+      writeDraft(null);
+      setPendingDraft(null);
       setConfirm(false);
       if (onSaved) onSaved(); else navigate('/purchases');
     } catch (err: any) {
@@ -299,6 +373,20 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
 
   return (
     <div>
+      {pendingDraft && (
+        <Alert
+          type="info" showIcon style={{ marginBottom: 12 }}
+          message={`Unsaved purchase from ${dayjs(pendingDraft.savedAt).format('DD MMM YYYY, hh:mm A')}`}
+          description={`${pendingDraft.lines.filter(l => !!l.productId).length} product line(s)${pendingDraft.invoiceNo ? ` · Invoice ${pendingDraft.invoiceNo}` : ''}`}
+          action={
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button size="small" type="primary" onClick={resumeDraft}>Resume</Button>
+              <Button size="small" onClick={discardDraft}>Discard</Button>
+            </div>
+          }
+        />
+      )}
+
       {/* Main card */}
       <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
@@ -309,7 +397,7 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
               Supplier <span style={{ color: RED }}>*</span>
             </label>
             <Select
-              size="middle" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())}
+              size="middle" showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
               placeholder="Select supplier"
               style={{ width: '100%' }}
               value={supplierId || undefined}
@@ -492,9 +580,12 @@ const PurchaseEntryPage: React.FC<Props> = ({ onSaved }) => {
                             options={
                               prodSearchMap[line.id]
                                 ? products
-                                    .filter((p: any) =>
-                                      p.name?.toLowerCase().startsWith(prodSearchMap[line.id].toLowerCase())
-                                    )
+                                    .filter((p: any) => {
+                                      const q = prodSearchMap[line.id].toLowerCase();
+                                      return p.name?.toLowerCase().includes(q) ||
+                                        p.brand?.toLowerCase().includes(q) ||
+                                        p.code?.toLowerCase().includes(q);
+                                    })
                                     .map((p: any) => ({ value: p.id, label: p.name, brand: p.brand }))
                                 : line.productId
                                     ? products

@@ -14,6 +14,10 @@ import com.stockez.api.module.payment.repository.PaymentMethodRepository;
 import com.stockez.api.module.user.entity.User;
 import com.stockez.api.module.user.repository.UserRepository;
 import com.stockez.api.module.audit.service.AuditService;
+import com.stockez.api.module.tracking.entity.CustomerVisit;
+import com.stockez.api.module.tracking.service.GeoContext;
+import com.stockez.api.module.tracking.service.VisitStamp;
+import com.stockez.api.module.tracking.service.VisitStampService;
 import com.stockez.common.exception.BusinessException;
 import com.stockez.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -38,9 +42,11 @@ public class PaymentService {
     private final RouteAllocationRepository routeAllocationRepository;
     private final GoodsReturnRepository goodsReturnRepository;
     private final AuditService auditService;
+    private final VisitStampService visitStampService;
+    private final GeoContext geoContext;
 
     public OrderDtos.PaymentResponse collectPayment(OrderDtos.CreatePaymentRequest req, UUID collectorId, UUID tenantId) {
-        Order order = orderRepository.findByIdAndTenantId(req.getOrderId(), tenantId)
+        Order order = orderRepository.findByIdAndTenantIdForUpdate(req.getOrderId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", req.getOrderId().toString()));
 
         User collector = userRepository.findByIdAndTenantId(collectorId, tenantId)
@@ -68,6 +74,11 @@ public class PaymentService {
         }
         if (resolvedMode == null) {
             throw new BusinessException("Payment mode is required", "MISSING_PAYMENT_MODE");
+        }
+        if (resolvedMode == Payment.PaymentMode.CREDIT) {
+            throw new BusinessException(
+                    "Credit is not a payment — the amount stays outstanding until money is collected",
+                    "CREDIT_NOT_COLLECTABLE");
         }
 
         // Collection date: field staff always record on today; office staff may back-date
@@ -122,7 +133,196 @@ public class PaymentService {
                 (req.getReferenceNumber() != null ? " (Ref: " + req.getReferenceNumber() + ")" : "") +
                 (isInstrument ? " — awaiting bank realisation" : ""));
 
+        // autoSubmit marks a back-office entry from the Customer Outstanding screen. Those are not
+        // field collections, and stamping them would invent shop visits that never happened.
+        if (!req.isAutoSubmit() && order.getCustomer() != null) {
+            GeoContext.Position pos = geoContext.current();
+            visitStampService.stampQuietly(VisitStamp.builder()
+                    .tenantId(tenantId)
+                    .userId(collectorId)
+                    .customerId(order.getCustomer().getId())
+                    .outcome(CustomerVisit.Outcome.PAYMENT_COLLECTED)
+                    .orderId(order.getId())
+                    .paymentId(saved.getId())
+                    .latitude(pos.latitude())
+                    .longitude(pos.longitude())
+                    .accuracyM(pos.accuracyM())
+                    .build());
+        }
+
         return toPaymentResponse(saved);
+    }
+
+    /**
+     * Cancels a wrongly entered payment. Field staff may void their own entry until they submit the
+     * day; office/admin may void any entry, submitted or cleared. The row is kept (voided = true)
+     * so the audit trail survives, and the order's paid/balance go back to what they were.
+     */
+    public void voidPayment(UUID paymentId, String reason, UUID userId, UUID tenantId, boolean canVoidAny) {
+        Payment p = paymentRepository.findById(paymentId)
+                .filter(x -> x.getTenant().getId().equals(tenantId))
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId.toString()));
+        User actor = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        if (!canVoidAny) {
+            if (!p.getCollectedBy().getId().equals(userId)) {
+                throw new BusinessException("You can only void your own entries", "VOID_NOT_ALLOWED");
+            }
+            if (p.isSubmitted()) {
+                throw new BusinessException(
+                        "This entry is already submitted. Ask the office to void it.", "VOID_ALREADY_SUBMITTED");
+            }
+        }
+        if (p.isCleared() && actor.getRole() != User.UserRole.ADMIN && actor.getRole() != User.UserRole.SUPER_ADMIN) {
+            throw new BusinessException(
+                    "This entry is already cleared by the accountant. Only an admin can void it.", "VOID_ALREADY_CLEARED");
+        }
+        if (p.getAmount().signum() <= 0) {
+            throw new BusinessException("Refund entries cannot be voided here", "VOID_REFUND");
+        }
+
+        Order order = p.getOrder() != null
+                ? orderRepository.findByIdAndTenantIdForUpdate(p.getOrder().getId(), tenantId).orElse(null)
+                : null;
+        if (order != null && order.getStatus() == Order.OrderStatus.CANCELLED) {
+            throw new BusinessException("The order is cancelled — its payments cannot be voided", "VOID_ORDER_CANCELLED");
+        }
+
+        boolean appliedToOrder = !p.isInstrument() || p.getStatus() == Payment.PaymentStatus.REALISED;
+        if (order != null && appliedToOrder) {
+            BigDecimal paid = order.getPaidAmount().subtract(p.getAmount());
+            if (paid.signum() < 0) paid = BigDecimal.ZERO;
+            order.setPaidAmount(paid);
+            order.setBalanceAmount(order.getTotalAmount().subtract(paid));
+            orderRepository.save(order);
+        }
+
+        p.setVoided(true);
+        p.setVoidedAt(Instant.now());
+        p.setVoidedBy(actor);
+        p.setVoidReason(reason.trim());
+        paymentRepository.save(p);
+
+        auditService.record(tenantId, order != null ? "ORDER" : "PAYMENT",
+                order != null ? order.getId() : p.getId(), "PAYMENT_VOIDED",
+                "Payment ₹" + p.getAmount().toPlainString() + " (" +
+                (p.getPaymentMethodName() != null ? p.getPaymentMethodName() : p.getPaymentMode().name()) +
+                ", collected by " + p.getCollectedBy().getFullName() + ") voided by " + actor.getFullName() +
+                " — " + reason.trim());
+    }
+
+    public OrderDtos.PaymentResponse editPayment(UUID paymentId, OrderDtos.EditPaymentRequest req,
+                                                 UUID userId, UUID tenantId, boolean canEditAny) {
+        Payment p = paymentRepository.findById(paymentId)
+                .filter(x -> x.getTenant().getId().equals(tenantId))
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId.toString()));
+        User actor = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        if (!canEditAny) {
+            if (!p.getCollectedBy().getId().equals(userId)) {
+                throw new BusinessException("You can only edit your own entries", "EDIT_NOT_ALLOWED");
+            }
+            if (p.isSubmitted()) {
+                throw new BusinessException(
+                        "This entry is already submitted. Ask the office to edit it.", "EDIT_ALREADY_SUBMITTED");
+            }
+        }
+        if (p.isCleared() && actor.getRole() != User.UserRole.ADMIN && actor.getRole() != User.UserRole.SUPER_ADMIN) {
+            throw new BusinessException(
+                    "This entry is already cleared by the accountant. Only an admin can edit it.", "EDIT_ALREADY_CLEARED");
+        }
+        if (p.getAmount().signum() <= 0) {
+            throw new BusinessException("Refund entries cannot be edited here", "EDIT_REFUND");
+        }
+        if (p.isInstrument() && p.getStatus() != Payment.PaymentStatus.PENDING) {
+            throw new BusinessException(
+                    "This cheque / transfer is already in bank clearance. Void it instead.", "EDIT_INSTRUMENT_PROCESSED");
+        }
+        if ((p.isSubmitted() || p.isCleared()) && (req.getReason() == null || req.getReason().trim().length() < 3)) {
+            throw new BusinessException("Enter a reason for editing a submitted entry", "EDIT_REASON_REQUIRED");
+        }
+
+        Order order = p.getOrder() != null
+                ? orderRepository.findByIdAndTenantIdForUpdate(p.getOrder().getId(), tenantId).orElse(null)
+                : null;
+        if (order != null && order.getStatus() == Order.OrderStatus.CANCELLED) {
+            throw new BusinessException("The order is cancelled — its payments cannot be edited", "EDIT_ORDER_CANCELLED");
+        }
+
+        PaymentMethod method = paymentMethodRepository.findByIdAndTenantId(req.getPaymentMethodId(), tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentMethod", req.getPaymentMethodId().toString()));
+        Payment.PaymentMode newMode = Payment.PaymentMode.valueOf(method.getMode());
+        if (newMode == Payment.PaymentMode.CREDIT) {
+            throw new BusinessException(
+                    "Credit is not a payment — the amount stays outstanding until money is collected",
+                    "CREDIT_NOT_COLLECTABLE");
+        }
+        boolean newInstrument = newMode == Payment.PaymentMode.CHEQUE
+                || newMode == Payment.PaymentMode.NEFT
+                || newMode == Payment.PaymentMode.RTGS;
+        if (newInstrument && (req.getReferenceNumber() == null || req.getReferenceNumber().isBlank())) {
+            String label = newMode == Payment.PaymentMode.CHEQUE ? "Cheque number" : "Transaction/UTR reference";
+            throw new BusinessException(label + " is required for " + newMode.name() + " payments", "REFERENCE_REQUIRED");
+        }
+
+        boolean wasApplied = !p.isInstrument() || p.getStatus() == Payment.PaymentStatus.REALISED;
+        if (order != null) {
+            BigDecimal paid = order.getPaidAmount();
+            if (wasApplied) paid = paid.subtract(p.getAmount());
+            if (paid.signum() < 0) paid = BigDecimal.ZERO;
+            BigDecimal balanceWithout = order.getTotalAmount().subtract(paid);
+            if (req.getAmount().compareTo(balanceWithout) > 0) {
+                throw new BusinessException("Payment amount exceeds balance of " + balanceWithout, "OVERPAYMENT");
+            }
+            if (!newInstrument) paid = paid.add(req.getAmount());
+            order.setPaidAmount(paid);
+            order.setBalanceAmount(order.getTotalAmount().subtract(paid));
+            orderRepository.save(order);
+        }
+
+        String before = "₹" + p.getAmount().toPlainString() + " " +
+                (p.getPaymentMethodName() != null ? p.getPaymentMethodName() : p.getPaymentMode().name()) +
+                (p.getReferenceNumber() != null ? " (Ref: " + p.getReferenceNumber() + ")" : "");
+
+        p.setAmount(req.getAmount());
+        p.setPaymentMode(newMode);
+        p.setPaymentMethodName(method.getName());
+        p.setReferenceNumber(req.getReferenceNumber());
+        p.setInstrumentDate(newInstrument ? req.getInstrumentDate() : null);
+        p.setDraweeBank(newInstrument ? req.getDraweeBank() : null);
+        p.setStatus(newInstrument ? Payment.PaymentStatus.PENDING : Payment.PaymentStatus.REALISED);
+        p.setRealisedDate(newInstrument ? null : p.getCollectionDate());
+        Payment saved = paymentRepository.save(p);
+
+        String after = "₹" + saved.getAmount().toPlainString() + " " + method.getName() +
+                (saved.getReferenceNumber() != null ? " (Ref: " + saved.getReferenceNumber() + ")" : "");
+        auditService.record(tenantId, order != null ? "ORDER" : "PAYMENT",
+                order != null ? order.getId() : saved.getId(), "PAYMENT_EDITED",
+                "Payment edited by " + actor.getFullName() + ": " + before + " → " + after +
+                (req.getReason() != null && !req.getReason().isBlank() ? " — " + req.getReason().trim() : ""));
+        return toPaymentResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderDtos.PaymentChangeEntry> getPaymentChanges(UUID tenantId, LocalDate from, LocalDate to) {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        var logs = auditService.getEventsByActions(tenantId, List.of("PAYMENT_VOIDED", "PAYMENT_EDITED"),
+                from.atStartOfDay(zone).toInstant(), to.plusDays(1).atStartOfDay(zone).toInstant());
+        Map<UUID, String> orderNumbers = new java.util.HashMap<>();
+        orderRepository.findAllById(logs.stream()
+                        .filter(l -> "ORDER".equals(l.getEntityType())).map(l -> l.getEntityId()).distinct().toList())
+                .forEach(o -> orderNumbers.put(o.getId(), o.getOrderNumber()));
+        return logs.stream().map(l -> {
+            OrderDtos.PaymentChangeEntry e = new OrderDtos.PaymentChangeEntry();
+            e.setAt(l.getPerformedAt());
+            e.setAction("PAYMENT_VOIDED".equals(l.getAction()) ? "Voided" : "Edited");
+            e.setOrderNumber(orderNumbers.get(l.getEntityId()));
+            e.setPerformedBy(l.getPerformedBy());
+            e.setDescription(l.getDescription());
+            return e;
+        }).toList();
     }
 
     @Transactional(readOnly = true)
@@ -176,12 +376,24 @@ public class PaymentService {
     }
 
     /**
+     * Today's collections plus anything from earlier days still unsubmitted, so a collection missed
+     * at midnight can still be submitted instead of staying "Pending" for good.
+     */
+    private List<Payment> todayAndUnsubmittedCollections(UUID personId, UUID tenantId) {
+        Map<UUID, Payment> byId = new LinkedHashMap<>();
+        paymentRepository.findByTenantIdAndCollectedByIdAndSubmittedFalse(tenantId, personId)
+                .forEach(p -> byId.put(p.getId(), p));
+        paymentRepository.findByTenantIdAndCollectedByIdAndCollectionDate(tenantId, personId, LocalDate.now())
+                .forEach(p -> byId.put(p.getId(), p));
+        return new ArrayList<>(byId.values());
+    }
+
+    /**
      * Sales/delivery person gets their own today's collection summary.
      */
     @Transactional(readOnly = true)
     public OrderDtos.MyDaySummaryResponse getMyDayCollections(UUID personId, UUID tenantId) {
-        List<Payment> payments = paymentRepository
-                .findByTenantIdAndCollectedByIdAndCollectionDate(tenantId, personId, LocalDate.now());
+        List<Payment> payments = todayAndUnsubmittedCollections(personId, tenantId);
 
         OrderDtos.MyDaySummaryResponse res = new OrderDtos.MyDaySummaryResponse();
         res.setDate(LocalDate.now());
@@ -229,8 +441,7 @@ public class PaymentService {
                 "RETURNS_NOT_VERIFIED");
         }
 
-        List<Payment> payments = paymentRepository
-                .findByTenantIdAndCollectedByIdAndCollectionDate(tenantId, personId, LocalDate.now());
+        List<Payment> payments = todayAndUnsubmittedCollections(personId, tenantId);
 
         Instant now = Instant.now();
         boolean anySubmitted = false;
@@ -253,8 +464,55 @@ public class PaymentService {
      */
     @Transactional(readOnly = true)
     public List<OrderDtos.DailySummaryResponse> getPendingVerifications(UUID tenantId) {
-        List<Payment> payments = paymentRepository.findByTenantIdAndSubmittedTrueAndClearedFalse(tenantId);
+        return summariseByPerson(paymentRepository.findByTenantIdAndSubmittedTrueAndClearedFalse(tenantId));
+    }
 
+    /** Everyone holding collections they have not submitted yet, from any date. */
+    @Transactional(readOnly = true)
+    public List<OrderDtos.DailySummaryResponse> getAwaitingSubmission(UUID tenantId) {
+        return summariseByPerson(paymentRepository.findByTenantIdAndSubmittedFalse(tenantId));
+    }
+
+    /** Office/admin submits for a person who collected but forgot to submit. */
+    public void submitOnBehalf(UUID personId, UUID adminId, UUID tenantId) {
+        User admin = userRepository.findByIdAndTenantId(adminId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", adminId.toString()));
+        User person = userRepository.findByIdAndTenantId(personId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", personId.toString()));
+
+        long unverifiedReturns = goodsReturnRepository.countByTenantIdAndCreatedByIdAndWarehouseStatus(
+                tenantId, personId, GoodsReturn.WarehouseStatus.PENDING_VERIFICATION);
+        if (unverifiedReturns > 0) {
+            throw new BusinessException(
+                    person.getFullName() + " has returned goods the warehouse has not verified yet. "
+                            + "Verify the returns first, then submit the collections.",
+                    "RETURNS_NOT_VERIFIED");
+        }
+
+        List<Payment> pending = paymentRepository.findByTenantIdAndCollectedByIdAndSubmittedFalse(tenantId, personId);
+        if (pending.isEmpty()) {
+            throw new BusinessException("Nothing to submit for " + person.getFullName(), "NOTHING_TO_SUBMIT");
+        }
+
+        Instant now = Instant.now();
+        pending.forEach(p -> {
+            p.setSubmitted(true);
+            p.setSubmittedAt(now);
+        });
+        paymentRepository.saveAll(pending);
+
+        pending.stream().filter(p -> p.getOrder() != null)
+                .collect(Collectors.groupingBy(p -> p.getOrder().getId()))
+                .forEach((orderId, orderPayments) -> {
+                    BigDecimal total = orderPayments.stream().map(Payment::getAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    auditService.record(tenantId, "ORDER", orderId, "PAYMENT_SUBMITTED",
+                            "₹" + total.toPlainString() + " submitted on behalf of " + person.getFullName()
+                                    + " by " + admin.getFullName());
+                });
+    }
+
+    private List<OrderDtos.DailySummaryResponse> summariseByPerson(List<Payment> payments) {
         Map<UUID, List<Payment>> byPerson = payments.stream()
                 .collect(Collectors.groupingBy(p -> p.getCollectedBy().getId()));
 

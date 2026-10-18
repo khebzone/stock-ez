@@ -79,6 +79,48 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(null, "Payments cleared successfully"));
     }
 
+    @PostMapping("/{paymentId}/void")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_CREATE','DELIVERY_UPDATE','DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Void a wrongly entered payment")
+    public ResponseEntity<ApiResponse<Void>> voidPayment(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody OrderDtos.VoidPaymentRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId,
+            org.springframework.security.core.Authentication authentication) {
+        boolean canVoidAny = authentication != null && authentication.getAuthorities().stream()
+                .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN") || a.equals("DAY_CLOSURE_CREATE"));
+        paymentService.voidPayment(paymentId, request.getReason(), userId, tenantId, canVoidAny);
+        return ResponseEntity.ok(ApiResponse.success(null, "Payment voided"));
+    }
+
+    @PutMapping("/{paymentId}")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_CREATE','DELIVERY_UPDATE','DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Edit a payment entry before it is cleared")
+    public ResponseEntity<ApiResponse<OrderDtos.PaymentResponse>> editPayment(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody OrderDtos.EditPaymentRequest request,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId,
+            org.springframework.security.core.Authentication authentication) {
+        boolean canEditAny = authentication != null && authentication.getAuthorities().stream()
+                .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN") || a.equals("DAY_CLOSURE_CREATE"));
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.editPayment(paymentId, request, userId, tenantId, canEditAny), "Payment updated"));
+    }
+
+    @GetMapping("/changes")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_VIEW','DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Voided and edited payment entries with who changed them")
+    public ResponseEntity<ApiResponse<List<OrderDtos.PaymentChangeEntry>>> changes(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getPaymentChanges(tenantId, from, to)));
+    }
+
     @GetMapping("/instruments")
     @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('DAY_CLOSURE_VIEW','BANK_CLEARANCE_VIEW')")
     @Operation(summary = "Get all cheque / bank-transfer instruments for bank clearance")
@@ -146,6 +188,25 @@ public class PaymentController {
             @RequestHeader("X-User-Id") UUID userId) {
         return ResponseEntity.ok(ApiResponse.success(
                 paymentService.submitDayCollections(userId, tenantId), "Day collections submitted to accountant"));
+    }
+
+    @GetMapping("/awaiting-submission")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_VIEW')")
+    @Operation(summary = "Get collections not yet submitted, grouped by person")
+    public ResponseEntity<ApiResponse<List<OrderDtos.DailySummaryResponse>>> awaitingSubmission(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getAwaitingSubmission(tenantId)));
+    }
+
+    @PostMapping("/submit-day/{personId}")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DAY_CLOSURE_CREATE')")
+    @Operation(summary = "Submit a person's collections on their behalf")
+    public ResponseEntity<ApiResponse<Void>> submitOnBehalf(
+            @PathVariable UUID personId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        paymentService.submitOnBehalf(personId, userId, tenantId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Collections submitted"));
     }
 
     @GetMapping("/pending-verification")

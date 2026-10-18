@@ -31,7 +31,7 @@ public class UserService {
     private final AuditService auditService;
 
     public UserDtos.UserResponse createUser(UserDtos.CreateUserRequest request, UUID tenantId) {
-        if (userRepository.existsByPhoneAndActiveTrue(request.getPhone())) {
+        if (userRepository.existsByPhoneAndTenant_IdAndActiveTrue(request.getPhone(), tenantId)) {
             throw new BusinessException("Phone number is already registered", "PHONE_EXISTS");
         }
 

@@ -122,6 +122,18 @@ public class PurchaseController {
         return ResponseEntity.ok(ApiResponse.success(toPagedResponse(result)));
     }
 
+    @PutMapping("/batches/{batchId}/rates")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('STOCK_ADJUSTMENT_CREATE')")
+    @Operation(summary = "Update a stock batch's min and max sale rate")
+    public ResponseEntity<ApiResponse<PurchaseDtos.StockBatchResponse>> updateBatchRates(
+            @PathVariable UUID batchId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody PurchaseDtos.UpdateBatchRatesRequest req) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.updateBatchRates(batchId, req, tenantId, userId), "Sale rates updated"));
+    }
+
     @GetMapping("/batches/product/{productId}")
     @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('STOCK_VIEW','ORDERS_VIEW','ORDERS_CREATE')")
     @Operation(summary = "Get stock batches for a product")

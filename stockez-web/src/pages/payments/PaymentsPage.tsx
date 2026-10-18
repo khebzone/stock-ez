@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
 import {
-  Table, Button, Card, message, Tag, Tabs, Row, Col,
-  Badge, Drawer, List, Avatar, DatePicker, Checkbox, Alert, Divider, Empty, Grid,
+  Table, Button, Card, message, Tag, Tabs, Row, Col, Popconfirm,
+  Badge, Drawer, List, Avatar, DatePicker, Checkbox, Alert, Divider, Empty, Grid, Input,
 } from 'antd';
 import {
   CheckCircleOutlined,
-  SafetyOutlined, CalendarOutlined, PhoneOutlined, ExclamationCircleOutlined,
+  SafetyOutlined, CalendarOutlined, StopOutlined, PhoneOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { noFutureDates } from '../../utils/date';
 import {
-  useGetDailySummaryQuery, useClearPaymentsMutation,
-  useGetPendingVerificationsQuery,
+  useGetDailySummaryQuery, useClearPaymentsMutation, useGetPaymentChangesQuery,
+  useGetPendingVerificationsQuery, useGetAwaitingSubmissionQuery, useSubmitDayForPersonMutation,
 } from '../../store/api/paymentApi';
 import PageHeader from '../../components/PageHeader';
+import PaymentActions from '../../components/PaymentActions';
 
 const MODE_COLOR: Record<string, string> = {
   CASH: '#059669', UPI: '#7c3aed', CHEQUE: '#d97706',
@@ -39,20 +40,25 @@ const PendingVerificationTab: React.FC = () => {
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
 
   const { data, isLoading, refetch } = useGetPendingVerificationsQuery();
-  const { data: todayData } = useGetDailySummaryQuery({ date: dayjs().format('YYYY-MM-DD') });
+  const { data: awaitingData } = useGetAwaitingSubmissionQuery();
+  const [submitForPerson, { isLoading: submittingFor }] = useSubmitDayForPersonMutation();
   const [clearPayments, { isLoading: clearing }] = useClearPaymentsMutation();
 
-  // People who have collected today but not yet submitted
-  const pendingSubmission = (todayData?.data || [])
-    .map((g: any) => ({
-      ...g,
-      unsubmitted: (g.payments || []).filter((p: any) => !p.submitted),
-    }))
-    .filter((g: any) => g.unsubmitted.length > 0)
-    .map((g: any) => ({
-      ...g,
-      unsubmittedTotal: g.unsubmitted.reduce((s: number, p: any) => s + Number(p.amount), 0),
-    }));
+  // Everyone holding collections they have not submitted, from any date
+  const pendingSubmission = (awaitingData?.data || []).map((g: any) => ({
+    ...g,
+    unsubmitted: g.payments || [],
+    unsubmittedTotal: Number(g.totalCollected || 0),
+  }));
+
+  const handleSubmitFor = async (g: any) => {
+    try {
+      await submitForPerson(g.personId).unwrap();
+      message.success(`Submitted for ${g.personName}`);
+    } catch (err: any) {
+      message.error(err?.data?.message || 'Failed to submit');
+    }
+  };
 
   const groups: any[] = data?.data || [];
 
@@ -126,6 +132,16 @@ const PendingVerificationTab: React.FC = () => {
                   }}>
                     NOT SUBMITTED
                   </span>
+                  <Popconfirm
+                    title={`Submit ₹${g.unsubmittedTotal.toFixed(2)} for ${g.personName}?`}
+                    description="It will go to Pending Verification, recorded as submitted by you."
+                    okText="Submit" onConfirm={() => handleSubmitFor(g)}
+                  >
+                    <Button type="primary" size="small" loading={submittingFor}
+                      style={{ background: '#059669', border: 'none', fontWeight: 700 }}>
+                      Submit
+                    </Button>
+                  </Popconfirm>
                   {g.phone && (
                     <a href={`tel:${g.phone}`} style={{
                       display: 'flex', alignItems: 'center', gap: 5,
@@ -329,6 +345,9 @@ const PendingVerificationTab: React.FC = () => {
                     )}
                   />
                 ),
+                Number(p.amount) > 0 && (
+                  <PaymentActions key="void" payment={p} onDone={() => setDrawerPerson(null)} />
+                ),
               ].filter(Boolean)}
             >
               <List.Item.Meta
@@ -375,6 +394,7 @@ const PendingVerificationTab: React.FC = () => {
 // ── Daily History Tab ────────────────────────────────────────────────────────
 const DailyHistoryTab: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
+  const [search, setSearch] = useState('');
 
   const { data, isLoading, refetch } = useGetDailySummaryQuery({
     date: selectedDate.format('YYYY-MM-DD'),
@@ -383,6 +403,15 @@ const DailyHistoryTab: React.FC = () => {
   const groups: any[] = data?.data || [];
 
   const allPayments = groups.flatMap((g: any) => g.payments || []);
+
+  const term = search.trim().toLowerCase();
+  const visiblePayments = term
+    ? allPayments.filter((p: any) =>
+        [
+          p.order?.customerName, p.order?.orderNumber, p.collectedBy?.fullName,
+          p.paymentMethodName, p.paymentMode, p.referenceNumber, String(p.amount),
+        ].some((v) => v && String(v).toLowerCase().includes(term)))
+    : allPayments;
 
   // Refunds are negative payments — keep them out of the "collected" figures so the
   // total never reads negative, and surface them on their own "Refunds Paid Out" tile.
@@ -454,6 +483,12 @@ const DailyHistoryTab: React.FC = () => {
               : <Badge status="default" text="Collected" />
       ),
     },
+    {
+      title: '',
+      key: 'actions',
+      width: 50,
+      render: (_: any, r: any) => (Number(r.amount) > 0 ? <PaymentActions payment={r} /> : null),
+    },
   ];
 
   return (
@@ -466,6 +501,13 @@ const DailyHistoryTab: React.FC = () => {
           allowClear={false}
           disabledDate={noFutureDates}
           style={{ borderRadius: 8 }}
+        />
+        <Input.Search
+          allowClear
+          placeholder="Search customer, order, collector, method, amount"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 360 }}
         />
         <Button onClick={() => refetch()} style={{ borderRadius: 8 }}>Refresh</Button>
       </div>
@@ -492,7 +534,7 @@ const DailyHistoryTab: React.FC = () => {
       <Card style={{ borderRadius: 12 }} styles={{ body: { padding: 0 } }}>
         <Table
           columns={columns}
-          dataSource={allPayments}
+          dataSource={visiblePayments}
           rowKey="id"
           loading={isLoading}
           size="middle"
@@ -504,17 +546,68 @@ const DailyHistoryTab: React.FC = () => {
   );
 };
 
+const ChangesHistoryTab: React.FC = () => {
+  const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(6, 'day'), dayjs()]);
+  const [search, setSearch] = useState('');
+  const { data, isLoading, refetch } = useGetPaymentChangesQuery({
+    from: range[0].format('YYYY-MM-DD'),
+    to: range[1].format('YYYY-MM-DD'),
+  });
+
+  const term = search.trim().toLowerCase();
+  const rows: any[] = (data?.data || []).filter((r: any) =>
+    !term || [r.orderNumber, r.performedBy, r.description, r.action]
+      .some((v) => v && String(v).toLowerCase().includes(term)));
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, margin: '16px 0', flexWrap: 'wrap' }}>
+        <DatePicker.RangePicker
+          value={range}
+          format="DD MMM YYYY"
+          allowClear={false}
+          disabledDate={noFutureDates}
+          onChange={(v) => v && v[0] && v[1] && setRange([v[0], v[1]])}
+        />
+        <Button onClick={() => refetch()}>Refresh</Button>
+        <Input.Search
+          allowClear
+          placeholder="Search order, person or reason"
+          style={{ width: 280 }}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+      <Card styles={{ body: { padding: 0 } }}>
+        <Table
+          rowKey={(r: any, i) => `${r.at}-${i}`}
+          loading={isLoading}
+          dataSource={rows}
+          size="small"
+          pagination={{ pageSize: 25, showSizeChanger: false }}
+          locale={{ emptyText: 'No voided or edited entries in this period' }}
+          columns={[
+            { title: 'When', dataIndex: 'at', width: 160, render: (v: string) => dayjs(v).format('DD MMM YYYY, h:mm A') },
+            { title: 'Action', dataIndex: 'action', width: 90 },
+            { title: 'Order', dataIndex: 'orderNumber', width: 150, render: (v: string) => v || '-' },
+            { title: 'Changed by', dataIndex: 'performedBy', width: 160 },
+            { title: 'Details', dataIndex: 'description' },
+          ]}
+        />
+      </Card>
+    </>
+  );
+};
+
 // ── Main Component ───────────────────────────────────────────────────────────
 const PaymentsPage: React.FC = () => {
   const { data: pendingData } = useGetPendingVerificationsQuery();
-  const { data: todaySummary } = useGetDailySummaryQuery({ date: dayjs().format('YYYY-MM-DD') });
+  const { data: awaitingSummary } = useGetAwaitingSubmissionQuery();
 
   const pendingVerifyCount = (pendingData?.data || []).reduce(
     (acc: number, g: any) => acc + (g.payments?.length || 0), 0
   );
-  const pendingSubmitCount = (todaySummary?.data || []).filter((g: any) =>
-    (g.payments || []).some((p: any) => !p.submitted)
-  ).length;
+  const pendingSubmitCount = (awaitingSummary?.data || []).length;
   const totalPending = pendingVerifyCount + pendingSubmitCount;
 
   const tabs = [
@@ -535,6 +628,11 @@ const PaymentsPage: React.FC = () => {
       key: 'history',
       label: <span><CalendarOutlined /> Daily History</span>,
       children: <DailyHistoryTab />,
+    },
+    {
+      key: 'changes',
+      label: <span><StopOutlined /> Void / Edit History</span>,
+      children: <ChangesHistoryTab />,
     },
   ];
 

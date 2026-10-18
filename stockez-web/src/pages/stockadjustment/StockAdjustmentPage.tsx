@@ -345,7 +345,7 @@ const StockAdjustmentPage: React.FC = () => {
 
                 {batchesData && batches.length === 0 && !loadingBatches && (
                   <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 14 }}>
-                    No active batches found for this product
+                    No batches found for this product
                   </div>
                 )}
               </>

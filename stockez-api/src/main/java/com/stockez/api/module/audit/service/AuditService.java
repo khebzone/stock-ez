@@ -39,6 +39,18 @@ public class AuditService {
     }
 
     @Transactional(readOnly = true)
+    public List<AuditLog> getEventsByActions(UUID tenantId, List<String> actions, Instant from, Instant to) {
+        return auditLogRepository.findByActionsBetween(tenantId, actions, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditLog> getWarehouseReturnEvents(UUID tenantId, Instant from, Instant to) {
+        return auditLogRepository.findWarehouseReturnEvents(
+                tenantId, "ORDER", List.of("RESTOCKED", "RESTOCKED_SHORTAGE", "CANCELLED"),
+                "%after warehouse return%", from, to);
+    }
+
+    @Transactional(readOnly = true)
     public Page<AuditLog> getReport(UUID tenantId, String entityType, String performedBy,
                                     String action, Instant from, Instant to, Pageable pageable) {
         Instant fromParam = from != null ? from : Instant.EPOCH;

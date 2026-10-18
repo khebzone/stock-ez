@@ -599,6 +599,34 @@ public class PurchaseService {
         return toResponse(saved);
     }
 
+    public PurchaseDtos.StockBatchResponse updateBatchRates(
+            UUID batchId, PurchaseDtos.UpdateBatchRatesRequest req, UUID tenantId, UUID userId) {
+        StockBatch batch = stockBatchRepository.findById(batchId)
+                .filter(b -> b.getTenant().getId().equals(tenantId))
+                .orElseThrow(() -> new ResourceNotFoundException("StockBatch", batchId.toString()));
+
+        if (req.getMinSaleRate().compareTo(req.getMaxSaleRate()) > 0) {
+            throw new BusinessException(
+                    "Min sale rate (₹" + req.getMinSaleRate() + ") cannot exceed max sale rate (₹" + req.getMaxSaleRate() + ")",
+                    "MIN_EXCEEDS_MAX");
+        }
+
+        BigDecimal oldMin = batch.getMinSaleRate();
+        BigDecimal oldMax = batch.getMaxSaleRate();
+        batch.setMinSaleRate(req.getMinSaleRate());
+        batch.setMaxSaleRate(req.getMaxSaleRate());
+        StockBatch saved = stockBatchRepository.save(batch);
+
+        String performer = userRepository.findById(userId).map(User::getFullName).orElse("Unknown");
+        auditLogRepository.save(AuditLog.builder()
+                .tenantId(tenantId).entityType("STOCK_BATCH").entityId(saved.getId()).action("RATES_UPDATED")
+                .description("Batch " + saved.getBatchNumber() + " sale rates: min ₹" + oldMin + " → ₹" + req.getMinSaleRate()
+                        + ", max ₹" + oldMax + " → ₹" + req.getMaxSaleRate())
+                .performedBy(performer).build());
+
+        return toBatchResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public List<PurchaseDtos.AuditLogResponse> getAuditHistory(UUID id, UUID tenantId) {
         purchaseEntryRepository.findByIdAndTenantId(id, tenantId)

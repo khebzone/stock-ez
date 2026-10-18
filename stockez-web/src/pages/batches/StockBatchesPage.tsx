@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Skeleton, Input, Button, Tooltip, Space, Select } from 'antd';
-import { InboxOutlined, SearchOutlined, RollbackOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { InboxOutlined, SearchOutlined, RollbackOutlined, DeleteOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons';
 import { exportToXLSX } from '../../components/TableToolbar';
 import dayjs from 'dayjs';
 import { useGetAllBatchesQuery } from '../../store/api/purchaseApi';
@@ -8,6 +8,7 @@ import { useGetMastersQuery } from '../../store/api/productMasterApi';
 import { hasPermission } from '../../utils/permissions';
 import ReturnToSupplierModal from '../../components/ReturnToSupplierModal';
 import WriteOffModal from '../../components/WriteOffModal';
+import EditBatchRatesModal from '../../components/EditBatchRatesModal';
 
 const STATUS_TABS = [
   { key: 'active',      label: 'Active' },
@@ -26,6 +27,7 @@ const StockBatchesPage: React.FC = () => {
   const [brand, setBrand]         = useState<string | undefined>();
   const [returnBatch, setReturnBatch]   = useState<any>(null);
   const [writeOffBatch, setWriteOffBatch] = useState<any>(null);
+  const [ratesBatch, setRatesBatch]       = useState<any>(null);
 
   // Debounce search — fires API call 400ms after user stops typing
   useEffect(() => {
@@ -150,14 +152,27 @@ const StockBatchesPage: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      width: 80,
+      width: 110,
       align: 'center' as const,
       render: (_: any, r: any) => {
-        if (r.quantityAvailable <= 0) return null;
-        if (!hasPermission('RETURNS_CREATE')) return null;
+        const canEditRates = hasPermission('STOCK_ADJUSTMENT_CREATE');
+        const hasStock = r.quantityAvailable > 0;
+        const canReturn = hasStock && hasPermission('RETURNS_CREATE');
+        const canWriteOff = hasStock && hasPermission('RETURNS_DAMAGE');
+        if (!canEditRates && !canReturn && !canWriteOff) return null;
         return (
           <Space size={4}>
-            {r.supplierName && (
+            {canEditRates && (
+              <Tooltip title="Edit sale rates">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => setRatesBatch(r)}
+                />
+              </Tooltip>
+            )}
+            {canReturn && r.supplierName && (
               <Tooltip title="Return to Supplier">
                 <Button
                   type="text"
@@ -167,14 +182,16 @@ const StockBatchesPage: React.FC = () => {
                 />
               </Tooltip>
             )}
-            <Tooltip title="Write Off / Damage">
-              <Button
-                type="text"
-                size="small"
-                icon={<DeleteOutlined style={{ color: '#dc2626' }} />}
-                onClick={() => setWriteOffBatch(r)}
-              />
-            </Tooltip>
+            {canWriteOff && (
+              <Tooltip title="Write Off / Damage">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined style={{ color: '#dc2626' }} />}
+                  onClick={() => setWriteOffBatch(r)}
+                />
+              </Tooltip>
+            )}
           </Space>
         );
       },
@@ -274,6 +291,8 @@ const StockBatchesPage: React.FC = () => {
           onClose={() => setReturnBatch(null)}
         />
       )}
+
+      <EditBatchRatesModal batch={ratesBatch} onClose={() => setRatesBatch(null)} />
 
       {writeOffBatch && (
         <WriteOffModal

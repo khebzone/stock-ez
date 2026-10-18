@@ -69,22 +69,50 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
   const settled = note.refundStatus === 'PROCESSED' && note.settlementMode;
 
   return (
-    <div style={{ padding: 24, fontFamily: 'Arial, sans-serif', color: '#1c2b36', background: '#fff' }}>
+    <div className="dn-root" style={{ padding: 24, fontFamily: 'Arial, sans-serif', color: '#1c2b36', background: '#fff' }}>
+      <style>{`
+        @media print {
+          @page { margin: 6mm; }
+          .print-invoice, .print-invoice * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        @media print and (max-width: 560px) {
+          .dn-root { padding: 0 !important; line-height: 1.25 !important; }
+          .dn-root .dn-head { padding-bottom: 8px !important; gap: 10px !important; }
+          .dn-root .dn-head img { height: 34px !important; }
+          .dn-root .dn-company { font-size: 16px !important; }
+          .dn-root .dn-head-text div:not(.dn-company) { font-size: 10px !important; }
+          .dn-root .dn-title { font-size: 16px !important; }
+          .dn-root .dn-meta table { font-size: 10px !important; }
+          .dn-root .dn-parties { margin: 8px 0 !important; gap: 10px !important; }
+          .dn-root .dn-parties > div { padding: 6px 10px !important; }
+          .dn-root .dn-parties > div > div:not(:first-child) { font-size: 10px !important; }
+          .dn-root .dn-parties > div > div:nth-child(2) { font-size: 12px !important; }
+          .dn-root .dn-items th, .dn-root .dn-items td { font-size: 9.5px !important; padding: 3px 4px !important; }
+          .dn-root .dn-totals { margin-top: 8px !important; gap: 10px !important; }
+          .dn-root .dn-totals table { font-size: 10.5px !important; }
+          .dn-root .dn-totals table th, .dn-root .dn-totals table td { font-size: 10px !important; padding: 3px 5px !important; }
+          .dn-root .dn-reason { margin-top: 8px !important; font-size: 10.5px !important; }
+          .dn-root .dn-settle { margin-top: 8px !important; padding: 6px 10px !important; }
+          .dn-root .dn-settle div { font-size: 10.5px !important; }
+          .dn-root .dn-sign { margin-top: 26px !important; }
+          .dn-root .dn-foot { margin-top: 10px !important; padding-top: 6px !important; font-size: 9px !important; }
+        }
+      `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, borderBottom: '2px solid #1c2b36', paddingBottom: 12 }}>
-        <div style={{ flex: '1 1 58%' }}>
+      <div className="dn-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 20, borderBottom: '2px solid #1c2b36', paddingBottom: 12 }}>
+        <div className="dn-head-text" style={{ flex: '1 1 auto', minWidth: 0 }}>
           {c.logoUrl && (
             <img src={c.logoUrl} alt="" style={{ height: 52, objectFit: 'contain', display: 'block', marginBottom: 6 }} />
           )}
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.3 }}>{c.name}</div>
+          <div className="dn-company" style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.3 }}>{c.name}</div>
           {address.trim() !== '-' && <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>{address}</div>}
           {c.phone && <div style={{ fontSize: 12, color: '#555' }}>Ph: {c.phone}</div>}
           {c.gstin && <div style={{ fontSize: 12, color: '#555' }}>GSTIN: <strong>{c.gstin}</strong></div>}
           {c.fssaiNumber && <div style={{ fontSize: 12, color: '#555' }}>FSSAI: {c.fssaiNumber}</div>}
         </div>
-        <div style={{ flex: '0 0 38%', textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>DEBIT NOTE</div>
+        <div className="dn-meta" style={{ flex: '0 0 auto', textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <div className="dn-title" style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>DEBIT NOTE</div>
           <div style={{ fontSize: 11, color: '#777', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
             (Purchase Return)
           </div>
@@ -122,7 +150,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
       </div>
 
       {/* Parties */}
-      <div style={{ display: 'flex', gap: 14, margin: '14px 0' }}>
+      <div className="dn-parties" style={{ display: 'flex', gap: 14, margin: '14px 0' }}>
         <div style={{ flex: 1, border: '1px solid #ddd', borderRadius: 4, padding: '10px 12px' }}>
           <div style={label}>Debit To (Supplier)</div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>{note.supplierName || '—'}</div>
@@ -139,13 +167,13 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
       </div>
 
       {/* Items */}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table className="dn-items" style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
             <th style={{ ...th, width: 32 }}>#</th>
-            <th style={th}>Product</th>
+            <th style={{ ...th, minWidth: 110 }}>Product</th>
             <th style={{ ...th, width: 70 }}>HSN</th>
-            <th style={{ ...th, width: 110 }}>Batch</th>
+            <th style={{ ...th, width: 130, whiteSpace: 'nowrap' }}>Batch</th>
             <th style={{ ...th, width: 70, textAlign: 'right' }}>Qty</th>
             <th style={{ ...th, width: 80, textAlign: 'right' }}>Rate</th>
             <th style={{ ...th, width: 90, textAlign: 'right' }}>Taxable</th>
@@ -162,7 +190,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
                 {l.reason && <div style={{ fontSize: 11, color: '#777' }}>{l.reason}</div>}
               </td>
               <td style={td}>{l.hsnCode || '—'}</td>
-              <td style={td}>{l.batchNumber || '—'}</td>
+              <td style={{ ...td, whiteSpace: 'nowrap' }}>{l.batchNumber || '—'}</td>
               <td style={tdR}>{l.quantity}{l.unitName ? ` ${l.unitName}` : ''}</td>
               <td style={tdR}>{fmt(l.unitRate)}</td>
               <td style={tdR}>{fmt(l.taxableAmount)}</td>
@@ -174,7 +202,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
       </table>
 
       {/* GST break-up + totals */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 14, alignItems: 'flex-start' }}>
+      <div className="dn-totals" style={{ display: 'flex', gap: 16, marginTop: 14, alignItems: 'flex-start' }}>
         <div style={{ flex: '1 1 52%' }}>
           {slabs.length > 0 && (
             <>
@@ -231,13 +259,13 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
       </div>
 
       {note.reason && (
-        <div style={{ marginTop: 14, fontSize: 12, color: '#444' }}>
+        <div className="dn-reason" style={{ marginTop: 14, fontSize: 12, color: '#444' }}>
           <span style={{ fontWeight: 700 }}>Reason for return:</span> {note.reason}
         </div>
       )}
 
       {/* Settlement */}
-      <div style={{ marginTop: 14, border: '1px solid #ddd', borderRadius: 4, padding: '10px 12px', background: '#fafafa' }}>
+      <div className="dn-settle" style={{ marginTop: 14, border: '1px solid #ddd', borderRadius: 4, padding: '10px 12px', background: '#fafafa' }}>
         <div style={label}>Settlement</div>
         <div style={{ fontSize: 13, fontWeight: 600 }}>
           {settled
@@ -250,18 +278,16 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
       </div>
 
       {/* Signatures */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 48 }}>
-        <div style={{ textAlign: 'left' }}>
-          <div style={{ fontSize: 12, color: '#888' }}>____________________</div>
-          <div style={label}>Supplier's Acknowledgement</div>
+      <div className="dn-sign" style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginTop: 48 }}>
+        <div style={{ minWidth: 150, borderTop: '1px solid #1c2b36', paddingTop: 5, textAlign: 'left' }}>
+          <div style={{ ...label, marginBottom: 0 }}>Supplier's Acknowledgement</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 12, color: '#888' }}>____________________</div>
-          <div style={label}>For {c.name}</div>
+        <div style={{ minWidth: 150, borderTop: '1px solid #1c2b36', paddingTop: 5, textAlign: 'right' }}>
+          <div style={{ ...label, marginBottom: 0 }}>For {c.name}</div>
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid #e8ecf0', marginTop: 20, paddingTop: 8, textAlign: 'center', fontSize: 11, color: '#999' }}>
+      <div className="dn-foot" style={{ borderTop: '1px solid #e8ecf0', marginTop: 20, paddingTop: 8, textAlign: 'center', fontSize: 11, color: '#999' }}>
         Generated by StockEz • Enterprise Distribution Platform
       </div>
     </div>
