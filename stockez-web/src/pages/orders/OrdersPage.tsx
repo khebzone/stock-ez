@@ -63,6 +63,32 @@ const StatusPill: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
+export const renderAvailBadge = (avail: number) => {
+  const isOut = avail <= 0;
+  const isLow = avail > 0 && avail <= 10;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1,
+        padding: '3px 8px',
+        borderRadius: 5,
+        background: isOut ? '#fef2f2' : isLow ? '#fffbeb' : '#f0fdf4',
+        color: isOut ? '#dc2626' : isLow ? '#d97706' : '#16a34a',
+        border: `1px solid ${isOut ? '#fecaca' : isLow ? '#fde68a' : '#bbf7d0'}`,
+        whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
+      }}
+    >
+      Avail: {avail}
+    </span>
+  );
+};
+
 const OrdersPage: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
@@ -283,6 +309,7 @@ const OrdersPage: React.FC = () => {
       return {
         productId: item.product?.id,
         quantity: item.quantity,
+        initialQuantity: item.quantity,
         unitPrice: item.unitPrice,
         gstPercent: item.gstPercent,
         discountPercent: item.discountPercent ?? 0,
@@ -295,7 +322,15 @@ const OrdersPage: React.FC = () => {
     setEditOverallDisc(record.overallDiscountValue != null ? Number(record.overallDiscountValue) : null);
     setEditModal(true);
   };
-  const addEditItem = () => setEditItems(prev => [...prev, { productId: undefined, quantity: 1, unitPrice: 0, gstPercent: 0, minSaleRate: null, maxSaleRate: null }]);
+  const addEditItem = () => setEditItems(prev => [...prev, {
+    productId: undefined,
+    quantity: 1,
+    initialQuantity: 0,
+    unitPrice: 0,
+    gstPercent: 0,
+    minSaleRate: null,
+    maxSaleRate: null,
+  }]);
   const removeEditItem = (i: number) => setEditItems(prev => prev.filter((_, idx) => idx !== i));
   const updateEditItem = (index: number, field: string, value: any) => {
     if (field === 'productId' && value) {
@@ -322,6 +357,8 @@ const OrdersPage: React.FC = () => {
           updated[index].gstPercent = p.salesGstPercent || p.sales_gst_percent;
           updated[index].minSaleRate = min;
           updated[index].maxSaleRate = max;
+          const origItem = (editingOrder?.items || []).find((oi: any) => (oi.product?.id || oi.productId) === value);
+          updated[index].initialQuantity = origItem ? origItem.quantity : 0;
         }
       }
       return updated;
@@ -334,6 +371,39 @@ const OrdersPage: React.FC = () => {
       : gross * (item.discountPercent || 0) / 100;
     return s + Math.max(0, gross - disc);
   }, 0);
+
+  const calcEditBreakdown = () => {
+    let subTotal = 0;
+    let totalGst = 0;
+    let grossIncl = 0;
+    for (const item of editItems) {
+      const gross = (item.unitPrice || 0) * (item.quantity || 0);
+      const disc = discountType === 'AMOUNT'
+        ? (item.discountAmount || 0)
+        : gross * (item.discountPercent || 0) / 100;
+      const netLine = Math.max(0, gross - disc);
+      const gstPct = item.gstPercent || 0;
+      const base = netLine * 100 / (100 + gstPct);
+      subTotal += base;
+      totalGst += netLine - base;
+      grossIncl += netLine;
+    }
+    const editDiscType: 'PERCENT' | 'AMOUNT' = editingOrder?.overallDiscountType || discountType;
+    const dv = editOverallDisc || 0;
+    const overallDisc = dv <= 0 || grossIncl <= 0 ? 0
+      : editDiscType === 'PERCENT'
+        ? Math.round(grossIncl * Math.min(dv, 100)) / 100
+        : Math.min(dv, grossIncl);
+    const factor = grossIncl > 0 ? (grossIncl - overallDisc) / grossIncl : 1;
+    subTotal *= factor;
+    totalGst *= factor;
+    return {
+      subTotal: Math.round(subTotal * 100) / 100,
+      totalGst: Math.round(totalGst * 100) / 100,
+      discount: Math.round(overallDisc * 100) / 100,
+      total: Math.round((subTotal + totalGst) * 100) / 100,
+    };
+  };
 
   const handleUpdate = async () => {
     if (!editItems.length) { message.error('Add at least one product'); return; }
@@ -860,99 +930,253 @@ const OrdersPage: React.FC = () => {
 
       {/* ── Edit Order Modal ── */}
       <Modal
-        title={<span style={{ fontWeight: 700, fontSize: 16 }}>Edit Order #{editingOrder?.orderNumber}</span>}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
+            <span style={{ fontWeight: 700, fontSize: 16 }}>Edit Order #{editingOrder?.orderNumber}</span>
+            {editingOrder?.status && <StatusPill status={editingOrder.status} />}
+          </div>
+        }
         open={editModal} onOk={handleUpdate} onCancel={() => setEditModal(false)}
-        confirmLoading={updating} width={isMobile ? '98vw' : 820} okText="Save Changes" okButtonProps={{ size: 'middle' }}
+        confirmLoading={updating} width={isMobile ? '98vw' : 760} okText="Save Changes"
+        okButtonProps={{ size: 'middle', style: { background: '#059669', borderColor: '#059669' } }}
         destroyOnClose
       >
         {editingOrder && (
-          <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#374151' }}>
-            <strong>{editingOrder.customer?.businessName}</strong>
-            <span style={{ color: '#94a3b8', marginLeft: 8 }}>{editingOrder.orderNumber}</span>
-            <span style={{ marginLeft: 8 }}><StatusPill status={editingOrder.status} /></span>
+          <div style={{
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: '12px 16px',
+            marginBottom: 12,
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+              Bill To
+            </div>
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: 15, lineHeight: 1.3 }}>
+              {editingOrder.customer?.businessName || '—'}
+            </div>
+            {(editingOrder.customer?.ownerName || editingOrder.customer?.phone) && (
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                {editingOrder.customer.ownerName}
+                {editingOrder.customer.phone && <span> · {editingOrder.customer.phone}</span>}
+              </div>
+            )}
           </div>
         )}
-        <Form form={editForm} layout="vertical">
-          <Form.Item name="notes" label="Notes"><Input placeholder="Optional" /></Form.Item>
+
+        <Form form={editForm} layout="vertical" style={{ marginBottom: 12 }}>
+          <Form.Item name="notes" label={<span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Notes</span>} style={{ marginBottom: 0 }}>
+            <Input placeholder="Optional order notes..." style={{ borderRadius: 8 }} />
+          </Form.Item>
         </Form>
-        <div style={{ borderTop: '1px solid #f0f0f0', marginBottom: 16, paddingTop: 16 }}>
-          <div style={{ fontWeight: 700, color: '#1a1d2e', marginBottom: 12 }}>Order Items</div>
-          {editItems.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: '#9ca3af' }}>
-              <ShoppingOutlined style={{ fontSize: 28, display: 'block', marginBottom: 8 }} />No items
+
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+          {editItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13 }}>
+              <ShoppingOutlined style={{ fontSize: 28, display: 'block', marginBottom: 8 }} />
+              No items in this order
             </div>
-          )}
-          {editItems.map((item, index) => {
-            const priceError = isPriceOutOfRange(item.unitPrice, item.minSaleRate, item.maxSaleRate);
-            const rangeLabel = item.minSaleRate != null || item.maxSaleRate != null
-              ? `${item.minSaleRate != null ? `₹${Number(item.minSaleRate).toFixed(2)}` : ''}${item.minSaleRate != null && item.maxSaleRate != null ? ' – ' : ''}${item.maxSaleRate != null ? `₹${Number(item.maxSaleRate).toFixed(2)}` : ''}`
-              : null;
-            const gross = (item.unitPrice || 0) * (item.quantity || 0);
-            const disc = discountType === 'AMOUNT' ? (item.discountAmount || 0) : gross * (item.discountPercent || 0) / 100;
-            return (
-              <Card key={index} size="small" style={{ marginBottom: 8, borderRadius: 8 }}
-                extra={<Button size="small" danger type="text" onClick={() => removeEditItem(index)}>Remove</Button>}>
-                <Row gutter={10} align="middle">
-                  <Col span={8}>
-                    <Select showSearch placeholder="Product" style={{ width: '100%' }} value={item.productId}
-                      optionFilterProp="children" onChange={(v) => updateEditItem(index, 'productId', v)}>
-                      {products.map((p: any) => <Option key={p.id} value={p.id}>{p.name} ({p.brand})</Option>)}
-                    </Select>
-                  </Col>
-                  <Col span={3}>
-                    <InputNumber placeholder="Qty" style={{ width: '100%' }} min={1} value={item.quantity}
-                      onChange={(v) => updateEditItem(index, 'quantity', v)} />
-                  </Col>
-                  <Col span={5}>
-                    <InputNumber placeholder="Rate ₹" precision={2} min={0} value={item.unitPrice}
-                      style={{ width: '100%', borderColor: priceError ? '#ef4444' : undefined }}
-                      onChange={(v) => updateEditItem(index, 'unitPrice', v ?? 0)} />
-                    {rangeLabel && (
-                      <div style={{ fontSize: 10, marginTop: 2, color: priceError ? '#ef4444' : '#9ca3af' }}>
-                        {rangeLabel}
+          ) : (
+            editItems.map((item, index) => {
+              const priceError = isPriceOutOfRange(item.unitPrice, item.minSaleRate, item.maxSaleRate);
+              const belowMin = item.minSaleRate != null && item.unitPrice < item.minSaleRate;
+              const aboveMax = item.maxSaleRate != null && item.unitPrice > item.maxSaleRate;
+              const gross = (item.unitPrice || 0) * (item.quantity || 0);
+              const disc = discountType === 'AMOUNT'
+                ? (item.discountAmount || 0)
+                : gross * (item.discountPercent || 0) / 100;
+              const netLine = Math.max(0, gross - disc);
+              const gstPct = item.gstPercent || 0;
+              const gstAmt = netLine - (netLine * 100 / (100 + gstPct));
+              const selectedProd = products.find((p: any) => p.id === item.productId);
+              const baseStock = selectedProd?.sellableStock ?? selectedProd?.stockQuantity ?? 0;
+              const initialQty = item.initialQuantity ?? 0;
+              const remainingAvail = Math.max(0, baseStock + initialQty - (item.quantity || 0));
+
+              return (
+                <div
+                  key={index}
+                  style={{
+                    borderBottom: index < editItems.length - 1 ? '6px solid #f1f5f9' : 'none',
+                    background: priceError ? '#fffdf0' : '#fff',
+                    padding: '12px 16px',
+                  }}
+                >
+                  {/* Top row: Product Select on left, Line Total & GST on right, Remove button */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Select
+                        showSearch
+                        placeholder="Select product..."
+                        style={{ width: '100%' }}
+                        value={item.productId}
+                        optionFilterProp="children"
+                        onChange={(v) => updateEditItem(index, 'productId', v)}
+                      >
+                        {products.map((p: any) => {
+                          const stock = p.sellableStock ?? p.stockQuantity ?? 0;
+                          return (
+                            <Option key={p.id} value={p.id}>
+                              {p.name} {p.brand ? `(${p.brand})` : ''} — Stock: {stock}
+                            </Option>
+                          );
+                        })}
+                      </Select>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingLeft: 2 }}>
+                        {selectedProd?.brand && (
+                          <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                            {selectedProd.brand}
+                          </span>
+                        )}
+                        {selectedProd?.brand && selectedProd && (
+                          <span style={{ color: '#cbd5e1', fontSize: 10 }}>•</span>
+                        )}
+                        {selectedProd && renderAvailBadge(remainingAvail)}
                       </div>
-                    )}
-                  </Col>
-                  <Col span={4}>
-                    {discountType === 'AMOUNT' ? (
-                      <InputNumber placeholder="Disc ₹" precision={2} min={0} value={item.discountAmount}
-                        style={{ width: '100%' }} prefix="₹" onChange={(v) => updateEditItem(index, 'discountAmount', v ?? 0)} />
-                    ) : (
-                      <InputNumber placeholder="Disc %" precision={2} min={0} max={100} value={item.discountPercent}
-                        style={{ width: '100%' }} suffix="%" onChange={(v) => updateEditItem(index, 'discountPercent', v ?? 0)} />
-                    )}
-                  </Col>
-                  <Col span={2}><span style={{ color: '#9ca3af', fontSize: 12 }}>GST {item.gstPercent}%</span></Col>
-                  <Col span={2}><span style={{ color: '#059669', fontWeight: 700, fontSize: 12 }}>
-                    ₹{Math.max(0, gross - disc).toFixed(0)}
-                  </span></Col>
-                </Row>
-              </Card>
-            );
-          })}
-          <Button icon={<PlusOutlined />} onClick={addEditItem} block style={{ borderStyle: 'dashed', borderRadius: 8, marginTop: 8 }}>
-            Add Product
-          </Button>
-          {editItems.length > 0 && (() => {
-            const gross = calcEditTotal();
-            const editDiscType: 'PERCENT' | 'AMOUNT' = editingOrder?.overallDiscountType || discountType;
-            const disc = calcDiscount(gross, editOverallDisc, editDiscType);
-            return (
-              <div style={{ marginTop: 12, background: '#ecfdf5', borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: disc > 0 ? 8 : 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>
-                    Overall Discount {editDiscType === 'PERCENT' ? '(%)' : '(₹)'}
-                  </span>
-                  <InputNumber size="small" min={0} style={{ width: 120 }} placeholder="0"
-                    prefix={editDiscType === 'AMOUNT' ? '₹' : undefined}
-                    value={editOverallDisc ?? undefined}
-                    max={editDiscType === 'PERCENT' ? 100 : undefined}
-                    onChange={(v) => setEditOverallDisc(v as number)} />
-                  {disc > 0 && <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>− ₹{disc.toFixed(2)}</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: priceError ? '#dc2626' : '#0f172a' }}>
+                          ₹{netLine.toFixed(2)}
+                        </div>
+                        {gstPct > 0 && (
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+                            GST ({gstPct}%) ₹{gstAmt.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        size="small"
+                        danger
+                        type="text"
+                        onClick={() => removeEditItem(index)}
+                        style={{ color: '#ef4444', padding: '0 4px', height: 24 }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Bottom row: QTY, RATE, DISC */}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, width: '100%' }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>
+                        QTY
+                      </div>
+                      <InputNumber
+                        min={1}
+                        value={item.quantity}
+                        controls={false}
+                        onChange={(v) => updateEditItem(index, 'quantity', v ?? 1)}
+                        style={{ width: 64, height: 32, textAlign: 'center' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>RATE</div>
+                      <InputNumber
+                        placeholder="Rate ₹"
+                        precision={2}
+                        min={0}
+                        controls={false}
+                        prefix="₹"
+                        value={item.unitPrice}
+                        style={{ width: '100%', height: 32, borderColor: priceError ? '#ef4444' : undefined }}
+                        onChange={(v) => updateEditItem(index, 'unitPrice', v ?? 0)}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>
+                        DISC {discountType === 'AMOUNT' ? '(₹)' : '(%)'}
+                      </div>
+                      {discountType === 'AMOUNT' ? (
+                        <InputNumber
+                          placeholder="0.00"
+                          precision={2}
+                          min={0}
+                          controls={false}
+                          prefix="₹"
+                          value={item.discountAmount || undefined}
+                          style={{ width: '100%', height: 32 }}
+                          onChange={(v) => updateEditItem(index, 'discountAmount', v ?? 0)}
+                        />
+                      ) : (
+                        <InputNumber
+                          placeholder="0"
+                          precision={2}
+                          min={0}
+                          max={100}
+                          controls={false}
+                          suffix="%"
+                          value={item.discountPercent || undefined}
+                          style={{ width: '100%', height: 32 }}
+                          onChange={(v) => updateEditItem(index, 'discountPercent', v ?? 0)}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Rate Range Hint */}
+                  {(item.minSaleRate != null || item.maxSaleRate != null) && (
+                    <div style={{ fontSize: 10, color: priceError ? '#dc2626' : '#94a3b8', fontWeight: priceError ? 600 : 500, marginTop: 4 }}>
+                      {priceError
+                        ? (belowMin ? `Below min rate ₹${Number(item.minSaleRate).toFixed(2)}` : `Above max rate ₹${Number(item.maxSaleRate).toFixed(2)}`)
+                        : `Allowed: ${item.minSaleRate != null ? `₹${Number(item.minSaleRate).toFixed(2)}` : ''}${item.minSaleRate != null && item.maxSaleRate != null ? ' – ' : ''}${item.maxSaleRate != null ? `₹${Number(item.maxSaleRate).toFixed(2)}` : ''}`
+                      }
+                    </div>
+                  )}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#059669' }}>
-                  <span>Total ({editItems.length} items)</span>
-                  <span>₹{(gross - disc).toFixed(2)}</span>
+              );
+            })
+          )}
+
+          {/* Add Product Button inside document card */}
+          <div style={{ padding: '10px 16px', background: '#fafafa', borderTop: '1px solid #f0f4f8' }}>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={addEditItem}
+              block
+              style={{ borderStyle: 'dashed', borderRadius: 8, height: 36, color: '#059669', borderColor: '#a7f3d0' }}
+            >
+              Add Product
+            </Button>
+          </div>
+
+          {/* Totals Block */}
+          {editItems.length > 0 && (() => {
+            const breakdown = calcEditBreakdown();
+            const editDiscType: 'PERCENT' | 'AMOUNT' = editingOrder?.overallDiscountType || discountType;
+            return (
+              <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '12px 16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>Overall Discount {editDiscType === 'AMOUNT' ? '(₹)' : '(%)'}</span>
+                    <InputNumber
+                      size="small" min={0} precision={2} controls={false}
+                      value={editOverallDisc ?? undefined}
+                      max={editDiscType === 'PERCENT' ? 100 : undefined}
+                      {...(editDiscType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}
+                      style={{ width: 100 }} placeholder="0"
+                      onChange={(v) => setEditOverallDisc(v as number)}
+                    />
+                  </div>
+                  {breakdown.discount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 13, color: '#94a3b8' }}>Less: Discount</span>
+                      <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>−₹{breakdown.discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, color: '#475569' }}>Subtotal</span>
+                    <span style={{ fontSize: 13, color: '#475569' }}>₹{breakdown.subTotal.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>GST</span>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>₹{breakdown.totalGst.toFixed(2)}</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Total</span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: '#059669' }}>₹{breakdown.total.toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             );

@@ -1697,6 +1697,8 @@ public class OrderService {
                 pi.setUnit(item.getProduct().getUnit());
                 pi.setImageUrl(item.getProduct().getImageUrl());
                 pi.setHsnCode(item.getProduct().getHsnCode());
+                pi.setMinSaleRate(item.getProduct().getMinSaleRate());
+                pi.setMaxSaleRate(item.getProduct().getMaxSaleRate());
                 ir.setProduct(pi);
             }
             return ir;

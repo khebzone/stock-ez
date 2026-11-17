@@ -115,6 +115,32 @@ const pricePopoverContent = (entries: { price: number; date: string }[]) => (
   </div>
 );
 
+const renderAvailBadge = (avail: number) => {
+  const isOut = avail <= 0;
+  const isLow = avail > 0 && avail <= 10;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1,
+        padding: '3px 8px',
+        borderRadius: 5,
+        background: isOut ? '#fef2f2' : isLow ? '#fffbeb' : '#f0fdf4',
+        color: isOut ? '#dc2626' : isLow ? '#d97706' : '#16a34a',
+        border: `1px solid ${isOut ? '#fecaca' : isLow ? '#fde68a' : '#bbf7d0'}`,
+        whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
+      }}
+    >
+      Avail: {avail}
+    </span>
+  );
+};
+
 // ── Memoized product card — only re-renders when this product's qty changes ───
 
 const NEAR_EXPIRY_DAYS = 60;
@@ -135,6 +161,7 @@ const ProductCard = React.memo<ProductCardProps>(({ p, qty, daysLeft, lastPrices
   const inCart    = qty > 0;
   const isExpired = daysLeft != null && daysLeft <= 0;
   const isNear    = daysLeft != null && daysLeft > 0;
+  const avail     = Math.max(0, (p.sellableStock ?? p.stockQuantity ?? 0) - qty);
   return (
     <div style={{
       background: '#fff',
@@ -155,11 +182,11 @@ const ProductCard = React.memo<ProductCardProps>(({ p, qty, daysLeft, lastPrices
         <span style={{
           position: 'absolute', top: 6, right: 6, fontSize: 10, fontWeight: 700,
           padding: '2px 7px', borderRadius: 12,
-          background: p.stockQuantity <= 10 ? '#fffbeb' : '#f0fdf4',
-          color: p.stockQuantity <= 10 ? '#d97706' : '#16a34a',
-          border: `1px solid ${p.stockQuantity <= 10 ? '#fde68a' : '#bbf7d0'}`,
+          background: avail === 0 ? '#fef2f2' : avail <= 10 ? '#fffbeb' : '#f0fdf4',
+          color: avail === 0 ? '#dc2626' : avail <= 10 ? '#d97706' : '#16a34a',
+          border: `1px solid ${avail === 0 ? '#fecaca' : avail <= 10 ? '#fde68a' : '#bbf7d0'}`,
         }}>
-          {p.stockQuantity}
+          {avail}
         </span>
       </div>
 
@@ -1060,6 +1087,8 @@ const SalesOrderPage: React.FC = () => {
               const hasError = belowMin || aboveMax;
               const gross    = lineTotal(item);
               const gstAmt   = gross * item.gstPercent / (100 + item.gstPercent);
+              const baseStock = item.product?.sellableStock ?? item.product?.stockQuantity ?? 0;
+              const remainingAvail = Math.max(0, baseStock - item.quantity);
               const updateDiscount = (v: number | null) => {
                 if (discountType === 'AMOUNT') {
                   setDiscountAmounts(prev => ({ ...prev, [item.productId]: v ?? 0 }));
@@ -1101,7 +1130,11 @@ const SalesOrderPage: React.FC = () => {
                       <div style={{ padding: '11px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13, lineHeight: 1.4 }}>{item.product?.name}</div>
-                          {item.product?.brand && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{item.product.brand}</div>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                            {item.product?.brand && <span style={{ fontSize: 11, color: '#94a3b8' }}>{item.product.brand}</span>}
+                            {item.product?.brand && <span style={{ color: '#cbd5e1', fontSize: 10 }}>•</span>}
+                            {renderAvailBadge(remainingAvail)}
+                          </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
                           <div style={{ textAlign: 'right' }}>
@@ -1115,24 +1148,52 @@ const SalesOrderPage: React.FC = () => {
                       </div>
                       {/* Mobile — bottom row: qty + rate input + optional error below */}
                       <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {QtyControl}
-                          <Tooltip
-                            title={(min != null || max != null) ? `${min != null ? `min ₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `max ₹${Number(max).toFixed(2)}` : ''}` : undefined}
-                            placement="top"
-                          >
-                            <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: isSmall ? 100 : 110, height: 30 }} status={hasError ? 'error' : ''} />
-                          </Tooltip>
-                          <InputNumber size="small" min={0} precision={2} value={discountValue} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹', style: { width: 82, height: 30 }, placeholder: '₹ disc' } : { suffix: '%', max: 100, style: { width: 72, height: 30 }, placeholder: 'Disc%' })} />
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, width: '100%' }}>
+                          <div style={{ flexShrink: 0 }}>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>QTY</div>
+                            {QtyControl}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3 }}>RATE</div>
+                            <Tooltip
+                              title={(min != null || max != null) ? `${min != null ? `min ₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `max ₹${Number(max).toFixed(2)}` : ''}` : undefined}
+                              placement="top"
+                            >
+                              <InputNumber size="small" controls={false} min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: '100%', height: 30 }} status={hasError ? 'error' : ''} />
+                            </Tooltip>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              DISC {discountType === 'AMOUNT' ? '(₹)' : '(%)'}
+                            </div>
+                            <InputNumber
+                              size="small"
+                              min={0}
+                              controls={false}
+                              precision={2}
+                              value={discountValue || undefined}
+                              onChange={updateDiscount}
+                              prefix={discountType === 'AMOUNT' ? '₹' : undefined}
+                              suffix={discountType === 'PERCENT' ? '%' : undefined}
+                              max={discountType === 'PERCENT' ? 100 : undefined}
+                              style={{ width: '100%', height: 30 }}
+                              placeholder="0.00"
+                            />
+                          </div>
                         </div>
+
+                        {(min != null || max != null) && (
+                          <div style={{ fontSize: 10, color: hasError ? '#dc2626' : '#94a3b8', fontWeight: hasError ? 600 : 500 }}>
+                            {hasError
+                              ? (belowMin ? `Below min rate ₹${Number(min).toFixed(2)}` : `Above max rate ₹${Number(max).toFixed(2)}`)
+                              : `Allowed: ${min != null ? `₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `₹${Number(max).toFixed(2)}` : ''}`
+                            }
+                          </div>
+                        )}
+
                         {lastPrices[item.productId]?.length > 0 && (
                           <span style={{ fontSize: 10, color: '#64748b' }}>
                             Last: {lastPrices[item.productId].map((e, i) => <span key={i}>{i > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}₹{Number(e.price).toFixed(2)} <span style={{ color: '#94a3b8' }}>({fmtShortDate(e.date)})</span></span>)}
-                          </span>
-                        )}
-                        {hasError && (
-                          <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
-                            {belowMin ? `Below min ₹${Number(min).toFixed(2)}` : `Above max ₹${Number(max).toFixed(2)}`}
                           </span>
                         )}
                       </div>
@@ -1142,7 +1203,11 @@ const SalesOrderPage: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: isTablet ? '1fr 70px 60px 64px 58px 48px 72px 20px' : '1fr 80px 65px 72px 66px 56px 82px 22px', gap: '0 8px', padding: '10px 16px', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product?.name}</div>
-                        {item.product?.brand && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{item.product.brand}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          {item.product?.brand && <span style={{ fontSize: 11, color: '#94a3b8' }}>{item.product.brand}</span>}
+                          {item.product?.brand && <span style={{ color: '#cbd5e1', fontSize: 10 }}>•</span>}
+                          {renderAvailBadge(remainingAvail)}
+                        </div>
                         {lastPrices[item.productId]?.length > 0 && (
                           <Popover trigger={["hover", "click"]} title={<span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Last Billed</span>} content={pricePopoverContent(lastPrices[item.productId])}>
                             <div style={{ fontSize: 10, color: '#64748b', marginTop: 1, cursor: 'pointer' }}>
@@ -1160,9 +1225,9 @@ const SalesOrderPage: React.FC = () => {
                         title={(min != null || max != null) ? `${min != null ? `min ₹${Number(min).toFixed(2)}` : ''}${min != null && max != null ? ' – ' : ''}${max != null ? `max ₹${Number(max).toFixed(2)}` : ''}` : undefined}
                         placement="top"
                       >
-                        <InputNumber size="small" min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: '100%', height: isTablet ? 26 : 30 }} status={hasError ? 'error' : ''} />
+                        <InputNumber size="small" controls={false} min={0.01} value={item.unitPrice} onChange={v => v != null && updatePrice(item.productId, v)} prefix="₹" style={{ width: '100%', height: isTablet ? 26 : 30 }} status={hasError ? 'error' : ''} />
                       </Tooltip>
-                      <InputNumber size="small" min={0} precision={2} value={discountValue} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%', max: 100 })} style={{ width: '100%', height: isTablet ? 26 : 30 }} />
+                      <InputNumber size="small" min={0} controls={false} precision={2} value={discountValue || undefined} onChange={updateDiscount} {...(discountType === 'AMOUNT' ? { prefix: '₹', placeholder: '0.00' } : { suffix: '%', max: 100, placeholder: '0' })} style={{ width: '100%', height: isTablet ? 26 : 30 }} />
                       {QtyControl}
                       <div style={{ textAlign: 'right', fontSize: 13, color: '#475569' }}>₹{gross.toFixed(2)}</div>
                       <div style={{ textAlign: 'right', fontSize: 13, color: '#475569' }}>₹{gstAmt.toFixed(2)}</div>
@@ -1183,7 +1248,7 @@ const SalesOrderPage: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 13, color: '#94a3b8' }}>Overall Discount {discountType === 'AMOUNT' ? '(₹)' : '(%)'}</span>
                     <InputNumber
-                      size="small" min={0} precision={2}
+                      size="small" min={0} precision={2} controls={false}
                       value={overallDiscValue ?? undefined}
                       max={discountType === 'PERCENT' ? 100 : undefined}
                       {...(discountType === 'AMOUNT' ? { prefix: '₹' } : { suffix: '%' })}

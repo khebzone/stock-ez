@@ -110,7 +110,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_EDIT','INVOICE_APPROVE')")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('ORDERS_EDIT','INVOICE_APPROVE','ORDERS_CREATE')")
     @Operation(summary = "Edit order items (only while SUBMITTED)")
     public ResponseEntity<ApiResponse<OrderDtos.OrderResponse>> update(
             @PathVariable UUID id,

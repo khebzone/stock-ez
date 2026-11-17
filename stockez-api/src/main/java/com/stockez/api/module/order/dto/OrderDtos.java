@@ -258,6 +258,8 @@ public class OrderDtos {
         private String unit;
         private String imageUrl;
         private String hsnCode;
+        private java.math.BigDecimal minSaleRate;
+        private java.math.BigDecimal maxSaleRate;
     }
 
     // Payment DTOs
