@@ -55,6 +55,7 @@ public class CustomerDtos {
     public static class UpdateCustomerRequest {
         @NotBlank @Size(max = 200) private String businessName;
         @NotBlank @Size(max = 100) private String ownerName;
+        @Pattern(regexp = "^[6-9]\\d{9}$", message = "Enter valid 10-digit phone") private String phone;
         @Pattern(regexp = "^[6-9]\\d{9}$") private String altPhone;
         @Email private String email;
         @Size(max = 500) private String address;

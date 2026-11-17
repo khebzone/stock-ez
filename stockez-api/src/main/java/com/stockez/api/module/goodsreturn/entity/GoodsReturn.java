@@ -37,7 +37,7 @@ public class GoodsReturn {
     // How a supplier claim was settled. Only ADJUST_AGAINST_BILL leaves our payable reduced —
     // the other two hand the value back as cash or as goods, so the bill stands in full.
     public enum SettlementMode {
-        CASH_REFUND, ADJUST_AGAINST_BILL, GOODS_REPLACED
+        CASH_REFUND, ADJUST_AGAINST_BILL, GOODS_REPLACED, REJECTED
     }
 
     public enum WarehouseStatus {
@@ -127,6 +127,15 @@ public class GoodsReturn {
     @Column(name = "replacement_restocked", nullable = false)
     @Builder.Default
     private boolean replacementRestocked = false;
+
+    @Column(name = "expiry_claim", nullable = false)
+    @Builder.Default
+    private boolean expiryClaim = false;
+
+    // Value the supplier refused on settlement — a loss to us, never credited against their bill.
+    @Column(name = "written_off_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal writtenOffAmount = BigDecimal.ZERO;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "refund_processed_by")

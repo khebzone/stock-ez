@@ -54,6 +54,10 @@ export const routeAllocationApi = baseApi.injectEndpoints({
       query: (allocationId) => ({ url: `/route-allocations/${allocationId}/complete-sales`, method: 'POST' }),
       invalidatesTags: () => [{ type: 'Route', id: 'ALLOCATIONS' }, { type: 'Route', id: 'MONITOR' }, { type: 'Route', id: 'MY_ALLOCATION' }],
     }),
+    reopenSales: builder.mutation<any, string>({
+      query: (allocationId) => ({ url: `/route-allocations/${allocationId}/reopen-sales`, method: 'POST' }),
+      invalidatesTags: () => [{ type: 'Route', id: 'ALLOCATIONS' }, { type: 'Route', id: 'MONITOR' }, { type: 'Route', id: 'MY_ALLOCATION' }, { type: 'Route', id: 'GATE_PASS_OPTIONS' }],
+    }),
     markDeliveryComplete: builder.mutation<any, string | { allocationId: string; force?: boolean }>({
       query: (arg) => {
         const allocationId = typeof arg === 'string' ? arg : arg.allocationId;
@@ -83,6 +87,7 @@ export const {
   useGetWarehouseSummaryQuery,
   useDispatchPackedOrdersMutation,
   useMarkSalesCompleteMutation,
+  useReopenSalesMutation,
   useMarkDeliveryCompleteMutation,
   useMarkWarehouseCompleteMutation,
 } = routeAllocationApi;

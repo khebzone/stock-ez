@@ -111,7 +111,7 @@ public class DebitNotePdfService {
         Paragraph title = new Paragraph("DEBIT NOTE", titleFont);
         title.setAlignment(Element.ALIGN_RIGHT);
         right.addElement(title);
-        right.addElement(rightLine("(Purchase Return)", labelFont));
+        right.addElement(rightLine(d.isExpiryClaim() ? "(Expiry Claim)" : "(Purchase Return)", labelFont));
         right.addElement(rightLine("No: " + d.getReturnNumber(), boldFont));
         if (d.getReturnDate() != null) {
             right.addElement(rightLine("Date: " + d.getReturnDate().format(DATE_FMT), normalFont));
@@ -161,13 +161,19 @@ public class DebitNotePdfService {
 
     private PdfPTable buildItems(GoodsReturnDtos.DebitNoteResponse d, Font thFont, Font tdFont)
             throws DocumentException {
-        PdfPTable table = new PdfPTable(9);
+        boolean expiry = d.isExpiryClaim();
+        String[] heads = expiry
+                ? new String[]{"#", "Product", "HSN", "Batch", "Expiry", "Qty", "Rate", "Taxable", "GST%", "Amount"}
+                : new String[]{"#", "Product", "HSN", "Batch", "Qty", "Rate", "Taxable", "GST%", "Amount"};
+        PdfPTable table = new PdfPTable(heads.length);
         table.setWidthPercentage(100);
-        table.setWidths(new float[]{4, 26, 10, 12, 6, 10, 12, 8, 12});
+        table.setWidths(expiry
+                ? new float[]{4, 22, 9, 11, 10, 6, 9, 11, 7, 11}
+                : new float[]{4, 26, 10, 12, 6, 10, 12, 8, 12});
         table.setHeaderRows(1);
         table.setSpacingAfter(4);
 
-        for (String h : new String[]{"#", "Product", "HSN", "Batch", "Qty", "Rate", "Taxable", "GST%", "Amount"}) {
+        for (String h : heads) {
             PdfPCell th = new PdfPCell(new Phrase(h, thFont));
             th.setBackgroundColor(HEADBG);
             th.setBorderColor(LINE);
@@ -183,6 +189,9 @@ public class DebitNotePdfService {
             table.addCell(td(l.getProductName(), tdFont, Element.ALIGN_LEFT));
             table.addCell(td(l.getHsnCode(), tdFont, Element.ALIGN_LEFT));
             table.addCell(td(l.getBatchNumber(), tdFont, Element.ALIGN_LEFT));
+            if (expiry) {
+                table.addCell(td(l.getExpiryDate() != null ? l.getExpiryDate().format(DATE_FMT) : "—", tdFont, Element.ALIGN_LEFT));
+            }
             String qty = l.getQuantity() + (notBlank(l.getUnitName()) ? " " + l.getUnitName() : "");
             table.addCell(td(qty, tdFont, Element.ALIGN_RIGHT));
             table.addCell(td(fmt(l.getUnitRate()), tdFont, Element.ALIGN_RIGHT));
@@ -255,6 +264,10 @@ public class DebitNotePdfService {
         PdfPCell cell = boxedCell();
         cell.addElement(new Phrase("SETTLEMENT", labelFont));
         cell.addElement(new Phrase(settlementText(d), boldFont));
+        if (d.getWrittenOffAmount() != null && d.getWrittenOffAmount().signum() > 0) {
+            cell.addElement(new Phrase("Accepted " + fmt(d.getAcceptedAmount()) + " · Not accepted "
+                    + fmt(d.getWrittenOffAmount()), smallFont));
+        }
         if (d.getRefundDate() != null) {
             cell.addElement(new Phrase("Settled on " + d.getRefundDate().format(DATE_FMT), smallFont));
         }
@@ -270,6 +283,7 @@ public class DebitNotePdfService {
             case "ADJUST_AGAINST_BILL" -> "Adjusted against our outstanding bill with you.";
             case "CASH_REFUND"         -> "Amount refunded to us.";
             case "GOODS_REPLACED"      -> "Settled — replacement goods of equal value received.";
+            case "REJECTED"            -> "Claim not accepted by the supplier.";
             default                    -> "Settled.";
         };
     }

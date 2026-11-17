@@ -4,7 +4,7 @@ import {
   Space, Drawer, message, Tooltip, Input, Tag, Spin, Alert, Modal,
 } from 'antd';
 import {
-  EditOutlined, PlusOutlined, CheckCircleOutlined, UserOutlined, PrinterOutlined,
+  EditOutlined, PlusOutlined, CheckCircleOutlined, UserOutlined, PrinterOutlined, UndoOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -16,6 +16,7 @@ import {
   useGetWarehouseSummaryQuery,
   useDispatchPackedOrdersMutation,
   useMarkSalesCompleteMutation,
+  useReopenSalesMutation,
   useMarkDeliveryCompleteMutation,
   useMarkWarehouseCompleteMutation,
 } from '../../store/api/routeAllocationApi';
@@ -58,6 +59,7 @@ const GatePassPage: React.FC = () => {
   const [allocateWarehouse, { isLoading: savingWarehouse }] = useAllocateWarehouseMutation();
   const [dispatchPacked, { isLoading: dispatching }] = useDispatchPackedOrdersMutation();
   const [markSalesComplete, { isLoading: completingSales }] = useMarkSalesCompleteMutation();
+  const [reopenSales, { isLoading: reopeningSales }] = useReopenSalesMutation();
   const [markDeliveryComplete, { isLoading: completingDelivery }] = useMarkDeliveryCompleteMutation();
   const [markWarehouseComplete, { isLoading: completingWarehouse }] = useMarkWarehouseCompleteMutation();
 
@@ -418,7 +420,33 @@ const GatePassPage: React.FC = () => {
       render: (_: any, r: any) => {
         // Past dates are read-only history — no editing/completing an old day's gate pass.
         if (!isToday || r.salesCompleted) {
-          return r.id ? <AuditHistoryButton entityType="ROUTE_ALLOCATION" entityId={r.id} title={`Sales Gate Pass — ${r.routeName}`} /> : null;
+          if (!r.id) return null;
+          return (
+            <Space size={4}>
+              <AuditHistoryButton entityType="ROUTE_ALLOCATION" entityId={r.id} title={`Sales Gate Pass — ${r.routeName}`} />
+              {isToday && r.salesCompleted && hasPermission('GATE_PASS_CREATE') && (
+                <Tooltip title="Reopen Sales Gate Pass">
+                  <Button
+                    icon={<UndoOutlined />} size="small" shape="circle"
+                    loading={reopeningSales}
+                    onClick={() => Modal.confirm({
+                      title: `Reopen ${r.routeName}?`,
+                      content: `${r.salesPerson?.fullName ?? 'The salesperson'} will be able to bill on this route again.`,
+                      okText: 'Reopen',
+                      onOk: async () => {
+                        try {
+                          await reopenSales(r.id).unwrap();
+                          message.success('Sales Gate Pass reopened');
+                        } catch (e: any) {
+                          message.error(e?.data?.message || 'Failed to reopen');
+                        }
+                      },
+                    })}
+                  />
+                </Tooltip>
+              )}
+            </Space>
+          );
         }
         return (
           <Space size={4}>

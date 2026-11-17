@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Row, Col, Select, Switch, Button, Table, InputNumber, Space, Tag } from 'antd';
-import { ReloadOutlined, DownloadOutlined, LockOutlined } from '@ant-design/icons';
+import { Row, Col, Select, Switch, Button, Table, InputNumber, Input, Space, Tag } from 'antd';
+import { ReloadOutlined, DownloadOutlined, LockOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useGetClosingStockQuery } from '../../store/api/reportApi';
 import PageHeader from '../../components/PageHeader';
@@ -42,6 +42,7 @@ const ClosingStockPage: React.FC = () => {
   const [filterBrand, setFilterBrand]      = useState<string | undefined>();
   const [filterCat, setFilterCat]          = useState<string | undefined>();
   const [lowThreshold, setLowThreshold]    = useState<number | null>(null);
+  const [search, setSearch]                = useState('');
 
   const effectiveThreshold = lowThreshold ?? 20;
 
@@ -65,15 +66,21 @@ const ClosingStockPage: React.FC = () => {
     Array.from(new Set(allRows.map((r: any) => r.category).filter(Boolean))).sort() as string[],
   [allRows]);
 
+  const searchTerms = useMemo(() => search.toLowerCase().split(/\s+/).filter(Boolean), [search]);
+
   const rows = useMemo(() =>
     allRows.filter((r: any) => {
+      if (searchTerms.length) {
+        const name = (r.productName || '').toLowerCase();
+        if (!searchTerms.every(t => name.includes(t))) return false;
+      }
       if (showOutOfStock && r.stockQty !== 0) return false;
       if (!showOutOfStock && showLowStock && !(r.stockQty > 0 && r.stockQty <= effectiveThreshold)) return false;
       if (filterBrand && r.brand !== filterBrand) return false;
       if (filterCat && r.category !== filterCat) return false;
       return true;
     }),
-  [allRows, showOutOfStock, showLowStock, filterBrand, filterCat, effectiveThreshold]);
+  [allRows, searchTerms, showOutOfStock, showLowStock, filterBrand, filterCat, effectiveThreshold]);
 
   const computedLowCount = useMemo(() =>
     allRows.filter((r: any) => r.stockQty > 0 && r.stockQty <= effectiveThreshold).length,
@@ -102,6 +109,7 @@ const ClosingStockPage: React.FC = () => {
 
   const exportSubtitle = [
     `As on ${dayjs().format('DD MMM YYYY')}`,
+    search.trim() ? `Search: ${search.trim()}` : null,
     filterBrand ? `Brand: ${filterBrand}` : null,
     filterCat ? `Category: ${filterCat}` : null,
     showOutOfStock ? 'Out of stock items only' : showLowStock ? `Low stock items only (up to ${effectiveThreshold})` : null,
@@ -145,6 +153,8 @@ const ClosingStockPage: React.FC = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <Space wrap>
+          <Input size="small" allowClear placeholder="Search product" prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+            value={search} onChange={e => setSearch(e.target.value)} style={{ width: 200 }} />
           <Select placeholder="Brand" allowClear showSearch filterOption={(input, option) => (option?.label as string)?.toLowerCase().startsWith(input.toLowerCase())} size="small" style={{ width: 140 }}
             value={filterBrand} onChange={setFilterBrand}
             options={uniqueBrands.map(b => ({ value: b, label: b }))} />

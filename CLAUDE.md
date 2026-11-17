@@ -199,7 +199,7 @@ Then restart backend. Flyway will apply V1 + V2 fresh.
 ### Order Numbering
 - Orders: `ORD-YYYY-NNNNN`
 - Purchase entries: `PUR-YYYY-NNNNN`
-- Goods returns (per type, own counter each): sales `SRN-YYYY-NNNNN`, purchase `PRN-YYYY-NNNNN`, damage `DMG-YYYY-NNNNN` — legacy rows may still be `RTN-YYYY-NNNNN`
+- Goods returns (per type, own counter each): sales `SRN-YYYY-NNNNN`, purchase `PRN-YYYY-NNNNN`, damage `DMG-YYYY-NNNNN`, expiry claims `ECL-YYYY-NNNNN` — legacy rows may still be `RTN-YYYY-NNNNN`
 - Batches: `BCH-YYYYMMDD-NNN`
 
 ---
@@ -238,7 +238,7 @@ StockEz/
 │       │   └── …                      ← attendance, expense, incentive, etc.
 │       └── resources/db/migration/
 │           ├── V1__init_schema.sql    ← frozen; never edit (live since 2026-06-15)
-│           └── V25__…sql              ← latest; add a new file per change
+│           └── V<n>__…sql             ← highest n is the latest (ls the folder); add a new file per change
 └── stockez-web/
     └── src/
         ├── pages/                     ← one folder per feature

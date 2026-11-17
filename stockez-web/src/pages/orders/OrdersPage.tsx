@@ -492,7 +492,6 @@ const OrdersPage: React.FC = () => {
       if (!all.length) { message.warning('No orders to export'); return; }
       await exportToXLSX(all, exportColumns, `orders-${dayjs().format('YYYY-MM-DD')}`, 'Orders', {
         title: 'Orders',
-        subtitle: `Generated ${dayjs().format('DD MMM YYYY')} · ${all.length} order${all.length === 1 ? '' : 's'}`,
         totals: true,
       });
     } catch {
@@ -504,6 +503,7 @@ const OrdersPage: React.FC = () => {
     {
       title: 'Order',
       key: 'order',
+      width: 170,
       sorter: (a: any, b: any) => (a.orderNumber || '').localeCompare(b.orderNumber || ''),
       render: (_: any, r: any) => (
         <div>
@@ -515,6 +515,7 @@ const OrdersPage: React.FC = () => {
     {
       title: 'Customer',
       key: 'customer',
+      width: 260,
       render: (_: any, r: any) => (
         <div>
           <div style={{ fontWeight: 600, color: '#1a1d2e' }}>{r.customer?.businessName}</div>
@@ -525,6 +526,7 @@ const OrdersPage: React.FC = () => {
     {
       title: 'Sales Person',
       key: 'salesPerson',
+      width: 160,
       render: (_: any, r: any) => (
         <div>
           <div style={{ fontWeight: 600, color: '#1a1d2e' }}>{r.salesPerson?.fullName || '—'}</div>
@@ -535,6 +537,7 @@ const OrdersPage: React.FC = () => {
     {
       title: 'Route',
       key: 'route',
+      width: 130,
       render: (_: any, r: any) => {
         const route = r.routeName || r.customer?.routeName;
         return route
@@ -561,7 +564,7 @@ const OrdersPage: React.FC = () => {
       sorter: (a: any, b: any) => (a.totalAmount || 0) - (b.totalAmount || 0),
       render: (_: any, r: any) => (
         <div>
-          <div style={{ fontWeight: 700, color: '#059669', fontSize: 14 }}>{formatINR(r.totalAmount)}</div>
+          <div style={{ fontWeight: 700, color: '#059669', fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>{formatINR(r.totalAmount)}</div>
           {r.balanceAmount > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>Due: {formatINR(r.balanceAmount)}</div>}
         </div>
       ),
@@ -572,7 +575,6 @@ const OrdersPage: React.FC = () => {
       key: 'actions',
       width: 132,
       align: 'center' as const,
-      fixed: 'right' as const,
       render: (_: any, record: any) => (
         <span onClick={e => e.stopPropagation()}>
           <Space size={2}>
@@ -746,7 +748,6 @@ const OrdersPage: React.FC = () => {
           exportFormat="excel"
           sheetName="Orders"
           exportTitle="Orders"
-          exportSubtitle={`Generated ${dayjs().format('DD MMM YYYY')} · ${orders.length} order${orders.length === 1 ? '' : 's'}`}
           exportTotals
           onExport={!isSales && !isDelivery ? handleExportAll : undefined}
         />
@@ -756,7 +757,7 @@ const OrdersPage: React.FC = () => {
             ? { total: totalOrders, current: currentPage, pageSize: 20, showSizeChanger: false, showTotal: (t) => `${t} orders`, onChange: (p) => setCurrentPage(p) }
             : { pageSize: 20, showSizeChanger: false, showTotal: (t) => `${t} orders` }
           }
-          size="middle" virtual scroll={{ x: 1000, y: 550 }}
+          size="middle"
           onRow={(record: any) => ({
             onClick: () => { setSelectedOrder(record); setDetailModal(true); },
             style: { cursor: 'pointer' },
@@ -1050,15 +1051,15 @@ const OrdersPage: React.FC = () => {
             </Button>
           ),
           isAdmin && selectedOrder && selectedOrder.status !== 'CANCELLED' && !selectedOrder.openingBalance && (
-            <Select key="status" placeholder="Change Status…" style={{ width: 170, textAlign: 'left' }}
-              value={undefined} loading={changingStatus} onChange={handleChangeStatus}
-              options={['SUBMITTED', 'APPROVED', 'PACKING', 'PACKED', 'DISPATCHED', 'DELIVERED']
-                .filter(s => s !== selectedOrder.status)
+            <Select key="status" style={{ width: 170, textAlign: 'left' }}
+              value={selectedOrder.status} loading={changingStatus}
+              onChange={(s: string) => s !== selectedOrder.status && handleChangeStatus(s)}
+              options={Array.from(new Set(['SUBMITTED', 'APPROVED', 'PACKING', 'PACKED', 'DISPATCHED', 'DELIVERED', selectedOrder.status]))
                 .map(s => ({ value: s, label: STATUS_CONFIG[s]?.label || s }))} />
           ),
           <Button key="close" type="primary" onClick={() => setDetailModal(false)}>Close</Button>,
         ]}
-        width={isMobile ? '98vw' : 720}
+        width={isMobile ? '98vw' : 860}
       >
         {selectedOrder && (
           <>
@@ -1095,9 +1096,9 @@ const OrdersPage: React.FC = () => {
             <div style={{ fontWeight: 700, color: '#1a1d2e', margin: '16px 0 8px' }}>Items</div>
             <Table size="small" dataSource={selectedOrder.items || []} rowKey="id" pagination={false}
               columns={[
-                { title: 'Product', dataIndex: ['product', 'name'], key: 'name' },
-                { title: 'HSN', dataIndex: ['product', 'hsnCode'], key: 'hsn', width: 80, render: (v: string) => v || '—' },
-                { title: 'Qty', dataIndex: 'quantity', key: 'qty', width: 60 },
+                { title: 'Product', dataIndex: ['product', 'name'], key: 'name', width: 230 },
+                { title: 'HSN', dataIndex: ['product', 'hsnCode'], key: 'hsn', width: 90, render: (v: string) => v || '—' },
+                { title: 'Qty', dataIndex: 'quantity', key: 'qty', width: 55 },
                 ...(anyReturned ? [{
                   title: 'Returned', key: 'returned', width: 80,
                   render: (_: any, r: any) => {
@@ -1107,10 +1108,10 @@ const OrdersPage: React.FC = () => {
                       : <span style={{ color: '#9ca3af' }}>—</span>;
                   },
                 }] : []),
-                { title: 'Rate', dataIndex: 'unitPrice', key: 'rate', render: (v: number) => `₹${v?.toFixed(2)}` },
-                { title: 'Disc', dataIndex: 'discountAmount', key: 'disc', render: (v: number) => v && v > 0 ? `₹${Number(v).toFixed(2)}` : '—' },
-                { title: 'GST', dataIndex: 'gstAmount', key: 'gst', render: (v: number) => `₹${v?.toFixed(2)}` },
-                { title: 'Total', dataIndex: 'lineTotal', key: 'total', render: (v: number) => <strong style={{ color: '#059669' }}>₹{v?.toFixed(2)}</strong> },
+                { title: 'Rate', dataIndex: 'unitPrice', key: 'rate', width: 90, render: (v: number) => `₹${v?.toFixed(2)}` },
+                { title: 'Disc', dataIndex: 'discountAmount', key: 'disc', width: 80, render: (v: number) => v && v > 0 ? `₹${Number(v).toFixed(2)}` : '—' },
+                { title: 'GST', dataIndex: 'gstAmount', key: 'gst', width: 90, render: (v: number) => `₹${v?.toFixed(2)}` },
+                { title: 'Total', dataIndex: 'lineTotal', key: 'total', width: 100, render: (v: number) => <strong style={{ color: '#059669' }}>₹{v?.toFixed(2)}</strong> },
               ]}
             />
             {anyReturned && (

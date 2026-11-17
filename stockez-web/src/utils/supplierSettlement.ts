@@ -2,7 +2,7 @@
 // reduced — the other two hand the value back as cash or as goods, so the bill stands in full.
 // Mirrors GoodsReturn.SettlementMode on the backend.
 
-export type SettlementKey = 'ADJUST_AGAINST_BILL' | 'CASH_REFUND' | 'GOODS_REPLACED';
+export type SettlementKey = 'ADJUST_AGAINST_BILL' | 'CASH_REFUND' | 'GOODS_REPLACED' | 'REJECTED';
 
 export const SETTLEMENT_OPTIONS: { value: SettlementKey; label: string; hint: string }[] = [
   {
@@ -20,18 +20,25 @@ export const SETTLEMENT_OPTIONS: { value: SettlementKey; label: string; hint: st
     label: 'Refunded the money',
     hint: 'They paid us back, so the bill stands in full.',
   },
+  {
+    value: 'REJECTED',
+    label: 'Rejected by supplier',
+    hint: 'Nothing recovered. The full claim is written off as a loss and the bill stands in full.',
+  },
 ];
 
 export const SETTLEMENT_LABEL: Record<SettlementKey, string> = {
   ADJUST_AGAINST_BILL: 'Adjusted vs bill',
   GOODS_REPLACED: 'Goods replaced',
   CASH_REFUND: 'Cash refunded',
+  REJECTED: 'Rejected',
 };
 
 export const SETTLED_MESSAGE: Record<SettlementKey, (amount: string) => string> = {
   ADJUST_AGAINST_BILL: (a) => `${a} knocked off the supplier's outstanding`,
   GOODS_REPLACED: (a) => `Replacement goods worth ${a} received — stock updated`,
   CASH_REFUND: (a) => `${a} received back from the supplier`,
+  REJECTED: () => 'Claim closed as rejected — written off as a loss',
 };
 
 /**

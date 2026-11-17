@@ -144,7 +144,7 @@ public class GoodsReturnService {
                 && !referencePurchaseEntry.getItems().isEmpty()) {
             java.util.Map<UUID, Integer> bought = new java.util.HashMap<>();
             for (var pi : referencePurchaseEntry.getItems()) {
-                bought.merge(pi.getProduct().getId(), pi.getQuantity(), Integer::sum);
+                bought.merge(pi.getProduct().getId(), pi.getUnits(), Integer::sum);
             }
             java.util.Map<UUID, Integer> returned = new java.util.HashMap<>();
             for (Object[] row : goodsReturnRepository.sumReturnedQtyByPurchaseEntry(tenantId, referencePurchaseEntry.getId())) {
@@ -854,9 +854,10 @@ public class GoodsReturnService {
             } catch (IllegalArgumentException e) {
                 throw new BusinessException(
                         "Invalid settlement mode: " + req.getSettlementMode()
-                        + ". Must be CASH_REFUND, ADJUST_AGAINST_BILL, or GOODS_REPLACED",
+                        + ". Must be CASH_REFUND, ADJUST_AGAINST_BILL, GOODS_REPLACED, or REJECTED",
                         "INVALID_SETTLEMENT_MODE");
             }
+            applyAcceptance(goodsReturn, req, settlement == GoodsReturn.SettlementMode.REJECTED);
         }
 
         // A payment mode only means something when money actually moved.
@@ -915,9 +916,11 @@ public class GoodsReturnService {
         GoodsReturn updated = goodsReturnRepository.save(goodsReturn);
 
         String how = supplierOwed ? settlementLabel(settlement) : "via " + req.getPaymentMode();
+        String writtenOff = supplierOwed && goodsReturn.getWrittenOffAmount().signum() > 0
+                ? ", ₹" + goodsReturn.getWrittenOffAmount().toPlainString() + " written off as loss" : "";
         auditService.record(tenantId, "GOODS_RETURN", returnId,
                 supplierOwed ? "SUPPLIER_CLAIM_SETTLED" : "REFUND_PROCESSED",
-                "₹" + goodsReturn.getRefundAmount().toPlainString() + " " + how
+                "₹" + goodsReturn.getRefundAmount().toPlainString() + " " + how + writtenOff
                 + " by " + processedBy.getFullName());
         if (!supplierOwed) {
             recordOnOrder(updated, "REFUNDED", "₹" + goodsReturn.getRefundAmount().toPlainString() + " refunded " + how
@@ -945,6 +948,8 @@ public class GoodsReturnService {
 
         for (GoodsReturnItem item : gr.getItems()) {
             Product product = item.getProduct();
+            int qty = item.getAcceptedQty() != null ? item.getAcceptedQty() : item.getQuantity();
+            if (qty <= 0) continue;
 
             BigDecimal mrp  = item.getMrp() != null ? item.getMrp() : product.getMrp();
             BigDecimal cost = item.getPurchaseRate() != null ? item.getPurchaseRate() : product.getPurchaseRate();
@@ -966,8 +971,8 @@ public class GoodsReturnService {
                     .minSaleRate(item.getMinSaleRate() != null ? item.getMinSaleRate() : product.getMinSaleRate())
                     .maxSaleRate(item.getMaxSaleRate() != null ? item.getMaxSaleRate() : product.getMaxSaleRate())
                     .expiryDate(expiryDate != null ? expiryDate : item.getExpiryDate())
-                    .quantityReceived(item.getQuantity())
-                    .quantityAvailable(item.getQuantity())
+                    .quantityReceived(qty)
+                    .quantityAvailable(qty)
                     .receivedDate(receivedDate)
                     .active(true)
                     .build();
@@ -1004,7 +1009,198 @@ public class GoodsReturnService {
             case CASH_REFUND -> "refunded in cash/bank";
             case ADJUST_AGAINST_BILL -> "adjusted against supplier bill";
             case GOODS_REPLACED -> "settled with replacement goods";
+            case REJECTED -> "rejected by supplier";
         };
+    }
+
+    /**
+     * Records what the supplier accepted on a claim. Each line's accepted units default to the full
+     * claimed quantity; the accepted amount defaults to those units at the claim rate and may be
+     * lowered when the supplier settles at a discount. Whatever is not accepted is written off.
+     */
+    private void applyAcceptance(GoodsReturn gr, GoodsReturnDtos.ProcessRefundRequest req, boolean rejected) {
+        java.util.Map<UUID, Integer> asked = new java.util.HashMap<>();
+        if (req.getAcceptedItems() != null) {
+            req.getAcceptedItems().forEach(a -> asked.put(a.getItemId(), a.getAcceptedQty()));
+        }
+
+        BigDecimal acceptedValue = BigDecimal.ZERO;
+        for (GoodsReturnItem it : gr.getItems()) {
+            int qty = rejected ? 0 : asked.getOrDefault(it.getId(), it.getQuantity());
+            if (qty > it.getQuantity()) {
+                throw new BusinessException(String.format(
+                        "Accepted quantity for '%s' cannot be more than the %d unit(s) claimed",
+                        it.getProduct().getName(), it.getQuantity()), "ACCEPTED_QTY_EXCEEDS_CLAIM");
+            }
+            it.setAcceptedQty(qty);
+            acceptedValue = acceptedValue.add(it.getUnitRate().multiply(BigDecimal.valueOf(qty)));
+        }
+        acceptedValue = acceptedValue.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal accepted = BigDecimal.ZERO;
+        if (!rejected) {
+            accepted = req.getAcceptedAmount() != null
+                    ? req.getAcceptedAmount().setScale(2, RoundingMode.HALF_UP) : acceptedValue;
+            if (accepted.signum() <= 0) {
+                throw new BusinessException(
+                        "Nothing was accepted — settle this claim as Rejected instead", "NOTHING_ACCEPTED");
+            }
+            if (accepted.compareTo(acceptedValue) > 0) {
+                throw new BusinessException(
+                        "Accepted amount cannot be more than ₹" + acceptedValue.toPlainString()
+                        + " (the accepted units at the claim rate)", "ACCEPTED_AMOUNT_TOO_HIGH");
+            }
+        }
+
+        gr.setRefundAmount(accepted);
+        gr.setWrittenOffAmount(gr.getTotalAmount().subtract(accepted).max(BigDecimal.ZERO));
+    }
+
+    @Transactional(readOnly = true)
+    public List<GoodsReturnDtos.ClaimableBatch> getClaimableBatches(UUID tenantId, int daysAhead) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate cutoff = daysAhead <= 0 ? today.minusDays(1) : today.plusDays(daysAhead);
+        return stockBatchRepository.findClaimableByExpiry(tenantId, cutoff).stream().map(b -> {
+            GoodsReturnDtos.ClaimableBatch row = new GoodsReturnDtos.ClaimableBatch();
+            Product p = b.getProduct();
+            row.setBatchId(b.getId());
+            row.setBatchNumber(b.getBatchNumber());
+            row.setProductId(p.getId());
+            row.setProductName(p.getName());
+            row.setProductBrand(p.getBrand());
+            row.setHsnCode(p.getHsnCode());
+            row.setExpiryDate(b.getExpiryDate());
+            row.setDaysToExpiry(java.time.temporal.ChronoUnit.DAYS.between(today, b.getExpiryDate()));
+            row.setExpired(b.getExpiryDate().isBefore(today));
+            row.setQuantity(b.getQuantityAvailable());
+            row.setPurchaseRate(b.getPurchaseRate());
+            row.setPurchaseGstPercent(nz(b.getPurchaseGstPercent()));
+            row.setValue(b.getPurchaseRate().multiply(BigDecimal.valueOf(b.getQuantityAvailable()))
+                    .setScale(2, RoundingMode.HALF_UP));
+            PurchaseEntry pe = b.getPurchaseItem() != null ? b.getPurchaseItem().getPurchaseEntry() : null;
+            if (pe != null) {
+                String supplier = pe.getSupplierName();
+                if ((supplier == null || supplier.isBlank()) && pe.getSupplier() != null) {
+                    supplier = pe.getSupplier().getName();
+                }
+                row.setSupplierName(supplier);
+                row.setPurchaseEntryNumber(pe.getEntryNumber());
+                row.setSupplierInvoiceNumber(pe.getInvoiceNumber());
+            }
+            return row;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GoodsReturnDtos.GoodsReturnResponse> getExpiryClaims(UUID tenantId) {
+        return goodsReturnRepository.findExpiryClaims(tenantId)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GoodsReturnDtos.GoodsReturnResponse> getExpiryClaimWriteOffs(
+            UUID tenantId, java.time.LocalDate from, java.time.LocalDate to) {
+        return goodsReturnRepository.findExpiryClaimWriteOffs(tenantId, from, to)
+                .stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    /**
+     * Files expired (or near-expiry) batches back to the supplier as one claim. The stock leaves the
+     * named batches at once — it cannot be sold — and the claim stays open, without touching what we
+     * owe the supplier, until they settle it under Refunds & Claims.
+     */
+    @Transactional
+    public GoodsReturnDtos.GoodsReturnResponse createExpiryClaim(
+            GoodsReturnDtos.CreateExpiryClaimRequest req, UUID userId, UUID tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId.toString()));
+        User createdBy = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
+
+        java.util.Map<UUID, Integer> qtyByBatch = new java.util.LinkedHashMap<>();
+        req.getItems().forEach(l -> qtyByBatch.merge(l.getBatchId(), l.getQuantity(), Integer::sum));
+        List<StockBatch> batches = stockBatchRepository.findByTenantAndIdsWithSource(tenantId, qtyByBatch.keySet());
+        if (batches.size() != qtyByBatch.size()) {
+            throw new BusinessException("One or more selected batches were not found", "BATCH_NOT_FOUND");
+        }
+        batches.sort(java.util.Comparator.comparing(StockBatch::getExpiryDate,
+                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+
+        int year = Year.now().getValue();
+        int seq = goodsReturnRepository.findMaxReturnSequence(tenantId, "ECL", year) + 1;
+        String reason = req.getReason() != null && !req.getReason().isBlank() ? req.getReason().trim() : "Expired goods claim";
+
+        GoodsReturn claim = GoodsReturn.builder()
+                .tenant(tenant)
+                .returnNumber(String.format("ECL-%d-%05d", year, seq))
+                .type(GoodsReturn.ReturnType.DAMAGE)
+                .damageSource("SUPPLIER")
+                .supplierName(req.getSupplierName().trim())
+                .returnDate(req.getClaimDate())
+                .reason(reason)
+                .createdBy(createdBy)
+                .warehouseStatus(GoodsReturn.WarehouseStatus.VERIFIED)
+                .refundStatus(GoodsReturn.RefundStatus.PENDING)
+                .expiryClaim(true)
+                .build();
+
+        BigDecimal total = BigDecimal.ZERO;
+        java.util.Map<UUID, Product> touched = new java.util.LinkedHashMap<>();
+        for (StockBatch b : batches) {
+            int qty = qtyByBatch.get(b.getId());
+            Product product = b.getProduct();
+            if (qty > b.getQuantityAvailable()) {
+                throw new BusinessException(String.format(
+                        "Batch %s of '%s' has only %d unit(s) left — cannot claim %d",
+                        b.getBatchNumber(), product.getName(), b.getQuantityAvailable(), qty), "RETURN_QTY_EXCEEDS_STOCK");
+            }
+            BigDecimal rate = b.getPurchaseRate();
+            BigDecimal amount = rate.multiply(BigDecimal.valueOf(qty)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal gstPct = nz(b.getPurchaseGstPercent());
+            BigDecimal gstAmt = gstPct.signum() > 0
+                    ? amount.multiply(gstPct).divide(BigDecimal.valueOf(100).add(gstPct), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            total = total.add(amount);
+
+            claim.getItems().add(GoodsReturnItem.builder()
+                    .goodsReturn(claim)
+                    .product(product)
+                    .batchNumber(b.getBatchNumber())
+                    .quantity(qty)
+                    .unitRate(rate)
+                    .amount(amount)
+                    .gstPercent(gstPct)
+                    .taxableAmount(amount.subtract(gstAmt))
+                    .gstAmount(gstAmt)
+                    .reason(b.getExpiryDate() != null && b.getExpiryDate().isBefore(java.time.LocalDate.now())
+                            ? "Expired" : "Near expiry")
+                    .mrp(b.getMrp())
+                    .purchaseRate(rate)
+                    .minSaleRate(b.getMinSaleRate())
+                    .maxSaleRate(b.getMaxSaleRate())
+                    .expiryDate(b.getExpiryDate())
+                    .build());
+
+            b.setQuantityAvailable(b.getQuantityAvailable() - qty);
+            if (b.getQuantityAvailable() == 0) b.setActive(false);
+            stockBatchRepository.save(b);
+            touched.put(product.getId(), product);
+        }
+
+        claim.setTotalAmount(total);
+        claim.setRefundAmount(total);
+        GoodsReturn saved = goodsReturnRepository.save(claim);
+
+        for (Product product : touched.values()) {
+            Integer stock = stockBatchRepository.sumAvailableByProduct(tenantId, product.getId());
+            product.setStockQuantity(stock != null ? stock : 0);
+            productRepository.save(product);
+        }
+
+        auditService.record(tenantId, "GOODS_RETURN", saved.getId(), "EXPIRY_CLAIM_FILED",
+                "Expiry claim " + saved.getReturnNumber() + " filed with " + saved.getSupplierName()
+                + " — " + saved.getItems().size() + " batch(es), ₹" + total.toPlainString());
+        return toResponse(saved);
     }
 
     /**
@@ -1077,6 +1273,11 @@ public class GoodsReturnService {
         res.setRefundStatus(gr.getRefundStatus().name());
         res.setRefundDate(gr.getRefundDate());
         res.setTotalAmount(gr.getTotalAmount());
+        res.setExpiryClaim(gr.isExpiryClaim());
+        if (gr.getRefundStatus() == GoodsReturn.RefundStatus.PROCESSED) {
+            res.setAcceptedAmount(gr.getRefundAmount());
+            res.setWrittenOffAmount(gr.getWrittenOffAmount());
+        }
         res.setCreatedByName(gr.getCreatedBy() != null ? gr.getCreatedBy().getFullName() : null);
 
         if (gr.getReferencePurchaseEntry() != null) {
@@ -1113,6 +1314,7 @@ public class GoodsReturnService {
             line.setHsnCode(it.getProduct().getHsnCode());
             line.setUnitName(it.getProduct().getUnit());
             line.setBatchNumber(it.getBatchNumber());
+            line.setExpiryDate(it.getExpiryDate());
             line.setQuantity(it.getQuantity());
             line.setUnitRate(it.getUnitRate());
             line.setTaxableAmount(it.getTaxableAmount());
@@ -1195,6 +1397,8 @@ public class GoodsReturnService {
         res.setSupplierRefNumber(gr.getSupplierRefNumber());
         res.setReplacementRestocked(gr.isReplacementRestocked());
         res.setReducesPayable(reducesPayable(gr));
+        res.setExpiryClaim(gr.isExpiryClaim());
+        res.setWrittenOffAmount(gr.getWrittenOffAmount());
         res.setWarehouseStatus(gr.getWarehouseStatus().name());
         res.setVerifiedAt(gr.getVerifiedAt());
         if (gr.getVerifiedBy() != null) {
@@ -1266,6 +1470,8 @@ public class GoodsReturnService {
             ir.setMrp(item.getMrp());
             ir.setMinSaleRate(item.getMinSaleRate());
             ir.setMaxSaleRate(item.getMaxSaleRate());
+            ir.setAcceptedQty(item.getAcceptedQty());
+            ir.setHsnCode(item.getProduct().getHsnCode());
             return ir;
         }).collect(Collectors.toList()));
 

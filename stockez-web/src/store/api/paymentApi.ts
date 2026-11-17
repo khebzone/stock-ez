@@ -67,6 +67,10 @@ export const paymentApi = baseApi.injectEndpoints({
       query: (customerId) => `/payments/customer/${customerId}/orders`,
       providesTags: ['Payment', 'Order'],
     }),
+    getCustomerAllOrders: builder.query<any, string>({
+      query: (customerId) => `/payments/customer/${customerId}/all-orders`,
+      providesTags: ['Payment', 'Order'],
+    }),
     getCustomerPaymentHistory: builder.query<any, string>({
       query: (customerId) => `/payments/customer/${customerId}/history`,
       providesTags: ['Payment'],
@@ -115,6 +119,7 @@ export const {
   useGetOutstandingSummaryQuery,
   useGetCustomerOrdersQuery,
   useGetCustomerPaymentHistoryQuery,
+  useGetCustomerAllOrdersQuery,
   useGetSalesmanOutstandingQuery,
   useGetRouteOutstandingQuery,
   useGetInstrumentsQuery,

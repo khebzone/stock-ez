@@ -23,6 +23,18 @@ public interface StockBatchRepository extends JpaRepository<StockBatch, UUID> {
     @Query("SELECT b FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id IN :productIds AND b.active = true AND b.quantityAvailable > 0 ORDER BY b.product.id, b.receivedDate ASC, b.createdAt ASC")
     List<StockBatch> findFifoByProducts(@Param("tenantId") UUID tenantId, @Param("productIds") List<UUID> productIds);
 
+    @Query("SELECT b FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id = :productId AND b.active = true AND b.quantityAvailable > 0 AND (b.expiryDate IS NULL OR b.expiryDate >= :today) ORDER BY b.receivedDate ASC, b.createdAt ASC")
+    List<StockBatch> findSellableFifoByProduct(@Param("tenantId") UUID tenantId, @Param("productId") UUID productId, @Param("today") LocalDate today);
+
+    @Query("SELECT b FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id IN :productIds AND b.active = true AND b.quantityAvailable > 0 AND (b.expiryDate IS NULL OR b.expiryDate >= :today) ORDER BY b.product.id, b.receivedDate ASC, b.createdAt ASC")
+    List<StockBatch> findSellableFifoByProducts(@Param("tenantId") UUID tenantId, @Param("productIds") List<UUID> productIds, @Param("today") LocalDate today);
+
+    @Query("SELECT COALESCE(SUM(b.quantityAvailable), 0) FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id = :productId AND b.active = true AND b.expiryDate IS NOT NULL AND b.expiryDate < :today")
+    Integer sumExpiredByProduct(@Param("tenantId") UUID tenantId, @Param("productId") UUID productId, @Param("today") LocalDate today);
+
+    @Query("SELECT b.product.id, COALESCE(SUM(b.quantityAvailable), 0) FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id IN :productIds AND b.active = true AND b.expiryDate IS NOT NULL AND b.expiryDate < :today GROUP BY b.product.id")
+    List<Object[]> sumExpiredByProducts(@Param("tenantId") UUID tenantId, @Param("productIds") List<UUID> productIds, @Param("today") LocalDate today);
+
     @Query("SELECT b FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.product.id = :productId ORDER BY b.receivedDate DESC")
     List<StockBatch> findByTenantAndProduct(@Param("tenantId") UUID tenantId, @Param("productId") UUID productId);
 
@@ -66,6 +78,15 @@ public interface StockBatchRepository extends JpaRepository<StockBatch, UUID> {
 
     @Query("SELECT b FROM StockBatch b WHERE b.tenant.id = :tenantId AND b.batchNumber = :batchNumber")
     Optional<StockBatch> findByTenantAndBatchNumber(@Param("tenantId") UUID tenantId, @Param("batchNumber") String batchNumber);
+
+    @Query("SELECT b FROM StockBatch b JOIN FETCH b.product LEFT JOIN FETCH b.purchaseItem pi LEFT JOIN FETCH pi.purchaseEntry "
+         + "WHERE b.tenant.id = :tenantId AND b.active = true AND b.quantityAvailable > 0 "
+         + "AND b.expiryDate IS NOT NULL AND b.expiryDate <= :cutoff ORDER BY b.expiryDate ASC, b.batchNumber ASC")
+    List<StockBatch> findClaimableByExpiry(@Param("tenantId") UUID tenantId, @Param("cutoff") LocalDate cutoff);
+
+    @Query("SELECT b FROM StockBatch b JOIN FETCH b.product LEFT JOIN FETCH b.purchaseItem pi LEFT JOIN FETCH pi.purchaseEntry "
+         + "WHERE b.tenant.id = :tenantId AND b.id IN :ids")
+    List<StockBatch> findByTenantAndIdsWithSource(@Param("tenantId") UUID tenantId, @Param("ids") java.util.Collection<UUID> ids);
 
     @Query("SELECT b FROM StockBatch b JOIN FETCH b.product WHERE b.tenant.id = :tenantId AND b.batchNumber IN :batchNumbers")
     List<StockBatch> findByTenantAndBatchNumbers(@Param("tenantId") UUID tenantId, @Param("batchNumbers") java.util.Collection<String> batchNumbers);

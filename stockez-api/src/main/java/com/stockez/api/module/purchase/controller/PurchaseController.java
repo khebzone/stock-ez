@@ -60,12 +60,13 @@ public class PurchaseController {
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String invoiceNumber,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Page<PurchaseDtos.PurchaseEntryResponse> result = purchaseService.listPurchases(
-                tenantId, supplierName, invoiceNumber, from, to, PageRequest.of(page, size));
+                tenantId, status, supplierName, invoiceNumber, from, to, PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.success(toPagedResponse(result)));
     }
 
@@ -87,6 +88,19 @@ public class PurchaseController {
             @Valid @RequestBody PurchaseDtos.UpdatePurchaseRequest req) {
         UUID userId = UUID.fromString(userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.success(purchaseService.updatePurchaseEntry(id, tenantId, userId, req), "Purchase updated"));
+    }
+
+    @PutMapping("/{id}/bill")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('PURCHASES_EDIT')")
+    @Operation(summary = "Edit a purchase as a whole bill — same fields and calculation as create")
+    public ResponseEntity<ApiResponse<PurchaseDtos.PurchaseEntryResponse>> replaceBill(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody PurchaseDtos.CreatePurchaseRequest req) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success(
+                purchaseService.replacePurchaseEntry(id, tenantId, userId, req), "Purchase updated"));
     }
 
     @PostMapping("/{id}/void")

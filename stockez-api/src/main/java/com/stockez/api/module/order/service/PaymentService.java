@@ -845,6 +845,26 @@ public class PaymentService {
     }
 
     @Transactional(readOnly = true)
+    public List<OrderDtos.OrderSummary> getAllOrdersByCustomer(UUID customerId, UUID tenantId) {
+        return orderRepository.findAllOrdersByCustomer(tenantId, customerId, Order.OrderStatus.CANCELLED)
+                .stream()
+                .map(o -> {
+                    OrderDtos.OrderSummary s = new OrderDtos.OrderSummary();
+                    s.setId(o.getId());
+                    s.setOrderNumber(o.getOrderNumber());
+                    s.setStatus(o.getStatus());
+                    s.setOrderDate(o.getOrderDate());
+                    s.setCustomerName(o.getCustomer().getBusinessName());
+                    s.setTotalAmount(o.getTotalAmount());
+                    s.setPaidAmount(o.getPaidAmount());
+                    s.setBalanceAmount(o.getBalanceAmount());
+                    s.setOpeningBalance(o.isOpeningBalance());
+                    return s;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public List<OrderDtos.SalesmanCreditSummary> getSalesmanCreditOutstanding(UUID tenantId) {
         List<Order> orders = orderRepository.findByTenantIdAndStatusNotAndBalanceAmountGreaterThan(
                 tenantId, Order.OrderStatus.CANCELLED, java.math.BigDecimal.ZERO);

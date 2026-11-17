@@ -108,6 +108,69 @@ public class GoodsReturnDtos {
         private LocalDate replacementExpiryDate;
 
         private String notes;
+
+        // Partial acceptance — units the supplier accepted per claim line. Omitted = everything accepted.
+        @Valid
+        private List<AcceptedItem> acceptedItems;
+
+        // What the supplier actually credits/pays. Defaults to the accepted units at the claim rate;
+        // lower it when they settle at a discount. The shortfall is written off as a loss.
+        private BigDecimal acceptedAmount;
+    }
+
+    @Data
+    public static class AcceptedItem {
+        @NotNull(message = "Item id is required")
+        private UUID itemId;
+
+        @NotNull(message = "Accepted quantity is required")
+        @Min(value = 0, message = "Accepted quantity cannot be negative")
+        private Integer acceptedQty;
+    }
+
+    @Data
+    public static class CreateExpiryClaimRequest {
+        @jakarta.validation.constraints.NotBlank(message = "Supplier is required")
+        private String supplierName;
+
+        @NotNull(message = "Claim date is required")
+        private LocalDate claimDate;
+
+        private String reason;
+
+        @NotEmpty(message = "Select at least one batch")
+        @Valid
+        private List<ExpiryClaimLine> items;
+    }
+
+    @Data
+    public static class ExpiryClaimLine {
+        @NotNull(message = "Batch is required")
+        private UUID batchId;
+
+        @NotNull(message = "Quantity is required")
+        @Min(value = 1, message = "Quantity must be at least 1")
+        private Integer quantity;
+    }
+
+    @Data
+    public static class ClaimableBatch {
+        private UUID batchId;
+        private String batchNumber;
+        private UUID productId;
+        private String productName;
+        private String productBrand;
+        private String hsnCode;
+        private LocalDate expiryDate;
+        private long daysToExpiry;
+        private boolean expired;
+        private Integer quantity;
+        private BigDecimal purchaseRate;
+        private BigDecimal purchaseGstPercent;
+        private BigDecimal value;
+        private String supplierName;
+        private String purchaseEntryNumber;
+        private String supplierInvoiceNumber;
     }
 
     @Data
@@ -147,6 +210,8 @@ public class GoodsReturnDtos {
         private String supplierRefNumber;     // supplier claims only
         private boolean replacementRestocked; // GOODS_REPLACED — stock already put back
         private boolean reducesPayable;       // this credit is still knocked off the supplier balance
+        private boolean expiryClaim;
+        private BigDecimal writtenOffAmount;
         private PersonInfo refundProcessedBy;
         private String warehouseStatus;
         private PersonInfo verifiedBy;
@@ -180,6 +245,8 @@ public class GoodsReturnDtos {
         private BigDecimal mrp;
         private BigDecimal minSaleRate;
         private BigDecimal maxSaleRate;
+        private Integer acceptedQty;
+        private String hsnCode;
     }
 
     @Data
@@ -207,6 +274,9 @@ public class GoodsReturnDtos {
         private BigDecimal totalAmount;
         private BigDecimal totalTaxable;
         private BigDecimal totalGst;
+        private boolean expiryClaim;
+        private BigDecimal acceptedAmount;
+        private BigDecimal writtenOffAmount;
         private String createdByName;
         private CompanyInfo company;
         private List<DebitNoteLine> lines;
@@ -218,6 +288,7 @@ public class GoodsReturnDtos {
         private String productName;
         private String hsnCode;
         private String batchNumber;
+        private LocalDate expiryDate;
         private Integer quantity;
         private String unitName;
         private BigDecimal unitRate;

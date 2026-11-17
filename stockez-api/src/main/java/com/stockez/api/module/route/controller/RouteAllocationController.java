@@ -153,6 +153,15 @@ public class RouteAllocationController {
         return ResponseEntity.ok(ApiResponse.success(allocationService.markSalesComplete(id, tenantId), "Sales trip marked complete"));
     }
 
+    @PostMapping("/{id}/reopen-sales")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
+    @Operation(summary = "Reopen a completed sales trip for today")
+    public ResponseEntity<ApiResponse<RouteAllocationDtos.RouteAllocationResponse>> reopenSales(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(allocationService.reopenSales(id, tenantId), "Sales trip reopened"));
+    }
+
     @PostMapping("/{id}/complete-delivery")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('GATE_PASS_CREATE')")
     @Operation(summary = "Mark the delivery run on a route allocation as completed")

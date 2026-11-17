@@ -73,6 +73,22 @@ public class PurchaseItem {
     @Column(nullable = false)
     private Integer quantity;
 
+    @Column(name = "free_qty", nullable = false)
+    @Builder.Default
+    private Integer freeQty = 0;
+
+    @Column(name = "bill_discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal billDiscountAmount = BigDecimal.ZERO;
+
+    @Column(name = "freight_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal freightAmount = BigDecimal.ZERO;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
+
+    public int getUnits() {
+        return (quantity != null ? quantity : 0) + (freeQty != null ? freeQty : 0);
+    }
 }

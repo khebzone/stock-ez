@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Skeleton, Input, Button, Tooltip, Space, Select } from 'antd';
-import { InboxOutlined, SearchOutlined, RollbackOutlined, DeleteOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons';
+import { Table, Skeleton, Input, Button, Tooltip, Select } from 'antd';
+import { InboxOutlined, SearchOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons';
 import { exportToXLSX } from '../../components/TableToolbar';
 import dayjs from 'dayjs';
 import { useGetAllBatchesQuery } from '../../store/api/purchaseApi';
 import { useGetMastersQuery } from '../../store/api/productMasterApi';
 import { hasPermission } from '../../utils/permissions';
-import ReturnToSupplierModal from '../../components/ReturnToSupplierModal';
-import WriteOffModal from '../../components/WriteOffModal';
 import EditBatchRatesModal from '../../components/EditBatchRatesModal';
 
 const STATUS_TABS = [
@@ -25,8 +23,6 @@ const StockBatchesPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch]       = useState('');
   const [brand, setBrand]         = useState<string | undefined>();
-  const [returnBatch, setReturnBatch]   = useState<any>(null);
-  const [writeOffBatch, setWriteOffBatch] = useState<any>(null);
   const [ratesBatch, setRatesBatch]       = useState<any>(null);
 
   // Debounce search — fires API call 400ms after user stops typing
@@ -152,49 +148,13 @@ const StockBatchesPage: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      width: 110,
+      width: 60,
       align: 'center' as const,
-      render: (_: any, r: any) => {
-        const canEditRates = hasPermission('STOCK_ADJUSTMENT_CREATE');
-        const hasStock = r.quantityAvailable > 0;
-        const canReturn = hasStock && hasPermission('RETURNS_CREATE');
-        const canWriteOff = hasStock && hasPermission('RETURNS_DAMAGE');
-        if (!canEditRates && !canReturn && !canWriteOff) return null;
-        return (
-          <Space size={4}>
-            {canEditRates && (
-              <Tooltip title="Edit sale rates">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => setRatesBatch(r)}
-                />
-              </Tooltip>
-            )}
-            {canReturn && r.supplierName && (
-              <Tooltip title="Return to Supplier">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<RollbackOutlined style={{ color: '#1d4ed8' }} />}
-                  onClick={() => setReturnBatch(r)}
-                />
-              </Tooltip>
-            )}
-            {canWriteOff && (
-              <Tooltip title="Write Off / Damage">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<DeleteOutlined style={{ color: '#dc2626' }} />}
-                  onClick={() => setWriteOffBatch(r)}
-                />
-              </Tooltip>
-            )}
-          </Space>
-        );
-      },
+      render: (_: any, r: any) => hasPermission('STOCK_ADJUSTMENT_CREATE') ? (
+        <Tooltip title="Edit rates and expiry">
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => setRatesBatch(r)} />
+        </Tooltip>
+      ) : null,
     },
   ];
 
@@ -284,23 +244,7 @@ const StockBatchesPage: React.FC = () => {
         )}
       </div>
 
-      {returnBatch && (
-        <ReturnToSupplierModal
-          batch={returnBatch}
-          open={!!returnBatch}
-          onClose={() => setReturnBatch(null)}
-        />
-      )}
-
       <EditBatchRatesModal batch={ratesBatch} onClose={() => setRatesBatch(null)} />
-
-      {writeOffBatch && (
-        <WriteOffModal
-          batch={writeOffBatch}
-          open={!!writeOffBatch}
-          onClose={() => setWriteOffBatch(null)}
-        />
-      )}
 
     </div>
   );

@@ -192,7 +192,7 @@ public class OrderService {
                     productRepository.findByIdAndTenantId(itemReq.getProductId(), tenantId)
                         .orElseThrow(() -> new ResourceNotFoundException("Product", itemReq.getProductId().toString())));
                 fifoBatchMap.put(itemReq.getProductId(),
-                    stockBatchRepository.findFifoByProduct(tenantId, itemReq.getProductId()));
+                    stockBatchRepository.findSellableFifoByProduct(tenantId, itemReq.getProductId(), LocalDate.now()));
             }
         }
 
@@ -208,10 +208,12 @@ public class OrderService {
                 throw new BusinessException("Product '" + product.getName() + "' is not active", "INACTIVE_PRODUCT");
             }
 
-            int availableStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+            int expired = expiredUnits(tenantId, product.getId());
+            int availableStock = Math.max(0, (product.getStockQuantity() != null ? product.getStockQuantity() : 0) - expired);
             if (availableStock < itemReq.getQuantity()) {
                 throw new BusinessException(
-                    "Insufficient stock for '" + product.getName() + "'. Available: " + availableStock + ", Requested: " + itemReq.getQuantity(),
+                    "Insufficient stock for '" + product.getName() + "'. Available: " + availableStock + ", Requested: " + itemReq.getQuantity()
+                        + expiredNote(expired),
                     "INSUFFICIENT_STOCK"
                 );
             }
@@ -336,7 +338,8 @@ public class OrderService {
                     batchesToSave.add(batch);
                     remaining -= deduct;
                 }
-                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum();
+                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum()
+                        + expiredUnits(tenantId, product.getId());
                 product.setStockQuantity(newStock);
             }
         }
@@ -347,6 +350,15 @@ public class OrderService {
                 CustomerVisit.Outcome.ORDER_PLACED, saved.getId(), null, null);
 
         return toResponse(saved);
+    }
+
+    private int expiredUnits(UUID tenantId, UUID productId) {
+        Integer qty = stockBatchRepository.sumExpiredByProduct(tenantId, productId, LocalDate.now());
+        return qty != null ? qty : 0;
+    }
+
+    private String expiredNote(int expired) {
+        return expired > 0 ? ". " + expired + " expired unit(s) cannot be sold" : "";
     }
 
     /**
@@ -528,7 +540,7 @@ public class OrderService {
                     productRepository.findByIdAndTenantId(itemReq.getProductId(), tenantId)
                         .orElseThrow(() -> new ResourceNotFoundException("Product", itemReq.getProductId().toString())));
                 fifoBatchMap.put(itemReq.getProductId(),
-                    stockBatchRepository.findFifoByProduct(tenantId, itemReq.getProductId()));
+                    stockBatchRepository.findSellableFifoByProduct(tenantId, itemReq.getProductId(), LocalDate.now()));
             }
         }
 
@@ -543,10 +555,12 @@ public class OrderService {
             if (!product.isActive()) {
                 throw new BusinessException("Product '" + product.getName() + "' is not active", "INACTIVE_PRODUCT");
             }
-            int availableStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+            int expired = expiredUnits(tenantId, product.getId());
+            int availableStock = Math.max(0, (product.getStockQuantity() != null ? product.getStockQuantity() : 0) - expired);
             if (availableStock < itemReq.getQuantity()) {
                 throw new BusinessException(
-                    "Insufficient stock for '" + product.getName() + "'. Available: " + availableStock + ", Requested: " + itemReq.getQuantity(),
+                    "Insufficient stock for '" + product.getName() + "'. Available: " + availableStock + ", Requested: " + itemReq.getQuantity()
+                        + expiredNote(expired),
                     "INSUFFICIENT_STOCK");
             }
 
@@ -640,7 +654,8 @@ public class OrderService {
                     batchesToSave.add(batch);
                     remaining -= deduct;
                 }
-                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum();
+                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum()
+                        + expiredUnits(tenantId, product.getId());
                 product.setStockQuantity(newStock);
             }
         }
@@ -959,7 +974,7 @@ public class OrderService {
                     productRepository.findByIdAndTenantId(itemReq.getProductId(), tenantId)
                         .orElseThrow(() -> new ResourceNotFoundException("Product", itemReq.getProductId().toString())));
                 fifoBatchMap.put(itemReq.getProductId(),
-                    stockBatchRepository.findFifoByProduct(tenantId, itemReq.getProductId()));
+                    stockBatchRepository.findSellableFifoByProduct(tenantId, itemReq.getProductId(), LocalDate.now()));
             }
         }
 
@@ -972,9 +987,10 @@ public class OrderService {
             List<StockBatch> fifo = fifoBatchMap.get(itemReq.getProductId());
 
             if (!product.isActive()) throw new BusinessException("Product '" + product.getName() + "' is not active", "INACTIVE_PRODUCT");
-            int available = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+            int expired = expiredUnits(tenantId, product.getId());
+            int available = Math.max(0, (product.getStockQuantity() != null ? product.getStockQuantity() : 0) - expired);
             if (available < itemReq.getQuantity()) throw new BusinessException(
-                "Insufficient stock for '" + product.getName() + "'. Available: " + available, "INSUFFICIENT_STOCK");
+                "Insufficient stock for '" + product.getName() + "'. Available: " + available + expiredNote(expired), "INSUFFICIENT_STOCK");
 
             BigDecimal unitPrice = itemReq.getUnitPrice() != null ? itemReq.getUnitPrice() : product.getMaxSaleRate();
             BigDecimal effectiveMin = !fifo.isEmpty() && fifo.get(0).getMinSaleRate() != null ? fifo.get(0).getMinSaleRate() : product.getMinSaleRate();
@@ -1088,7 +1104,8 @@ public class OrderService {
                     batchesToSave.add(batch);
                     remaining -= deduct;
                 }
-                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum();
+                int newStock = fifo.stream().mapToInt(b -> b.getQuantityAvailable() != null ? b.getQuantityAvailable() : 0).sum()
+                        + expiredUnits(tenantId, product.getId());
                 product.setStockQuantity(newStock);
             }
         }

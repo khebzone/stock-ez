@@ -79,4 +79,7 @@ public class GoodsReturnItem {
 
     @Column(name = "expiry_date")
     private java.time.LocalDate expiryDate;
+
+    @Column(name = "accepted_qty")
+    private Integer acceptedQty;
 }

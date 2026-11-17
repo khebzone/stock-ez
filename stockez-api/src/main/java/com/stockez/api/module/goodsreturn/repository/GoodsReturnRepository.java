@@ -92,17 +92,17 @@ public interface GoodsReturnRepository extends JpaRepository<GoodsReturn, UUID> 
           + "  OR (g.type = 'DAMAGE' AND g.damageSource = 'SUPPLIER' AND g.settlementMode = 'ADJUST_AGAINST_BILL')"
           + ")";
 
-    @Query("SELECT g.supplierName, COALESCE(SUM(g.totalAmount), 0) FROM GoodsReturn g "
+    @Query("SELECT g.supplierName, COALESCE(SUM(g.totalAmount - g.writtenOffAmount), 0) FROM GoodsReturn g "
          + "WHERE g.tenant.id = :tenantId AND g.supplierName IS NOT NULL AND " + OPEN_CREDIT_PREDICATE
          + " GROUP BY g.supplierName")
     List<Object[]> sumOpenSupplierCreditGrouped(@Param("tenantId") UUID tenantId);
 
-    @Query("SELECT COALESCE(SUM(g.totalAmount), 0) FROM GoodsReturn g "
+    @Query("SELECT COALESCE(SUM(g.totalAmount - g.writtenOffAmount), 0) FROM GoodsReturn g "
          + "WHERE g.tenant.id = :tenantId AND LOWER(g.supplierName) = LOWER(:supplierName) AND " + OPEN_CREDIT_PREDICATE)
     java.math.BigDecimal sumOpenSupplierCredit(
             @Param("tenantId") UUID tenantId, @Param("supplierName") String supplierName);
 
-    @Query("SELECT COALESCE(SUM(g.totalAmount), 0) FROM GoodsReturn g "
+    @Query("SELECT COALESCE(SUM(g.totalAmount - g.writtenOffAmount), 0) FROM GoodsReturn g "
          + "WHERE g.tenant.id = :tenantId AND LOWER(g.supplierName) = LOWER(:supplierName) "
          + "AND g.returnDate < :from AND " + OPEN_CREDIT_PREDICATE)
     java.math.BigDecimal sumOpenSupplierCreditBeforeDate(
@@ -110,12 +110,12 @@ public interface GoodsReturnRepository extends JpaRepository<GoodsReturn, UUID> 
             @Param("from") LocalDate from);
 
     // Per-bill credit — only returns filed against a specific purchase entry can offset that bill.
-    @Query("SELECT g.referencePurchaseEntry.id, COALESCE(SUM(g.totalAmount), 0) FROM GoodsReturn g "
+    @Query("SELECT g.referencePurchaseEntry.id, COALESCE(SUM(g.totalAmount - g.writtenOffAmount), 0) FROM GoodsReturn g "
          + "WHERE g.tenant.id = :tenantId AND g.referencePurchaseEntry IS NOT NULL AND " + OPEN_CREDIT_PREDICATE
          + " GROUP BY g.referencePurchaseEntry.id")
     List<Object[]> sumOpenCreditByPurchaseEntryGrouped(@Param("tenantId") UUID tenantId);
 
-    @Query("SELECT COALESCE(SUM(g.totalAmount), 0) FROM GoodsReturn g "
+    @Query("SELECT COALESCE(SUM(g.totalAmount - g.writtenOffAmount), 0) FROM GoodsReturn g "
          + "WHERE g.tenant.id = :tenantId AND g.referencePurchaseEntry.id = :purchaseEntryId AND " + OPEN_CREDIT_PREDICATE)
     java.math.BigDecimal sumOpenCreditByPurchaseEntry(
             @Param("tenantId") UUID tenantId, @Param("purchaseEntryId") UUID purchaseEntryId);
@@ -137,5 +137,15 @@ public interface GoodsReturnRepository extends JpaRepository<GoodsReturn, UUID> 
          + "AND g.warehouseStatus = 'VERIFIED' AND g.returnDate BETWEEN :from AND :to "
          + "ORDER BY g.returnDate ASC, g.returnNumber ASC")
     List<GoodsReturn> findVerifiedSalesReturnsInPeriod(
+            @Param("tenantId") UUID tenantId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    @Query("SELECT g FROM GoodsReturn g WHERE g.tenant.id = :tenantId AND g.expiryClaim = true "
+         + "ORDER BY g.returnDate DESC, g.createdAt DESC")
+    List<GoodsReturn> findExpiryClaims(@Param("tenantId") UUID tenantId);
+
+    @Query("SELECT g FROM GoodsReturn g WHERE g.tenant.id = :tenantId AND g.expiryClaim = true "
+         + "AND g.refundStatus = 'PROCESSED' AND g.writtenOffAmount > 0 "
+         + "AND g.refundDate BETWEEN :from AND :to ORDER BY g.refundDate DESC, g.returnNumber DESC")
+    List<GoodsReturn> findExpiryClaimWriteOffs(
             @Param("tenantId") UUID tenantId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 }

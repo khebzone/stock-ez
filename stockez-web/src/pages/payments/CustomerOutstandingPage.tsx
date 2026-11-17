@@ -17,6 +17,7 @@ import { useGetRoutesQuery } from '../../store/api/routeApi';
 import { exportToXLSX } from '../../components/TableToolbar';
 import { formatINR } from '../../utils/format';
 import PaymentActions from '../../components/PaymentActions';
+import CustomerPaymentHistoryView from './CustomerPaymentHistoryView';
 import { hasAnyPermission, hasPermission } from '../../utils/permissions';
 
 const canRecordPayment = hasAnyPermission('PAYMENTS_CREATE', 'DELIVERY_UPDATE');
@@ -509,7 +510,7 @@ const CustomerOutstandingPage: React.FC = () => {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const isLargeDesktop = screens.xl;
-  const [activeTab, setActiveTab] = useState<'customer' | 'salesman' | 'route'>('customer');
+  const [activeTab, setActiveTab] = useState<'customer' | 'salesman' | 'route' | 'history'>('customer');
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
@@ -738,6 +739,7 @@ const CustomerOutstandingPage: React.FC = () => {
           { key: 'customer', label: 'By Customer', icon: <UserOutlined /> },
           { key: 'salesman', label: 'By Salesman', icon: <TeamOutlined /> },
           { key: 'route', label: 'By Route', icon: <EnvironmentOutlined /> },
+          { key: 'history', label: 'Payment History', icon: <ProfileOutlined /> },
         ].map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key as any)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, transition: 'all 0.15s',
@@ -753,6 +755,8 @@ const CustomerOutstandingPage: React.FC = () => {
       {activeTab === 'salesman' && <SalesmanOutstandingView />}
 
       {activeTab === 'route' && <RouteOutstandingView />}
+
+      {activeTab === 'history' && <CustomerPaymentHistoryView />}
 
       {activeTab === 'customer' && !summaryLoading && allSummaries.length > 0 && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>

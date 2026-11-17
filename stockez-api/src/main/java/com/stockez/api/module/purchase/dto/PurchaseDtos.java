@@ -32,19 +32,51 @@ public class PurchaseDtos {
         @NotEmpty(message = "At least one product is required")
         @Valid
         private List<PurchaseItemRequest> items;
+
+        // Bill discount printed BEFORE GST — spread over the lines, lowers their cost and GST.
+        private String billDiscountType;   // PERCENT | AMOUNT
+        @DecimalMin(value = "0", message = "Bill discount cannot be negative")
+        private BigDecimal billDiscountValue;
+
+        // Cash discount taken AFTER GST — lowers only what we owe; item cost stays as billed.
+        private String cashDiscountType;   // PERCENT | AMOUNT
+        @DecimalMin(value = "0", message = "Cash discount cannot be negative")
+        private BigDecimal cashDiscountValue;
+
+        @DecimalMin(value = "0", message = "Freight cannot be negative")
+        private BigDecimal freightAmount;
+
+        @DecimalMin(value = "-0.99", message = "Round off must be under ₹1")
+        @DecimalMax(value = "0.99", message = "Round off must be under ₹1")
+        private BigDecimal roundOffAmount;
+
+        private BigDecimal supplierInvoiceTotal;
+
+        // The saved draft this purchase was finished from; it is removed once the purchase saves.
+        private UUID draftId;
     }
 
     @Data
     public static class PurchaseItemRequest {
+        // Set only when editing a saved bill — identifies the existing line this one replaces.
+        private UUID itemId;
+
         @NotNull(message = "Product is required")
         private UUID productId;
 
         @NotNull(message = "Total amount is required")
-        @DecimalMin(value = "0.01", message = "Total amount must be greater than 0")
+        @DecimalMin(value = "0", message = "Total amount cannot be negative")
         private BigDecimal totalAmount;
 
         @DecimalMin(value = "0")
         private BigDecimal discountAmount;
+
+        @DecimalMin(value = "0", message = "Discount % cannot be negative")
+        @DecimalMax(value = "100", message = "Discount % cannot exceed 100")
+        private BigDecimal discountPercent;
+
+        @Min(value = 0, message = "Free quantity cannot be negative")
+        private Integer freeQty;
 
         @NotNull(message = "MRP is required")
         @DecimalMin(value = "0.01", message = "MRP must be greater than 0")
@@ -55,7 +87,7 @@ public class PurchaseDtos {
         private LocalDate expiryDate;
 
         @NotNull(message = "Quantity is required")
-        @Min(value = 1, message = "Quantity must be at least 1")
+        @Min(value = 0, message = "Quantity cannot be negative")
         private Integer quantity;
 
         @DecimalMin(value = "0")
@@ -118,6 +150,16 @@ public class PurchaseDtos {
         private BigDecimal totalCgst;
         private BigDecimal totalSgst;
         private BigDecimal paidAmount;
+        private BigDecimal itemDiscountTotal;
+        private String billDiscountType;
+        private BigDecimal billDiscountValue;
+        private BigDecimal billDiscountAmount;
+        private String cashDiscountType;
+        private BigDecimal cashDiscountValue;
+        private BigDecimal cashDiscountAmount;
+        private BigDecimal freightAmount;
+        private BigDecimal roundOffAmount;
+        private BigDecimal supplierInvoiceTotal;
         private String status;
         private String notes;
         private PersonInfo createdBy;
@@ -132,6 +174,10 @@ public class PurchaseDtos {
         private String batchNumber;
         private BigDecimal mrp;
         private BigDecimal discountAmount;
+        private BigDecimal discountPercent;
+        private Integer freeQty;
+        private BigDecimal billDiscountAmount;
+        private BigDecimal freightAmount;
         private BigDecimal taxableAmount;
         private BigDecimal gstPercent;
         private BigDecimal cgstPercent;
@@ -158,6 +204,9 @@ public class PurchaseDtos {
         @NotNull(message = "Max sale rate is required")
         @DecimalMin(value = "0.01", message = "Max sale rate must be greater than 0")
         private BigDecimal maxSaleRate;
+
+        /** Optional — correct a wrongly entered expiry date; left unchanged when null. */
+        private java.time.LocalDate expiryDate;
     }
 
     @Data

@@ -102,6 +102,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Query("SELECT o FROM Order o WHERE o.tenant.id = :tenantId AND o.customer.id = :customerId AND o.status <> :cancelled AND o.balanceAmount > 0 ORDER BY o.orderDate ASC")
     List<Order> findUnpaidOrdersByCustomer(@Param("tenantId") UUID tenantId, @Param("customerId") UUID customerId, @Param("cancelled") Order.OrderStatus cancelled);
 
+    @Query("SELECT o FROM Order o WHERE o.tenant.id = :tenantId AND o.customer.id = :customerId AND o.status <> :cancelled ORDER BY o.orderDate DESC, o.createdAt DESC")
+    List<Order> findAllOrdersByCustomer(@Param("tenantId") UUID tenantId, @Param("customerId") UUID customerId, @Param("cancelled") Order.OrderStatus cancelled);
+
     // Migrated opening-balance rows (OPN-...) that still carry a balance — an old-stock return credit is applied against these, oldest first.
     @Query("SELECT o FROM Order o WHERE o.tenant.id = :tenantId AND o.customer.id = :customerId AND o.openingBalance = true AND o.status <> :cancelled AND o.balanceAmount > 0 ORDER BY o.orderDate ASC")
     List<Order> findOpeningBalanceOutstandingByCustomer(@Param("tenantId") UUID tenantId, @Param("customerId") UUID customerId, @Param("cancelled") Order.OrderStatus cancelled);

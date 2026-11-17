@@ -34,10 +34,12 @@ export const goodsReturnApi = baseApi.injectEndpoints({
       id: string;
       paymentMode?: string;
       refundDate: string;
-      settlementMode?: 'CASH_REFUND' | 'ADJUST_AGAINST_BILL' | 'GOODS_REPLACED';
+      settlementMode?: 'CASH_REFUND' | 'ADJUST_AGAINST_BILL' | 'GOODS_REPLACED' | 'REJECTED';
       supplierRefNumber?: string;
       replacementExpiryDate?: string;
       notes?: string;
+      acceptedItems?: { itemId: string; acceptedQty: number }[];
+      acceptedAmount?: number;
     }>({
       query: ({ id, ...body }) => ({ url: `/goods-returns/${id}/process-refund`, method: 'POST', body }),
       // A settled claim changes the supplier payable, and GOODS_REPLACED puts stock back.
@@ -71,6 +73,27 @@ export const goodsReturnApi = baseApi.injectEndpoints({
       query: ({ id, reason }) => ({ url: `/goods-returns/${id}/cancel`, method: 'POST', body: { reason } }),
       invalidatesTags: ['Order', 'Product'],
     }),
+    getClaimableBatches: builder.query<any, number>({
+      query: (days) => `/goods-returns/expiry-claims/claimable?days=${days}`,
+      providesTags: ['Product', 'Purchase'],
+    }),
+    getExpiryClaims: builder.query<any, void>({
+      query: () => '/goods-returns/expiry-claims',
+      providesTags: ['Order', 'Payment'],
+    }),
+    getExpiryWriteOffs: builder.query<any, { from: string; to: string }>({
+      query: ({ from, to }) => `/goods-returns/expiry-claims/write-offs?from=${from}&to=${to}`,
+      providesTags: ['Order', 'Payment'],
+    }),
+    createExpiryClaim: builder.mutation<any, {
+      supplierName: string;
+      claimDate: string;
+      reason?: string;
+      items: { batchId: string; quantity: number }[];
+    }>({
+      query: (body) => ({ url: '/goods-returns/expiry-claims', method: 'POST', body }),
+      invalidatesTags: ['Order', 'Payment', 'Product', 'Purchase'],
+    }),
   }),
 });
 
@@ -90,4 +113,8 @@ export const {
   useGetWarehouseReturnHistoryQuery,
   useVerifyGoodsReturnMutation,
   useCancelGoodsReturnMutation,
+  useGetClaimableBatchesQuery,
+  useGetExpiryClaimsQuery,
+  useGetExpiryWriteOffsQuery,
+  useCreateExpiryClaimMutation,
 } = goodsReturnApi;

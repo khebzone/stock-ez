@@ -243,6 +243,15 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(paymentService.getUnpaidOrdersByCustomer(customerId, tenantId)));
     }
 
+    @GetMapping("/customer/{customerId}/all-orders")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','CUSTOMERS_VIEW')")
+    @Operation(summary = "Get all orders (paid and unpaid) for a customer, newest first")
+    public ResponseEntity<ApiResponse<List<OrderDtos.OrderSummary>>> customerAllOrders(
+            @PathVariable UUID customerId,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getAllOrdersByCustomer(customerId, tenantId)));
+    }
+
     @GetMapping("/customer/{customerId}/history")
     @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('PAYMENTS_VIEW','CUSTOMERS_VIEW')")
     @Operation(summary = "Get payment history for a customer")

@@ -89,7 +89,7 @@ const ItemHistoryPage: React.FC = () => {
             columns={[
               { title: 'S.No', width: 60, align: 'center' as const, render: (_: any, __: any, i: number) => i + 1 },
               { title: 'Date', dataIndex: 'orderDate', width: 120, render: (v: string) => dayjs(v).format('DD MMM YYYY') },
-              { title: 'Order #', dataIndex: 'orderNumber', width: 140, render: (v: string) => <span style={{ fontWeight: 600, color: '#0f172a' }}>{v}</span> },
+              { title: 'Order #', dataIndex: 'orderNumber', width: 170, render: (v: string) => <span style={{ fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{v}</span> },
               { title: 'Customer', dataIndex: 'customerName' },
               { title: 'Qty', dataIndex: 'quantity', width: 90, align: 'right' as const, sorter: (a: any, b: any) => a.quantity - b.quantity },
               { title: 'Rate', dataIndex: 'rate', width: 110, align: 'right' as const, render: (v: any) => fmt(v) },

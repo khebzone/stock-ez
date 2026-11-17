@@ -206,6 +206,45 @@ public class GoodsReturnController {
                 "Refund processed successfully"));
     }
 
+    @GetMapping("/expiry-claims/claimable")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_DAMAGE','RETURNS_VIEW','STOCK_VIEW')")
+    @Operation(summary = "Expired batches still in stock (plus those expiring within `days`), with their supplier")
+    public ResponseEntity<ApiResponse<List<GoodsReturnDtos.ClaimableBatch>>> claimableBatches(
+            @RequestParam(defaultValue = "0") int days,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getClaimableBatches(tenantId, days)));
+    }
+
+    @GetMapping("/expiry-claims")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_DAMAGE','RETURNS_VIEW','STOCK_VIEW')")
+    @Operation(summary = "All expiry claims filed with suppliers")
+    public ResponseEntity<ApiResponse<List<GoodsReturnDtos.GoodsReturnResponse>>> expiryClaims(
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getExpiryClaims(tenantId)));
+    }
+
+    @GetMapping("/expiry-claims/write-offs")
+    @PreAuthorize("hasRole('ADMIN') or hasAnyAuthority('RETURNS_DAMAGE','RETURNS_VIEW','STOCK_VIEW')")
+    @Operation(summary = "Settled expiry claims with a written-off portion, by settlement date")
+    public ResponseEntity<ApiResponse<List<GoodsReturnDtos.GoodsReturnResponse>>> expiryWriteOffs(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        return ResponseEntity.ok(ApiResponse.success(goodsReturnService.getExpiryClaimWriteOffs(tenantId, from, to)));
+    }
+
+    @PostMapping("/expiry-claims")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('RETURNS_DAMAGE')")
+    @Operation(summary = "File expired batches back to a supplier as one claim — removes the stock")
+    public ResponseEntity<ApiResponse<GoodsReturnDtos.GoodsReturnResponse>> createExpiryClaim(
+            @Valid @RequestBody GoodsReturnDtos.CreateExpiryClaimRequest request,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("X-Tenant-Id") UUID tenantId) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                goodsReturnService.createExpiryClaim(request, userId, tenantId), "Expiry claim filed"));
+    }
+
     private <T> PagedResponse<T> toPagedResponse(Page<T> page) {
         return PagedResponse.<T>builder()
                 .content(page.getContent())

@@ -20,6 +20,7 @@ public interface PurchaseEntryRepository extends JpaRepository<PurchaseEntry, UU
 
     @Query("SELECT p FROM PurchaseEntry p WHERE p.tenant.id = :tenantId " +
            "AND p.openingBalance = false " +
+           "AND p.status IN :statuses " +
            "AND (:supplierName IS NULL OR LOWER(p.supplierName) LIKE :supplierName) " +
            "AND (:invoiceNumber IS NULL OR LOWER(p.invoiceNumber) LIKE :invoiceNumber) " +
            "AND p.purchaseDate >= :from " +
@@ -27,6 +28,7 @@ public interface PurchaseEntryRepository extends JpaRepository<PurchaseEntry, UU
            "ORDER BY p.purchaseDate DESC, p.createdAt DESC")
     Page<PurchaseEntry> findFiltered(
             @Param("tenantId") UUID tenantId,
+            @Param("statuses") java.util.Collection<String> statuses,
             @Param("supplierName") String supplierName,
             @Param("invoiceNumber") String invoiceNumber,
             @Param("from") LocalDate from,
@@ -38,6 +40,11 @@ public interface PurchaseEntryRepository extends JpaRepository<PurchaseEntry, UU
     // How many purchase-line items feed the same batch — >1 means the batch was merged (shared).
     @Query("SELECT COUNT(i) FROM PurchaseItem i WHERE i.purchaseEntry.tenant.id = :tenantId AND i.batchNumber = :batchNumber")
     long countItemsSharingBatch(@Param("tenantId") UUID tenantId, @Param("batchNumber") String batchNumber);
+
+    @Query("SELECT i FROM PurchaseItem i WHERE i.purchaseEntry.tenant.id = :tenantId AND i.batchNumber = :batchNumber "
+         + "AND i.id <> :excludeId ORDER BY i.purchaseEntry.createdAt")
+    java.util.List<com.stockez.api.module.purchase.entity.PurchaseItem> findOtherItemsInBatch(
+            @Param("tenantId") UUID tenantId, @Param("batchNumber") String batchNumber, @Param("excludeId") UUID excludeId);
 
     @Query("SELECT p FROM PurchaseEntry p WHERE p.tenant.id = :tenantId AND p.openingBalance = false ORDER BY p.purchaseDate DESC, p.createdAt DESC")
     java.util.List<PurchaseEntry> findAllByTenant(@Param("tenantId") UUID tenantId);

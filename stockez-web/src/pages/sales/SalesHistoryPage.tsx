@@ -160,7 +160,8 @@ const SalesHistoryPage: React.FC = () => {
   const { data: workflowData }  = useGetWorkflowSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
   const discountType = workflowData?.data?.discountType ?? 'PERCENT';
 
-  const products: any[] = productsData?.data?.content || productsData?.data || [];
+  const products: any[] = (productsData?.data?.content || productsData?.data || [])
+    .map((p: any) => ({ ...p, stockQuantity: p.sellableStock ?? p.stockQuantity }));
   const productsById: Record<string, any> = React.useMemo(() => {
     const m: Record<string, any> = {};
     products.forEach((p: any) => { m[p.id] = p; });
@@ -473,14 +474,15 @@ const SalesHistoryPage: React.FC = () => {
                               }}>
                                 {order.status}
                               </span>
-                              {['DRAFT', 'SUBMITTED'].includes(order.status) && (hasPermission('ORDERS_EDIT') || hasPermission('ORDERS_CANCEL')) && (
+                              {(['DRAFT', 'SUBMITTED', 'APPROVED'].includes(order.status) && hasPermission('ORDERS_EDIT')
+                                || ['DRAFT', 'SUBMITTED'].includes(order.status) && hasPermission('ORDERS_CANCEL')) && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                   {hasPermission('ORDERS_EDIT') && (
                                     <Tooltip title="Edit order">
                                       <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(order.orderId)} style={{ color: '#64748b', width: 26, height: 26, padding: 0 }} />
                                     </Tooltip>
                                   )}
-                                  {hasPermission('ORDERS_CANCEL') && (
+                                  {hasPermission('ORDERS_CANCEL') && ['DRAFT', 'SUBMITTED'].includes(order.status) && (
                                     <Tooltip title="Cancel order">
                                       <Button type="text" danger size="small" icon={<CloseCircleOutlined />} onClick={() => handleCancel(order.orderId, order.orderNumber)} style={{ width: 26, height: 26, padding: 0 }} />
                                     </Tooltip>

@@ -82,7 +82,10 @@ const CounterSalePage: React.FC = () => {
   const { data: outstandingData } = useGetCustomerOutstandingQuery(customerId!, { skip: !customerId });
 
   const customers: any[]      = customersData?.data?.content || customersData?.data || [];
-  const allProducts: any[]    = productsData?.data?.content || productsData?.data || [];
+  const allProducts: any[]    = useMemo(() => {
+    const list: any[] = productsData?.data?.content || productsData?.data || [];
+    return list.map((p) => ({ ...p, stockQuantity: p.sellableStock ?? p.stockQuantity }));
+  }, [productsData]);
   const paymentMethods: any[] = paymentMethodsData?.data || [];
   const routes: any[]         = routesData?.data || [];
   const gatePassOptions: any[] = gatePassOptionsData?.data || [];

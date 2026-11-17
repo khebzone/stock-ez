@@ -136,6 +136,15 @@ public class CustomerService {
         Customer c = customerRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer", id.toString()));
 
+        if (req.getPhone() != null && !req.getPhone().equals(c.getPhone())) {
+            customerRepository.findByTenantIdAndPhoneAndActiveTrue(tenantId, req.getPhone())
+                    .filter(other -> !other.getId().equals(c.getId()))
+                    .ifPresent(other -> {
+                        throw new BusinessException("A customer with phone '" + req.getPhone() + "' already exists", "DUPLICATE_PHONE");
+                    });
+            c.setPhone(req.getPhone());
+        }
+
         c.setBusinessName(req.getBusinessName());
         c.setOwnerName(req.getOwnerName());
         c.setAltPhone(req.getAltPhone());

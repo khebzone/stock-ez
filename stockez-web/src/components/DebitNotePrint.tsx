@@ -41,6 +41,7 @@ const SETTLEMENT_TEXT: Record<string, string> = {
   ADJUST_AGAINST_BILL: 'Adjusted against our outstanding bill with you.',
   CASH_REFUND: 'Amount refunded to us.',
   GOODS_REPLACED: 'Settled — replacement goods of equal value received.',
+  REJECTED: 'Claim not accepted by the supplier.',
 };
 
 const label: React.CSSProperties = {
@@ -67,6 +68,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
     + (c.pinCode ? ` - ${c.pinCode}` : '');
 
   const settled = note.refundStatus === 'PROCESSED' && note.settlementMode;
+  const expiry = !!note.expiryClaim;
 
   return (
     <div className="dn-root" style={{ padding: 24, fontFamily: 'Arial, sans-serif', color: '#1c2b36', background: '#fff' }}>
@@ -114,7 +116,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
         <div className="dn-meta" style={{ flex: '0 0 auto', textAlign: 'right', whiteSpace: 'nowrap' }}>
           <div className="dn-title" style={{ fontSize: 20, fontWeight: 800, letterSpacing: 1 }}>DEBIT NOTE</div>
           <div style={{ fontSize: 11, color: '#777', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-            (Purchase Return)
+            {expiry ? '(Expiry Claim)' : '(Purchase Return)'}
           </div>
           <table style={{ marginLeft: 'auto', fontSize: 12, borderCollapse: 'collapse' }}>
             <tbody>
@@ -174,6 +176,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
             <th style={{ ...th, minWidth: 110 }}>Product</th>
             <th style={{ ...th, width: 70 }}>HSN</th>
             <th style={{ ...th, width: 130, whiteSpace: 'nowrap' }}>Batch</th>
+            {expiry && <th style={{ ...th, width: 90, whiteSpace: 'nowrap' }}>Expiry</th>}
             <th style={{ ...th, width: 70, textAlign: 'right' }}>Qty</th>
             <th style={{ ...th, width: 80, textAlign: 'right' }}>Rate</th>
             <th style={{ ...th, width: 90, textAlign: 'right' }}>Taxable</th>
@@ -191,6 +194,7 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
               </td>
               <td style={td}>{l.hsnCode || '—'}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}>{l.batchNumber || '—'}</td>
+              {expiry && <td style={{ ...td, whiteSpace: 'nowrap' }}>{l.expiryDate ? date(l.expiryDate) : '—'}</td>}
               <td style={tdR}>{l.quantity}{l.unitName ? ` ${l.unitName}` : ''}</td>
               <td style={tdR}>{fmt(l.unitRate)}</td>
               <td style={tdR}>{fmt(l.taxableAmount)}</td>
@@ -272,6 +276,11 @@ const DebitNoteContent: React.FC<{ note: any }> = ({ note }) => {
             ? (SETTLEMENT_TEXT[note.settlementMode] || 'Settled.')
             : 'Outstanding — please credit our account or replace the goods.'}
         </div>
+        {settled && Number(note.writtenOffAmount || 0) > 0 && (
+          <div style={{ fontSize: 12, color: '#444', marginTop: 2 }}>
+            Accepted {fmt(note.acceptedAmount)} · Not accepted {fmt(note.writtenOffAmount)}
+          </div>
+        )}
         {settled && note.refundDate && (
           <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>Settled on {date(note.refundDate)}</div>
         )}

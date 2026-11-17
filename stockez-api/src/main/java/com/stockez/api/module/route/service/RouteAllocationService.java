@@ -143,6 +143,20 @@ public class RouteAllocationService {
         return toResponse(saved);
     }
 
+    public RouteAllocationDtos.RouteAllocationResponse reopenSales(UUID id, UUID tenantId) {
+        RouteAllocation allocation = getAllocationForTenant(id, tenantId);
+        if (!allocation.isSalesCompleted())
+            throw new BusinessException("Sales trip is not completed", "NOT_COMPLETED");
+        if (!LocalDate.now().equals(allocation.getAllocationDate()))
+            throw new BusinessException("Only today's Sales Gate Pass can be reopened", "NOT_TODAY");
+        checkSalesPersonConflict(tenantId, allocation.getSalesPerson(), allocation.getAllocationDate(), allocation.getId());
+        allocation.setSalesCompleted(false);
+        RouteAllocation saved = allocationRepository.save(allocation);
+        auditService.record(tenantId, "ROUTE_ALLOCATION", saved.getId(), "SALES_REOPENED",
+                "Sales Gate Pass for " + saved.getRoute().getName() + " on " + saved.getAllocationDate() + " reopened");
+        return toResponse(saved);
+    }
+
     public RouteAllocationDtos.RouteAllocationResponse markDeliveryComplete(UUID id, UUID tenantId, boolean force) {
         RouteAllocation allocation = getAllocationForTenant(id, tenantId);
         if (allocation.isDeliveryCompleted())

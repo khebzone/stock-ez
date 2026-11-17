@@ -3,7 +3,7 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { getGeoFix } from '../../utils/geoPosition';
 import { CLIENT_ID } from '../../utils/clientId';
 
-export const API_TAG_TYPES = ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'PurchaseEntry', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive', 'StockAdjustment', 'Notification', 'Tracking', 'TrackingSettings'] as const;
+export const API_TAG_TYPES = ['User', 'Role', 'Tenant', 'Product', 'Order', 'Customer', 'Route', 'Payment', 'ProductMaster', 'PaymentMethod', 'Purchase', 'PurchaseEntry', 'PurchaseDraft', 'Target', 'Vehicle', 'Supplier', 'CompanyProfile', 'WorkflowSettings', 'Expense', 'SupplierPayment', 'Attendance', 'AttendanceSettings', 'Incentive', 'StockAdjustment', 'Notification', 'Tracking', 'TrackingSettings'] as const;
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: `${import.meta.env.VITE_API_URL || ''}/api/v1`,

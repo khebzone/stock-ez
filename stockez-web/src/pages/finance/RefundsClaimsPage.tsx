@@ -14,10 +14,11 @@ import {
 } from '../../store/api/goodsReturnApi';
 import { hasPermission } from '../../utils/permissions';
 import {
-  SETTLEMENT_OPTIONS, SETTLEMENT_LABEL, SETTLED_MESSAGE, downloadDebitNotePdf, type SettlementKey,
+  SETTLEMENT_LABEL, downloadDebitNotePdf, type SettlementKey,
 } from '../../utils/supplierSettlement';
 import PageHeader from '../../components/PageHeader';
 import DebitNotePrint from '../../components/DebitNotePrint';
+import SettleClaimModal from '../../components/SettleClaimModal';
 
 const fmt = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -186,37 +187,13 @@ const CustomerRefundsTab: React.FC = () => {
 // ── Supplier Claims — money to recover from suppliers on purchase returns ──
 const SupplierClaimsTab: React.FC = () => {
   const { data, isLoading, refetch } = useGetSupplierClaimsQuery();
-  const [processRefund, { isLoading: processing }] = useProcessRefundMutation();
   const [target, setTarget] = useState<any>(null);
   const [printId, setPrintId] = useState<string | null>(null);
-  const [form] = Form.useForm();
   const canProcess = hasPermission('RETURNS_CREATE');
 
   const rows: any[] = data?.data || [];
   const pending = rows.filter((r) => r.refundStatus === 'PENDING');
   const totalPending = pending.reduce((s, r) => s + Number(r.refundAmount || 0), 0);
-  const settlementMode = Form.useWatch('settlementMode', form);
-
-  const handleReceive = async (values: any) => {
-    try {
-      await processRefund({
-        id: target.id,
-        settlementMode: values.settlementMode,
-        paymentMode: values.settlementMode === 'CASH_REFUND' ? values.paymentMode : undefined,
-        supplierRefNumber: values.supplierRefNumber?.trim() || undefined,
-        replacementExpiryDate: values.settlementMode === 'GOODS_REPLACED' && values.replacementExpiryDate
-          ? values.replacementExpiryDate.format('YYYY-MM-DD') : undefined,
-        refundDate: values.refundDate.format('YYYY-MM-DD'),
-        notes: values.notes,
-      }).unwrap();
-      message.success(SETTLED_MESSAGE[values.settlementMode as SettlementKey](fmt(target.refundAmount)));
-      setTarget(null);
-      form.resetFields();
-      refetch();
-    } catch (err: any) {
-      message.error(err?.data?.message || 'Failed to settle claim');
-    }
-  };
 
   const columns = [
     {
@@ -266,11 +243,14 @@ const SupplierClaimsTab: React.FC = () => {
         const label = SETTLEMENT_LABEL[r.settlementMode as SettlementKey] || r.refundMode || 'Settled';
         return (
           <div>
-            <Badge status="success" text={label} />
+            <Badge status={r.settlementMode === 'REJECTED' ? 'error' : 'success'} text={label} />
             <div style={{ fontSize: 11, color: '#94a3b8' }}>
               {r.refundDate ? dayjs(r.refundDate).format('DD MMM YYYY') : ''}
               {r.supplierRefNumber ? ` · ${r.supplierRefNumber}` : ''}
             </div>
+            {Number(r.writtenOffAmount || 0) > 0 && (
+              <div style={{ fontSize: 11, color: '#dc2626' }}>{fmt(r.writtenOffAmount)} written off</div>
+            )}
           </div>
         );
       },
@@ -310,7 +290,7 @@ const SupplierClaimsTab: React.FC = () => {
               type="primary"
               size="small"
               icon={<CheckCircleOutlined />}
-              onClick={() => { setTarget(r); form.setFieldsValue({ refundDate: dayjs() }); }}
+              onClick={() => setTarget(r)}
               style={{ background: '#16a34a', border: 'none', borderRadius: 6, fontWeight: 600 }}
             >
               Settle
@@ -347,92 +327,7 @@ const SupplierClaimsTab: React.FC = () => {
         />
       </Card>
 
-      <Modal
-        open={!!target}
-        onCancel={() => { setTarget(null); form.resetFields(); }}
-        title={
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 16 }}>
-              <DollarOutlined style={{ color: '#16a34a', marginRight: 6 }} />
-              Settle Supplier Claim
-            </div>
-            {target && (
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 2 }}>
-                {target.returnNumber} · {target.supplierName || target.referencePurchaseSupplierName} ·{' '}
-                <span style={{ color: '#16a34a', fontWeight: 700 }}>{fmt(target?.refundAmount)}</span>
-              </div>
-            )}
-          </div>
-        }
-        footer={null}
-        width={420}
-        centered
-      >
-        <Form form={form} layout="vertical" onFinish={handleReceive} style={{ marginTop: 16 }}>
-          <Form.Item
-            name="settlementMode"
-            label="How did the supplier settle this?"
-            rules={[{ required: true, message: 'Choose how it was settled' }]}
-          >
-            <Select
-              placeholder="Select settlement"
-              options={SETTLEMENT_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-            />
-          </Form.Item>
-
-          {settlementMode && (
-            <div style={{
-              background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8,
-              padding: '10px 12px', marginBottom: 16, fontSize: 12, color: '#475569',
-            }}>
-              {SETTLEMENT_OPTIONS.find(o => o.value === settlementMode)?.hint}
-            </div>
-          )}
-
-          {settlementMode === 'CASH_REFUND' && (
-            <Form.Item name="paymentMode" label="Received Via" rules={[{ required: true }]}>
-              <Select
-                options={[
-                  { value: 'CASH', label: 'Cash' },
-                  { value: 'UPI', label: 'UPI' },
-                  { value: 'CHEQUE', label: 'Cheque' },
-                  { value: 'NEFT', label: 'NEFT / Bank Transfer' },
-                  { value: 'RTGS', label: 'RTGS' },
-                ]}
-              />
-            </Form.Item>
-          )}
-
-          {settlementMode === 'GOODS_REPLACED' && (
-            <Form.Item
-              name="replacementExpiryDate"
-              label="Expiry on the replacement packs"
-              extra="Read it off the physical stock — it goes on the new batch."
-            >
-              <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
-            </Form.Item>
-          )}
-
-          <Form.Item name="supplierRefNumber" label="Supplier's Credit Note / Ref No. (optional)">
-            <Input placeholder="e.g. CN-2026-001" />
-          </Form.Item>
-          <Form.Item name="refundDate" label="Settlement Date" rules={[{ required: true }]}>
-            <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
-          </Form.Item>
-          <Form.Item name="notes" label="Notes (optional)">
-            <Input placeholder="e.g. collected by driver, bank ref..." />
-          </Form.Item>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
-            <Button onClick={() => { setTarget(null); form.resetFields(); }}>Cancel</Button>
-            <Button
-              type="primary" htmlType="submit" loading={processing}
-              style={{ background: '#16a34a', border: 'none', fontWeight: 700 }}
-            >
-              Confirm Settlement {fmt(target?.refundAmount || 0)}
-            </Button>
-          </div>
-        </Form>
-      </Modal>
+      <SettleClaimModal claim={target} onClose={() => setTarget(null)} onSettled={refetch} />
     </>
   );
 };

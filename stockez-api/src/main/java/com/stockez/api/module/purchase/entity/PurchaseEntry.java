@@ -71,6 +71,39 @@ public class PurchaseEntry {
     @Builder.Default
     private BigDecimal paidAmount = BigDecimal.ZERO;
 
+    @Column(name = "bill_discount_type", length = 10)
+    private String billDiscountType;
+
+    @Column(name = "bill_discount_value", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal billDiscountValue = BigDecimal.ZERO;
+
+    @Column(name = "bill_discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal billDiscountAmount = BigDecimal.ZERO;
+
+    @Column(name = "cash_discount_type", length = 10)
+    private String cashDiscountType;
+
+    @Column(name = "cash_discount_value", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal cashDiscountValue = BigDecimal.ZERO;
+
+    @Column(name = "cash_discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal cashDiscountAmount = BigDecimal.ZERO;
+
+    @Column(name = "freight_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal freightAmount = BigDecimal.ZERO;
+
+    @Column(name = "round_off_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal roundOffAmount = BigDecimal.ZERO;
+
+    @Column(name = "supplier_invoice_total", precision = 12, scale = 2)
+    private BigDecimal supplierInvoiceTotal;
+
     @Column(name = "is_opening_balance")
     @Builder.Default
     private boolean openingBalance = false;

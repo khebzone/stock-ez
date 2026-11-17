@@ -83,7 +83,8 @@ public class ProductService {
     public List<ProductDtos.ProductResponse> getAllProducts(UUID tenantId) {
         List<Product> products = productRepository.findByTenantIdAndActiveTrueOrderByName(tenantId);
         Map<UUID, StockBatch> fifo = loadFifoMap(tenantId, products);
-        return products.stream().map(p -> toResponse(p, fifo.get(p.getId()))).toList();
+        Map<UUID, Integer> expired = loadExpiredMap(tenantId, products);
+        return products.stream().map(p -> toResponse(p, fifo.get(p.getId()), expired.getOrDefault(p.getId(), 0))).toList();
     }
 
     @Transactional(readOnly = true)
@@ -91,14 +92,22 @@ public class ProductService {
         String searchParam = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
         Page<Product> page = productRepository.findFiltered(tenantId, brandId, categoryId, searchParam, pageable);
         Map<UUID, StockBatch> fifo = loadFifoMap(tenantId, page.getContent());
-        return page.map(p -> toResponse(p, fifo.get(p.getId())));
+        Map<UUID, Integer> expired = loadExpiredMap(tenantId, page.getContent());
+        return page.map(p -> toResponse(p, fifo.get(p.getId()), expired.getOrDefault(p.getId(), 0)));
+    }
+
+    private Map<UUID, Integer> loadExpiredMap(UUID tenantId, List<Product> products) {
+        if (products.isEmpty()) return Map.of();
+        List<UUID> ids = products.stream().map(Product::getId).toList();
+        return stockBatchRepository.sumExpiredByProducts(tenantId, ids, java.time.LocalDate.now()).stream()
+                .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).intValue()));
     }
 
     /** One query to fetch the FIFO-first batch per product — replaces the per-row N+1. */
     private Map<UUID, StockBatch> loadFifoMap(UUID tenantId, List<Product> products) {
         if (products.isEmpty()) return Map.of();
         List<UUID> ids = products.stream().map(Product::getId).toList();
-        return stockBatchRepository.findFifoByProducts(tenantId, ids).stream()
+        return stockBatchRepository.findSellableFifoByProducts(tenantId, ids, java.time.LocalDate.now()).stream()
                 .collect(Collectors.toMap(b -> b.getProduct().getId(), b -> b, (a, b) -> a));
     }
 
@@ -220,11 +229,12 @@ public class ProductService {
     }
 
     private ProductDtos.ProductResponse toResponse(Product p) {
-        List<StockBatch> fifo = stockBatchRepository.findFifoByProduct(p.getTenant().getId(), p.getId());
-        return toResponse(p, fifo.isEmpty() ? null : fifo.get(0));
+        List<StockBatch> fifo = stockBatchRepository.findSellableFifoByProduct(p.getTenant().getId(), p.getId(), java.time.LocalDate.now());
+        Integer expired = stockBatchRepository.sumExpiredByProduct(p.getTenant().getId(), p.getId(), java.time.LocalDate.now());
+        return toResponse(p, fifo.isEmpty() ? null : fifo.get(0), expired != null ? expired : 0);
     }
 
-    private ProductDtos.ProductResponse toResponse(Product p, StockBatch fifoBatch) {
+    private ProductDtos.ProductResponse toResponse(Product p, StockBatch fifoBatch, int expiredUnits) {
         ProductDtos.ProductResponse res = new ProductDtos.ProductResponse();
         res.setId(p.getId());
         res.setName(p.getName());
@@ -257,6 +267,7 @@ public class ProductService {
         res.setDescription(p.getDescription());
         res.setActive(p.isActive());
         res.setStockQuantity(p.getStockQuantity());
+        res.setSellableStock(Math.max(0, (p.getStockQuantity() != null ? p.getStockQuantity() : 0) - expiredUnits));
         res.setCreatedAt(p.getCreatedAt());
         res.setMfgDate(p.getMfgDate());
         res.setExpiryDate(p.getExpiryDate());

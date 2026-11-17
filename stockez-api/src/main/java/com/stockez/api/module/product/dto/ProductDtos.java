@@ -115,6 +115,7 @@ public class ProductDtos {
         private String description;
         private boolean active;
         private Integer stockQuantity;
+        private Integer sellableStock;
         private Instant createdAt;
         private java.time.LocalDate mfgDate;
         private java.time.LocalDate expiryDate;

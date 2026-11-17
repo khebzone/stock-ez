@@ -853,7 +853,7 @@ public class ReportService {
                     || (gr.getType() == com.stockez.api.module.goodsreturn.entity.GoodsReturn.ReturnType.PURCHASE_RETURN
                         && gr.getSettlementMode() == null);
             totalReturned = totalReturned.add(gr.getTotalAmount());
-            if (reduces) returnCreditOpen = returnCreditOpen.add(gr.getTotalAmount());
+            if (reduces) returnCreditOpen = returnCreditOpen.add(gr.getTotalAmount().subtract(nvl(gr.getWrittenOffAmount())));
 
             rows.add(ReportDtos.SupplierHistoryRow.builder()
                     .serialNo(serial++)
@@ -1255,7 +1255,7 @@ public class ReportService {
                         .cgstAmount(item.getCgstAmount())
                         .sgstPercent(item.getSgstPercent())
                         .sgstAmount(item.getSgstAmount())
-                        .quantity(item.getQuantity())
+                        .quantity(item.getUnits())
                         .rateExclGst(item.getRateExclGst())
                         .netAmount(item.getAmount())
                         .build());

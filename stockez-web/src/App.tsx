@@ -48,6 +48,7 @@ const SuppliersPage         = React.lazy(() => import('./pages/suppliers/Supplie
 const SupplierPaymentsPage  = React.lazy(() => import('./pages/purchases/SupplierPaymentsPage'));
 const CustomerOutstandingPage = React.lazy(() => import('./pages/payments/CustomerOutstandingPage'));
 const RefundsClaimsPage      = React.lazy(() => import('./pages/finance/RefundsClaimsPage'));
+const ExpiryClaimsPage       = React.lazy(() => import('./pages/expiry/ExpiryClaimsPage'));
 const CompanySettingsPage   = React.lazy(() => import('./pages/settings/CompanySettingsPage'));
 const ExpensesPage          = React.lazy(() => import('./pages/expenses/ExpensesPage'));
 const WarehousePicklistPage   = React.lazy(() => import('./pages/warehouse/WarehousePicklistPage'));
@@ -190,6 +191,7 @@ const App: React.FC = () => {
             <Route path="/day-closure"         element={<DayClosurePage />} />
             <Route path="/bank-clearance"      element={<BankClearancePage />} />
             <Route path="/goods-return"        element={<GoodsReturnPage />} />
+            <Route path="/expiry-claims"       element={<ExpiryClaimsPage />} />
             <Route path="/stock-adjustments"   element={<StockAdjustmentPage />} />
             <Route path="/stock-batches"       element={<StockBatchesPage />} />
             <Route path="/gate-pass"           element={<PlanGate required="PROFESSIONAL"><GatePassPage /></PlanGate>} />

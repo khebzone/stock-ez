@@ -117,6 +117,8 @@ const pricePopoverContent = (entries: { price: number; date: string }[]) => (
 
 // ── Memoized product card — only re-renders when this product's qty changes ───
 
+const NEAR_EXPIRY_DAYS = 60;
+
 interface ProductCardProps {
   p: any;
   qty: number;
@@ -181,6 +183,9 @@ const ProductCard = React.memo<ProductCardProps>(({ p, qty, daysLeft, lastPrices
             </span>
           )}
         </div>
+        {isNear && (
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706' }}>Exp in {daysLeft}d</div>
+        )}
         {lastPrices && lastPrices.length > 0 && (
           isMobile ? (
             <div style={{ fontSize: 10, color: '#64748b' }}>
@@ -253,12 +258,12 @@ const SalesOrderPage: React.FC = () => {
   const { data: lastPricesData }  = useGetCustomerLastPricesQuery(selectedCustomer?.id ?? '', { skip: !selectedCustomer?.id , refetchOnMountOrArgChange: true });
   const lastPrices: Record<string, { price: number; date: string }[]> = lastPricesData?.data || {};
 
-  const { data: nearExpiryData } = useGetNearExpiryAlertsQuery({ days: 30 }, { refetchOnMountOrArgChange: true });
+  const { data: nearExpiryData } = useGetNearExpiryAlertsQuery({ days: NEAR_EXPIRY_DAYS }, { refetchOnMountOrArgChange: true });
   const nearExpiryMap: Record<string, number> = useMemo(() => {
     const map: Record<string, number> = {};
     (nearExpiryData?.data || []).forEach((a: any) => {
       const pid = a.product?.id;
-      if (!pid) return;
+      if (!pid || a.daysToExpiry <= 0) return;
       if (map[pid] == null || a.daysToExpiry < map[pid]) map[pid] = a.daysToExpiry;
     });
     return map;
@@ -285,7 +290,10 @@ const SalesOrderPage: React.FC = () => {
     routePlaces.map((p: any) => ({ id: p.id, name: p.name })).filter((p: any) => !!p.id),
   [routePlaces]);
 
-  const products: any[]  = productsData?.data?.content || productsData?.data || [];
+  const products: any[]  = useMemo(() => {
+    const list: any[] = productsData?.data?.content || productsData?.data || [];
+    return list.map((p) => ({ ...p, stockQuantity: p.sellableStock ?? p.stockQuantity }));
+  }, [productsData]);
   const outstanding  = outstandingData?.data;
   const creditEnforcement = workflowData?.data?.creditLimitEnforcement ?? 'HARD_BLOCK';
   const creditChecked = creditEnforcement !== 'DISABLED'

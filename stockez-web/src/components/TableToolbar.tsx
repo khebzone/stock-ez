@@ -144,6 +144,10 @@ function buildStyledSheet(
   const cols = columns.filter(c => c.title && c.title !== '' && c !== groupCol);
   const nCols = cols.length;
   const rtypes = cols.map(c => detectType(c, data));
+  const phoneCols = cols.map((c, i) => rtypes[i] === 'text' && /phone|mobile|contact/i.test(c.title) && data.every(row => {
+    const v = String(resolve(row, c) ?? '').trim();
+    return v === '' || /^[1-9]\d{6,14}$/.test(v);
+  }));
 
   const dataAlign = (i: number): 'left' | 'center' | 'right' => {
     const c = cols[i];
@@ -158,6 +162,11 @@ function buildStyledSheet(
   const GRID = 'FFE4E7EC';
   const ZEBRA = 'FFF8F9FB';
   const lastCol = Math.max(nCols, 1);
+  const SIDE = { style: 'thin' as const, color: { argb: GRID } };
+  const edges = (col: number) => ({
+    ...(col === 1 ? { left: SIDE } : {}),
+    ...(col === nCols ? { right: SIDE } : {}),
+  });
 
   const brand = companyLines(getExportCompany());
   const hasLogo = !!getExportCompany()?.logoUrl;
@@ -197,6 +206,7 @@ function buildStyledSheet(
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
     cell.alignment = { vertical: 'middle', horizontal: dataAlign(col - 1), wrapText: true, indent: 1 };
+    cell.border = edges(col);
   }
 
   const isSummable = (i: number) => options.totalKeys ? options.totalKeys.includes(cols[i].key) : rtypes[i] === 'currency';
@@ -214,8 +224,8 @@ function buildStyledSheet(
       cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: NAVY } };
       cell.alignment = { vertical: 'middle', horizontal: dataAlign(col - 1), indent: 1 };
       cell.border = grand
-        ? { top: { style: 'medium', color: { argb: NAVY } }, bottom: { style: 'medium', color: { argb: NAVY } } }
-        : { top: { style: 'thin', color: { argb: NAVY } }, bottom: { style: 'thin', color: { argb: GRID } } };
+        ? { top: { style: 'medium', color: { argb: NAVY } }, bottom: { style: 'medium', color: { argb: NAVY } }, ...edges(col) }
+        : { top: { style: 'thin', color: { argb: NAVY } }, bottom: { style: 'thin', color: { argb: GRID } }, ...edges(col) };
       if (NUM_FMT[rt]) cell.numFmt = NUM_FMT[rt];
     }
   };
@@ -234,16 +244,20 @@ function buildStyledSheet(
       band.getCell(1).border = { bottom: { style: 'thin', color: { argb: ACCENT } } };
     }
     g.rows.forEach((row, ri) => {
-      const dataRow = ws.addRow(cols.map((c, ci) => cellValue(row, c, rtypes[ci])));
+      const dataRow = ws.addRow(cols.map((c, ci) => {
+        const v = cellValue(row, c, rtypes[ci]);
+        return phoneCols[ci] && v !== '' ? Number(v) : v;
+      }));
       dataRow.height = 20;
       for (let col = 1; col <= nCols; col++) {
         const cell = dataRow.getCell(col);
         const rt = rtypes[col - 1];
         cell.font = { size: 10, name: 'Calibri', color: { argb: 'FF1F2937' } };
         cell.alignment = { vertical: 'middle', horizontal: dataAlign(col - 1), indent: 1 };
-        cell.border = { bottom: { style: 'thin', color: { argb: GRID } } };
+        cell.border = { bottom: { style: 'thin', color: { argb: GRID } }, ...edges(col) };
         if (ri % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
         if (NUM_FMT[rt]) cell.numFmt = NUM_FMT[rt];
+        else if (phoneCols[col - 1]) cell.numFmt = '0';
       }
     });
     if (groupCol && showTotals) addTotalsRow(`Subtotal — ${g.label}`, g.rows, false);
@@ -267,8 +281,9 @@ function buildStyledSheet(
   });
 
   // ── Freeze header, gridlines off (cell borders draw the grid), no filter buttons ──
-  if (!groupCol) ws.autoFilter = { from: { row: headerRowNumber, column: 1 }, to: { row: headerRowNumber, column: lastCol } };
-  ws.views = [{ state: 'frozen', ySplit: headerRowNumber, showGridLines: false }];
+  ws.views = data.length > 25
+    ? [{ state: 'frozen', ySplit: headerRowNumber, showGridLines: false }]
+    : [{ showGridLines: false }];
 
   // ── Print layout: margins + fit to width + repeat header + footer ──
   ws.pageSetup = {
